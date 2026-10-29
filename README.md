@@ -40,3 +40,26 @@ docker compose up -d --build
 ```
 python test_app.py
 ```
+
+## Auto-updating apps from GitHub releases
+
+Set `SOURCES` to AltStore source URLs, separated by spaces. sidedrop checks them hourly and on page load (at most once a minute), and downloads any new version into `apps/`. Point it at each repo's release asset, not a GitHub Pages copy: release assets update the moment a release is published, while Pages adds build time and a 10-minute CDN cache.
+
+```
+SOURCES=https://github.com/FIZL0/opentennis/releases/latest/download/altstore-source.json https://github.com/FIZL0/partyboard/releases/latest/download/altstore-source.json
+```
+
+To have new releases downloaded and signed before anyone opens the page, set `SYNC_TOKEN` and have CI call `POST /sync` after a release. For the FIZL0 apps, add this as the last step of `FIZL0/apps` `.github/workflows/source.yml`, which the apps' release scripts already trigger:
+
+```yaml
+      - run: curl -fsS -X POST -H "Authorization: Bearer $T" https://sidedrop.example.com/sync || echo "sidedrop unreachable, it'll catch up on its own"
+        env: { T: "${{ secrets.SIDEDROP_SYNC_TOKEN }}" }
+```
+
+Then store the token as a repo secret. The token is in `/mnt/SSD/sidedrop/.env` on the NAS:
+
+```
+ssh truenas sudo grep ^SYNC_TOKEN= /mnt/SSD/sidedrop/.env | cut -d= -f2 | gh secret set SIDEDROP_SYNC_TOKEN -R FIZL0/apps
+```
+
+`/sync` returns 202 right away and does the work in the background. It returns 403 without the token.
