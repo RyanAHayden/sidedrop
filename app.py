@@ -149,6 +149,8 @@ def page(body, **ctx):
 
 @app.get("/")
 def home():
+    if "password" in request.args:  # shareable ?password= link; redirect drops it from the address bar
+        return login()
     if not logged_in():
         return page("""<form class=c method=post action=/login>
 <label>Password<input type=password name=password autofocus required></label>
@@ -183,7 +185,7 @@ def home():
 
 @app.post("/login")
 def login():
-    if not hmac.compare_digest(request.form.get("password", "").encode(), PASSWORD.encode()):
+    if not hmac.compare_digest(request.values.get("password", "").encode(), PASSWORD.encode()):
         time.sleep(2)  # ponytail: slows guessing per request, add per-IP lockout if this ever gets hammered
         return redirect("/?err=1")
     session.permanent, session["ok"] = True, True

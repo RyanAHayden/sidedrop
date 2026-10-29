@@ -37,6 +37,12 @@ assert "err=1" in c.post("/login", data={"password": "nope"}).location
 c.post("/login", data={"password": "hunter2-but-longer"})
 assert b"Register iPhone" in c.get("/").data
 
+# shareable link logs in and strips the password from the URL
+link = A.app.test_client()
+r = link.get("/?password=hunter2-but-longer")
+assert r.status_code == 302 and r.location == "/" and b"Register iPhone" in link.get("/").data
+assert "err=1" in A.app.test_client().get("/?password=wrong").location
+
 # enrollment profile points at a signed /udid URL
 prof = plistlib.loads(c.post("/enroll", data={"name": "Sam <script>"}).data)
 url = prof["PayloadContent"]["URL"]
