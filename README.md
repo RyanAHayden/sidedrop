@@ -21,7 +21,7 @@ files/          anything you want downloadable
 
 `signed/` and `adhoc.mobileprovision` are generated.
 
-Copy `.env.example` to `.env` and fill it in. `BUNDLE_ID` must already exist in the developer portal. A wildcard such as `com.you.*` lets one profile cover every app, as long as the apps don't need entitlements like push or App Groups.
+Copy `.env.example` to `.env` and fill it in. `BUNDLE_ID` must be a wildcard App ID that already exists in the developer portal, such as `com.you.*`. One profile then covers every app: apps whose bundle ID falls outside it are re-IDed at signing (`com.other.game` becomes `com.you.game`). Apps that need entitlements like push or App Groups won't work this way.
 
 ```
 docker compose up -d --build

@@ -105,10 +105,11 @@ def fake_get(url, **kw):
     gets.append(url)
     if url.endswith(".json"):
         return Resp({"apps": [{"bundleIdentifier": "io.x.tennis", "versions": [{"version": "1.5", "downloadURL": "https://gh/t.ipa"}]}]})
-    return Resp(b"IPA")
+    return Resp((tmp / "apps" / "Demo.ipa").read_bytes())
 A.requests.get, A.SOURCES = fake_get, ["https://src/source.json"]
 A.sync_sources(); A.sync_sources()
-assert (tmp / "apps" / "io.x.tennis.ipa").read_bytes() == b"IPA" and gets.count("https://gh/t.ipa") == 1
+assert (tmp / "apps" / "io.x.tennis.ipa").read_bytes() == (tmp / "apps" / "Demo.ipa").read_bytes()
+assert gets.count("https://gh/t.ipa") == 1
 # page loads check the source, throttled to once a minute
 n = gets.count("https://src/source.json"); A.last_sync[0] = 0
 c.get("/"); c.get("/")
@@ -119,4 +120,18 @@ A.SYNC_TOKEN = "tok"
 assert anon.post("/sync").status_code == 403
 assert anon.post("/sync", headers={"Authorization": "Bearer nope"}).status_code == 403
 assert anon.post("/sync", headers={"Authorization": "Bearer tok"}).status_code == 202
+
+# apps outside the wildcard get re-IDed under it; ones inside are left alone
+assert A.fit_bundle_id("com.me.demo") is None
+assert A.fit_bundle_id("com.mariopartyrd.partyboard") == "com.me.partyboard"
+with zipfile.ZipFile(tmp / "pb.ipa", "w") as z:
+    z.writestr("Payload/PB.app/Info.plist", plistlib.dumps({"CFBundleIdentifier": "com.mario.pb"}, fmt=plistlib.FMT_BINARY))
+    z.writestr("Payload/PB.app/PlugIns/W.appex/Info.plist", plistlib.dumps({"CFBundleIdentifier": "com.mario.pb.widget"}))
+    z.writestr("Payload/PB.app/Base.lproj/Info.plist", b"not a plist")
+    z.writestr("Payload/PB.app/PB", b"\xca\xfe")
+A.retarget(tmp / "pb.ipa", tmp / "pb2.ipa", "com.mario.pb", "com.me.pb")
+with zipfile.ZipFile(tmp / "pb2.ipa") as z:
+    assert plistlib.loads(z.read("Payload/PB.app/Info.plist"))["CFBundleIdentifier"] == "com.me.pb"
+    assert plistlib.loads(z.read("Payload/PB.app/PlugIns/W.appex/Info.plist"))["CFBundleIdentifier"] == "com.me.pb.widget"
+    assert z.read("Payload/PB.app/PB") == b"\xca\xfe"
 print("ok")

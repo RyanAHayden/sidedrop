@@ -17,7 +17,7 @@ PASSWORD = os.environ["PASSWORD"]
 PUBLIC_URL = os.environ["PUBLIC_URL"].rstrip("/")  # must be https with a real cert, iOS refuses otherwise
 SECRET = os.environ["SECRET_KEY"].encode()
 P12_PASSWORD = os.environ.get("P12_PASSWORD", "")
-BUNDLE_ID = os.environ.get("BUNDLE_ID", "")  # wildcard like com.you.* covers every app with one profile
+BUNDLE_ID = os.environ.get("BUNDLE_ID", "")  # wildcard like com.you.*; apps outside it get re-IDed to fit
 PROFILE_NAME = os.environ.get("PROFILE_NAME", "sidedrop adhoc")
 LINK_TTL = int(os.environ.get("LINK_TTL", 7 * 86400))
 SOURCES = os.environ.get("SOURCES", "").split()  # AltStore source.json URLs to mirror into apps/
@@ -122,6 +122,28 @@ def ipa_info(path):
             "title": info.get("CFBundleDisplayName") or info.get("CFBundleName") or path.stem}
 
 
+def fit_bundle_id(bid):
+    """Bundle ID the app must be signed as so a wildcard profile like io.x.* covers it, or None if it already fits."""
+    prefix = BUNDLE_ID[:-1]  # "io.x." for "io.x.*"
+    if not BUNDLE_ID.endswith("*") or bid.startswith(prefix):
+        return None
+    return prefix + bid.rsplit(".", 1)[-1]  # ponytail: two apps sharing a last component would collide
+
+
+def retarget(src, dst, old_id, new_id):
+    """Copy an IPA, swapping the old bundle ID prefix for the new one in the app's and its extensions' Info.plists."""
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item)
+            if item.filename.endswith("Info.plist") and ".lproj/" not in item.filename:
+                info = plistlib.loads(data)
+                bid = info.get("CFBundleIdentifier", "")
+                if bid == old_id or bid.startswith(old_id + "."):
+                    info["CFBundleIdentifier"] = new_id + bid[len(old_id):]
+                    data = plistlib.dumps(info)
+            zout.writestr(item, data)
+
+
 def resign(force=False):
     """Sign every apps/*.ipa whose signed copy is missing or older than the IPA or profile."""
     if not PROFILE.exists():
@@ -130,8 +152,17 @@ def resign(force=False):
     for src in sorted(APPS.glob("*.ipa")):
         out = SIGNED / src.name
         if force or not out.exists() or out.stat().st_mtime < max(src.stat().st_mtime, PROFILE.stat().st_mtime):
-            subprocess.run(["zsign", "-q", "-k", P12, "-p", P12_PASSWORD, "-m", PROFILE, "-o", out, src],
-                           check=True, timeout=600)
+            old_id = ipa_info(src)["id"]
+            new_id = fit_bundle_id(old_id)
+            tmp = SIGNED / f".{src.name}" if new_id else src
+            if new_id:  # rewrite ourselves: zsign 1.1.2's -b can't find Info.plist
+                retarget(src, tmp, old_id, new_id)
+            try:
+                subprocess.run(["zsign", "-q", "-t", SIGNED, "-k", P12, "-p", P12_PASSWORD, "-m", PROFILE, "-o", out, tmp],
+                               check=True, timeout=600)
+            finally:
+                if new_id:
+                    tmp.unlink(missing_ok=True)
 
 
 def sync_sources():
