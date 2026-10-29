@@ -4,7 +4,9 @@ from pathlib import Path
 from urllib.parse import quote
 
 import jwt, requests
-from cryptography.hazmat.primitives.serialization import pkcs12
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.serialization import pkcs7, pkcs12
 from flask import Flask, abort, redirect, render_template_string, request, send_from_directory, session, url_for
 
 DATA = Path(os.environ.get("DATA", "/data"))
@@ -20,6 +22,7 @@ PROFILE_NAME = os.environ.get("PROFILE_NAME", "sidedrop adhoc")
 LINK_TTL = int(os.environ.get("LINK_TTL", 7 * 86400))
 SOURCES = os.environ.get("SOURCES", "").split()  # AltStore source.json URLs to mirror into apps/
 SYNC_TOKEN = os.environ.get("SYNC_TOKEN", "")  # lets CI hit POST /sync after a release
+PROFILE_CERT_DIR = os.environ.get("PROFILE_CERT_DIR", "")  # dir with fullchain.pem + privkey.pem; iOS then shows "Verified"
 
 app = Flask(__name__)
 app.secret_key = SECRET
@@ -176,6 +179,19 @@ if SOURCES:  # ponytail: runs once per worker; gunicorn here has one worker
     threading.Thread(target=sync_loop, daemon=True).start()
 
 
+def sign_profile(data):
+    """CMS-sign a .mobileconfig with the site's TLS cert. Read per request so cert renewals just work."""
+    if not PROFILE_CERT_DIR:
+        return data
+    d = Path(PROFILE_CERT_DIR)
+    chain = x509.load_pem_x509_certificates((d / "fullchain.pem").read_bytes())
+    key = serialization.load_pem_private_key((d / "privkey.pem").read_bytes(), None)
+    b = pkcs7.PKCS7SignatureBuilder().set_data(data).add_signer(chain[0], key, hashes.SHA256())
+    for c in chain[1:]:
+        b = b.add_certificate(c)
+    return b.sign(serialization.Encoding.DER, [])
+
+
 # --- pages ---
 
 PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
@@ -258,7 +274,7 @@ def enroll():
         "PayloadDescription": "Shares this iPhone's device ID so apps can be signed for it.",
         "PayloadIdentifier": "sidedrop.udid", "PayloadUUID": str(uuid.uuid4()).upper(),
         "PayloadType": "Profile Service", "PayloadVersion": 1})
-    return profile, 200, {"Content-Type": "application/x-apple-aspen-config",
+    return sign_profile(profile), 200, {"Content-Type": "application/x-apple-aspen-config",
                           "Content-Disposition": 'attachment; filename="sidedrop.mobileconfig"'}
 
 

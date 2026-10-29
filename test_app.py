@@ -48,6 +48,25 @@ prof = plistlib.loads(c.post("/enroll", data={"name": "Sam <script>"}).data)
 url = prof["PayloadContent"]["URL"]
 assert "/udid/Sam%20script?" in url, url
 
+# with a cert dir set, the profile comes back CMS-signed with the whole chain attached
+import datetime
+from cryptography import x509 as X
+from cryptography.hazmat.primitives import hashes as H, serialization as S
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.serialization import pkcs7 as P7
+k = ec.generate_private_key(ec.SECP256R1()); n = X.Name([X.NameAttribute(X.oid.NameOID.COMMON_NAME, "x.test")])
+now = datetime.datetime.now(datetime.timezone.utc)
+crt = X.CertificateBuilder().subject_name(n).issuer_name(n).public_key(k.public_key()).serial_number(1) \
+    .not_valid_before(now).not_valid_after(now + datetime.timedelta(days=1)).sign(k, H.SHA256())
+cd = tmp / "tls"; cd.mkdir()
+(cd / "fullchain.pem").write_bytes(crt.public_bytes(S.Encoding.PEM) * 2)  # leaf + "intermediate"
+(cd / "privkey.pem").write_bytes(k.private_bytes(S.Encoding.PEM, S.PrivateFormat.PKCS8, S.NoEncryption()))
+A.PROFILE_CERT_DIR = str(cd)
+der = c.post("/enroll", data={"name": "Sam"}).data
+assert der[:1] == b"\x30" and A.embedded_plist(der)["PayloadType"] == "Profile Service"
+assert len(P7.load_der_pkcs7_certificates(der)) == 2
+A.PROFILE_CERT_DIR = ""
+
 # iOS posts a CMS-signed plist; we register + regen + sign, then 301 back
 body = b"\x30\x80" + plistlib.dumps({"UDID": "00008130-AAAA", "PRODUCT": "iPhone16,1"}) + b"\x00sig"
 r = A.app.test_client().post(path_qs(url), data=body)  # no cookie, like iOS
