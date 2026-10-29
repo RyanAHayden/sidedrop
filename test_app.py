@@ -17,10 +17,14 @@ with zipfile.ZipFile(tmp / "apps" / "Demo.ipa", "w") as z:
 calls = []
 def fake_regen():
     # real profiles are CMS-wrapped plists; junk bytes around it exercise embedded_plist
-    A.PROFILE.write_bytes(b"\x30\x82junk" + plistlib.dumps({"ProvisionedDevices": [u for u, _ in calls]}) + b"\x00tail")
+    A.PROFILE.write_bytes(b"\x30\x82junk" + plistlib.dumps({"ProvisionedDevices": [u for u, _ in calls], "Entitlements": {
+        "application-identifier": "TEAM.com.me.*", "com.apple.developer.team-identifier": "TEAM",
+        "keychain-access-groups": ["TEAM.*"], "get-task-allow": False}}) + b"\x00tail")
 def fake_asc(method, path, **kw):
     return {"data": []}
+signed_ents = []
 def fake_run(cmd, **kw):
+    signed_ents.append(plistlib.loads(Path(cmd[cmd.index("-e") + 1]).read_bytes()))
     Path(cmd[cmd.index("-o") + 1]).write_bytes((tmp / "apps" / "Demo.ipa").read_bytes())
 A.regen_profile, A.asc, A.subprocess.run = fake_regen, fake_asc, fake_run
 orig_register = A.register
@@ -77,6 +81,9 @@ assert b"Register this iPhone" in c.get("/").data
 html = c.get("/?enrolled=1").data
 assert b"This iPhone is registered" in html and b"<details>" in html and b"This iPhone is registered" in c.get("/").data
 assert A.profile_udids() == {"00008130-AAAA"} and (tmp / "signed" / "Demo.ipa").exists()
+# signed with the concrete app ID, never the profile's wildcard
+assert signed_ents[-1]["application-identifier"] == "TEAM.com.me.demo"
+assert signed_ents[-1]["keychain-access-groups"] == ["TEAM.com.me.demo"] and signed_ents[-1]["get-task-allow"] is False
 
 # tampered / expired signatures are refused
 assert A.app.test_client().post(path_qs(url).replace("Sam", "Eve"), data=body).status_code == 403

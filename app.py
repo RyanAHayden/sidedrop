@@ -144,6 +144,19 @@ def retarget(src, dst, old_id, new_id):
             zout.writestr(item, data)
 
 
+def app_entitlements(bid):
+    """The profile's entitlements with the wildcard narrowed to this app, the way Xcode signs.
+
+    zsign copies TEAM.com.you.* verbatim, and iOS can then match the app to a development
+    profile on the phone and demand Developer Mode."""
+    ents = embedded_plist(PROFILE.read_bytes())["Entitlements"]
+    team = ents["com.apple.developer.team-identifier"]
+    ents["application-identifier"] = f"{team}.{bid}"
+    ents["keychain-access-groups"] = [f"{team}.{bid}"]
+    ents["get-task-allow"] = False
+    return ents
+
+
 def resign(force=False):
     """Sign every apps/*.ipa whose signed copy is missing or older than the IPA or profile."""
     if not PROFILE.exists():
@@ -157,10 +170,13 @@ def resign(force=False):
             tmp = SIGNED / f".{src.name}" if new_id else src
             if new_id:  # rewrite ourselves: zsign 1.1.2's -b can't find Info.plist
                 retarget(src, tmp, old_id, new_id)
+            ents = SIGNED / ".entitlements.plist"
+            ents.write_bytes(plistlib.dumps(app_entitlements(new_id or old_id)))
             try:
-                subprocess.run(["zsign", "-q", "-t", SIGNED, "-k", P12, "-p", P12_PASSWORD, "-m", PROFILE, "-o", out, tmp],
-                               check=True, timeout=600)
+                subprocess.run(["zsign", "-q", "-t", SIGNED, "-k", P12, "-p", P12_PASSWORD, "-m", PROFILE,
+                                "-e", ents, "-o", out, tmp], check=True, timeout=600)
             finally:
+                ents.unlink(missing_ok=True)
                 if new_id:
                     tmp.unlink(missing_ok=True)
 
