@@ -293,6 +293,10 @@ def home():
 <li><a class=b href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Install {{ a.title }}</a>
 <small>v{{ a.short }}</small></li>{% endfor %}</ul>
 <small>Tap Install, then Install again in the popup and check your home screen.</small>
+<details><summary><b>Says it "requires Developer Mode"?</b></summary><small>iOS asks for this once for apps
+not from the App Store. Open Settings → Privacy &amp; Security → <b>Developer Mode</b> (near the bottom) → turn it on
+→ Restart. After the restart, tap <b>Turn On</b> and enter your passcode. Then the apps open normally.
+The switch only shows up after one of these apps is installed.</small></details>
 {% else %}<p class=m>No apps yet.</p>{% endif %}</div>
 {% if files %}<div class=c><h3>Files</h3><ul>{% for f in files %}
 <li><a href="{{ dl(f) }}">{{ f.relative_to(FILES) }}</a> <small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></li>
