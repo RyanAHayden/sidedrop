@@ -15,7 +15,7 @@ Everything lives in one data folder (`/mnt/SSD/sidedrop` in `compose.yaml`), whi
 ```
 asc.p8          App Store Connect API key (Users and Access → Integrations → Keys, role Admin or App Manager)
 cert.p12        Apple Distribution certificate + private key (export from Keychain, or openssl)
-apps/*.ipa      unsigned or dev-signed IPAs to share
+apps/*.ipa      unsigned or dev-signed IPAs to share (or set SOURCES to mirror an AltStore source hourly)
 files/          anything you want downloadable
 ```
 

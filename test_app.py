@@ -72,4 +72,22 @@ f = re.search(r'href="(https://x\.test/f/[^"]+)"', html).group(1).replace("&amp;
 r = anon.get(path_qs(f), headers={"Range": "bytes=2-4"})
 assert r.status_code == 206 and r.data == b"234"
 assert anon.get(path_qs(f.replace("big.bin", "..%2Fadhoc.mobileprovision"))).status_code in (403, 404)
+
+# AltStore source mirroring: downloads new versions, skips unchanged ones
+class Resp:
+    def __init__(s, body): s.body = body
+    def json(s): return s.body
+    def raise_for_status(s): pass
+    def iter_content(s, n): yield s.body
+    def __enter__(s): return s
+    def __exit__(s, *a): pass
+gets = []
+def fake_get(url, **kw):
+    gets.append(url)
+    if url.endswith(".json"):
+        return Resp({"apps": [{"bundleIdentifier": "io.x.tennis", "versions": [{"version": "1.5", "downloadURL": "https://gh/t.ipa"}]}]})
+    return Resp(b"IPA")
+A.requests.get, A.SOURCES = fake_get, ["https://src/source.json"]
+A.sync_sources(); A.sync_sources()
+assert (tmp / "apps" / "io.x.tennis.ipa").read_bytes() == b"IPA" and gets.count("https://gh/t.ipa") == 1
 print("ok")

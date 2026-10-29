@@ -18,6 +18,7 @@ P12_PASSWORD = os.environ.get("P12_PASSWORD", "")
 BUNDLE_ID = os.environ.get("BUNDLE_ID", "")  # wildcard like com.you.* covers every app with one profile
 PROFILE_NAME = os.environ.get("PROFILE_NAME", "sidedrop adhoc")
 LINK_TTL = int(os.environ.get("LINK_TTL", 7 * 86400))
+SOURCES = os.environ.get("SOURCES", "").split()  # AltStore source.json URLs to mirror into apps/
 
 app = Flask(__name__)
 app.secret_key = SECRET
@@ -127,6 +128,38 @@ def resign(force=False):
         if force or not out.exists() or out.stat().st_mtime < max(src.stat().st_mtime, PROFILE.stat().st_mtime):
             subprocess.run(["zsign", "-q", "-k", P12, "-p", P12_PASSWORD, "-m", PROFILE, "-o", out, src],
                            check=True, timeout=600)
+
+
+def sync_sources():
+    """Download the newest IPA of each app in SOURCES when its version changes."""
+    for url in SOURCES:
+        for a in requests.get(url, timeout=30).json().get("apps", []):
+            v = (a.get("versions") or [a])[0]  # newer sources nest versions, older ones are flat
+            slug = re.sub(r"[^\w.-]", "", a["bundleIdentifier"])
+            marker = APPS / f".{slug}.version"
+            if not v.get("downloadURL") or (marker.exists() and marker.read_text() == v["version"]):
+                continue
+            tmp = APPS / f".{slug}.part"
+            with requests.get(v["downloadURL"], stream=True, timeout=60) as r:
+                r.raise_for_status()
+                with tmp.open("wb") as f:
+                    for chunk in r.iter_content(1 << 20):
+                        f.write(chunk)
+            tmp.replace(APPS / f"{slug}.ipa")
+            marker.write_text(v["version"])
+
+
+def sync_loop():
+    while True:
+        try:
+            sync_sources()
+        except Exception as e:
+            print("source sync failed:", e, flush=True)
+        time.sleep(3600)
+
+
+if SOURCES:  # ponytail: runs once per worker; gunicorn here has one worker
+    threading.Thread(target=sync_loop, daemon=True).start()
 
 
 # --- pages ---
