@@ -12,7 +12,7 @@ import app as A
 (tmp / "files" / "big.bin").write_bytes(b"0123456789")
 with zipfile.ZipFile(tmp / "apps" / "Demo.ipa", "w") as z:
     z.writestr("Payload/Demo.app/Info.plist", plistlib.dumps(
-        {"CFBundleIdentifier": "com.me.demo", "CFBundleVersion": "7", "CFBundleName": "Demo"}, fmt=plistlib.FMT_BINARY))
+        {"CFBundleIdentifier": "com.me.demo", "CFBundleVersion": "7", "CFBundleShortVersionString": "1.2", "CFBundleName": "Demo"}, fmt=plistlib.FMT_BINARY))
 
 calls = []
 def fake_regen():
@@ -91,6 +91,7 @@ assert A.app.test_client().get("/f/big.bin?e=1&s=x").status_code == 403
 
 # install page -> manifest -> ipa, all cookie-less
 html = c.get("/").data.decode()
+assert "v1.2<" in html  # marketing version, not the build number
 m = unquote(re.search(r"download-manifest&url=([^\"]+)", html).group(1))
 anon = A.app.test_client()
 mf = plistlib.loads(anon.get(path_qs(m)).data)["items"][0]

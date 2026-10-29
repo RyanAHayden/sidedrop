@@ -119,6 +119,7 @@ def ipa_info(path):
         name = next(n for n in z.namelist() if re.fullmatch(r"Payload/[^/]+\.app/Info\.plist", n))
         info = plistlib.loads(z.read(name))
     return {"id": info["CFBundleIdentifier"], "version": info.get("CFBundleVersion", "1"),
+            "short": info.get("CFBundleShortVersionString") or info.get("CFBundleVersion", "1"),
             "title": info.get("CFBundleDisplayName") or info.get("CFBundleName") or path.stem}
 
 
@@ -290,7 +291,7 @@ def home():
 <p class=m>Do this in Safari on the iPhone. It takes about a minute, once per phone.</p>{{ enroll_form }}</div>{% endif %}
 <div class=c><h3>2. Install apps</h3>{% if apps %}<ul>{% for a in apps %}
 <li><a class=b href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Install {{ a.title }}</a>
-<small>v{{ a.version }}</small></li>{% endfor %}</ul>
+<small>v{{ a.short }}</small></li>{% endfor %}</ul>
 <small>Tap Install, then Install again in the popup and check your home screen.</small>
 {% else %}<p class=m>No apps yet.</p>{% endif %}</div>
 {% if files %}<div class=c><h3>Files</h3><ul>{% for f in files %}
