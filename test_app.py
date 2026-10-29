@@ -90,4 +90,8 @@ def fake_get(url, **kw):
 A.requests.get, A.SOURCES = fake_get, ["https://src/source.json"]
 A.sync_sources(); A.sync_sources()
 assert (tmp / "apps" / "io.x.tennis.ipa").read_bytes() == b"IPA" and gets.count("https://gh/t.ipa") == 1
+# page loads check the source, throttled to once a minute
+n = gets.count("https://src/source.json"); A.last_sync[0] = 0
+c.get("/"); c.get("/")
+assert gets.count("https://src/source.json") == n + 1
 print("ok")

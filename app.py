@@ -149,12 +149,25 @@ def sync_sources():
             marker.write_text(v["version"])
 
 
+sync_lock, last_sync = threading.Lock(), [0.0]
+
+
+def sync_if_stale(max_age):
+    """Sync unless one ran within max_age seconds or another is already running."""
+    if time.time() - last_sync[0] < max_age or not sync_lock.acquire(blocking=False):
+        return
+    try:
+        last_sync[0] = time.time()  # set before trying so a GitHub outage doesn't stall every page load
+        sync_sources()
+    except Exception as e:
+        print("source sync failed:", e, flush=True)
+    finally:
+        sync_lock.release()
+
+
 def sync_loop():
     while True:
-        try:
-            sync_sources()
-        except Exception as e:
-            print("source sync failed:", e, flush=True)
+        sync_if_stale(0)
         time.sleep(3600)
 
 
@@ -189,6 +202,7 @@ def home():
 <label>Password<input type=password name=password autofocus required></label>
 {% if err %}<p class=err>Wrong password.</p>{% endif %}<button>Sign in</button></form>""", err=request.args.get("err"))
     error = None
+    sync_if_stale(60)  # ponytail: a new release makes this one page load wait for the download
     try:
         with lock:
             resign()  # ponytail: signs stale IPAs on page load; first visit after an upload waits for it
