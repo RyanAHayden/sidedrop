@@ -19,6 +19,7 @@ BUNDLE_ID = os.environ.get("BUNDLE_ID", "")  # wildcard like com.you.* covers ev
 PROFILE_NAME = os.environ.get("PROFILE_NAME", "sidedrop adhoc")
 LINK_TTL = int(os.environ.get("LINK_TTL", 7 * 86400))
 SOURCES = os.environ.get("SOURCES", "").split()  # AltStore source.json URLs to mirror into apps/
+SYNC_TOKEN = os.environ.get("SYNC_TOKEN", "")  # lets CI hit POST /sync after a release
 
 app = Flask(__name__)
 app.secret_key = SECRET
@@ -267,6 +268,22 @@ def udid(name):
     attrs = embedded_plist(request.get_data())
     register(attrs["UDID"], f"{name} {attrs.get('PRODUCT', '')}".strip())
     return redirect(f"{PUBLIC_URL}/?enrolled=1", 301)  # iOS requires a 301 here, then opens it in Safari
+
+
+@app.post("/sync")
+def sync_now():
+    if not SYNC_TOKEN or not hmac.compare_digest(request.headers.get("Authorization", ""), f"Bearer {SYNC_TOKEN}"):
+        abort(403)
+
+    def run():
+        sync_if_stale(0)
+        try:
+            with lock:
+                resign()
+        except Exception as e:
+            print("resign failed:", e, flush=True)
+    threading.Thread(target=run, daemon=True).start()  # return right away; CI shouldn't wait on downloads
+    return "", 202
 
 
 @app.get("/m/<name>.plist")

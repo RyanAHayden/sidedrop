@@ -94,4 +94,10 @@ assert (tmp / "apps" / "io.x.tennis.ipa").read_bytes() == b"IPA" and gets.count(
 n = gets.count("https://src/source.json"); A.last_sync[0] = 0
 c.get("/"); c.get("/")
 assert gets.count("https://src/source.json") == n + 1
+
+# CI trigger needs the token
+A.SYNC_TOKEN = "tok"
+assert anon.post("/sync").status_code == 403
+assert anon.post("/sync", headers={"Authorization": "Bearer nope"}).status_code == 403
+assert anon.post("/sync", headers={"Authorization": "Bearer tok"}).status_code == 202
 print("ok")
