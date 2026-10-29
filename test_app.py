@@ -72,6 +72,10 @@ body = b"\x30\x80" + plistlib.dumps({"UDID": "00008130-AAAA", "PRODUCT": "iPhone
 r = A.app.test_client().post(path_qs(url), data=body)  # no cookie, like iOS
 assert r.status_code == 301 and r.location.endswith("/?enrolled=1")
 assert calls == [("00008130-AAAA", "Sam script iPhone16,1")]
+# landing back in Safari marks this browser as registered and hides the form behind <details>
+assert b"Register this iPhone" in c.get("/").data
+html = c.get("/?enrolled=1").data
+assert b"This iPhone is registered" in html and b"<details>" in html and b"This iPhone is registered" in c.get("/").data
 assert A.profile_udids() == {"00008130-AAAA"} and (tmp / "signed" / "Demo.ipa").exists()
 
 # tampered / expired signatures are refused

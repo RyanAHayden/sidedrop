@@ -249,6 +249,8 @@ def home():
         return page("""<form class=c method=post action=/login>
 <label>Password<input type=password name=password autofocus required></label>
 {% if err %}<p class=err>Wrong password.</p>{% endif %}<button>Sign in</button></form>""", err=request.args.get("err"))
+    if request.args.get("enrolled"):  # the 301 after the profile install lands here in Safari
+        session["enrolled"] = True
     error = None
     sync_if_stale(60)  # ponytail: a new release makes this one page load wait for the download
     try:
@@ -260,20 +262,25 @@ def home():
     files = sorted(p for p in FILES.rglob("*") if p.is_file()) if FILES.exists() else []
     return page("""
 {% if error %}<p class="c err">{{ error }}</p>{% endif %}
-{% if request.args.get('enrolled') %}<p class=c>✅ Your iPhone is registered. Install below.
-<br><small>You can delete the "sidedrop" profile in Settings → General → VPN &amp; Device Management.</small></p>{% endif %}
-<div class=c><h3>1. Register this iPhone</h3>
-<p class=m>Open this page in Safari on the iPhone. Tap the button, then go to Settings → Profile Downloaded → Install.</p>
-<form method=post action=/enroll><label>Your name<input name=name required maxlength=30></label><button>Register iPhone</button></form></div>
+{% set enroll_form %}<form method=post action=/enroll onsubmit="document.getElementById('next').hidden=false">
+<label>Your name<input name=name required maxlength=30></label><button>Register iPhone</button></form>
+<ol id=next hidden><li>Tap <b>Allow</b>, then <b>Close</b>.</li><li>Open the <b>Settings</b> app.</li>
+<li>Tap <b>Profile Downloaded</b> near the top.</li><li>Tap <b>Install</b>, enter your passcode, tap <b>Install</b> again.</li>
+<li>You'll land back here automatically, registered.</li></ol>{% endset %}
+{% if enrolled %}<div class=c><h3>✅ This iPhone is registered</h3>
+<small>You can delete the "sidedrop" profile in Settings → General → VPN &amp; Device Management.</small>
+<details><summary class=m>Register a different iPhone</summary>{{ enroll_form }}</details></div>
+{% else %}<div class=c><h3>1. Register this iPhone</h3>
+<p class=m>Do this in Safari on the iPhone. It takes about a minute, once per phone.</p>{{ enroll_form }}</div>{% endif %}
 <div class=c><h3>2. Install apps</h3>{% if apps %}<ul>{% for a in apps %}
 <li><a class=b href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Install {{ a.title }}</a>
 <small>v{{ a.version }}</small></li>{% endfor %}</ul>
-<small>Tap Install, then check your home screen. Not registered yet? Do step 1 first.</small>
+<small>Tap Install, then Install again in the popup and check your home screen.</small>
 {% else %}<p class=m>No apps yet.</p>{% endif %}</div>
 {% if files %}<div class=c><h3>Files</h3><ul>{% for f in files %}
 <li><a href="{{ dl(f) }}">{{ f.relative_to(FILES) }}</a> <small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></li>
 {% endfor %}</ul></div>{% endif %}
-<p><a href=/logout class=m>Sign out</a></p>""", error=error, apps=apps, files=files, FILES=FILES,
+<p><a href=/logout class=m>Sign out</a></p>""", error=error, enrolled=session.get("enrolled"), apps=apps, files=files, FILES=FILES,
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"))
 
