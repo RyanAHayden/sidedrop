@@ -33,6 +33,7 @@ docker compose up -d --build
 
 - Apple allows 100 iPhones per developer account per membership year. Removing a device only frees its slot at renewal.
 - Ad hoc apps stop launching when the distribution certificate expires (1 year).
+- Ad hoc apps need Developer Mode turned on, once per phone (iOS 16+; only App Store, TestFlight and enterprise apps are exempt). The page explains how.
 - Download speed is capped by your home upload bandwidth. Cloudflare's free plan won't cache files this large.
 
 ## Test
