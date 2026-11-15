@@ -6,7 +6,10 @@ from urllib.parse import unquote, urlsplit
 tmp = Path(tempfile.mkdtemp())
 os.environ.update(DATA=str(tmp), PASSWORD="hunter2-but-longer", PUBLIC_URL="https://x.test", SECRET_KEY="k" * 32,
                   BUNDLE_ID="com.me.*")
+import threading
+start, threading.Thread.start = threading.Thread.start, lambda self: None  # no background source sync in tests
 import app as A
+threading.Thread.start, A.SOURCES = start, []
 
 (tmp / "apps").mkdir(); (tmp / "files").mkdir()
 (tmp / "files" / "big.bin").write_bytes(b"0123456789")
@@ -153,10 +156,9 @@ a = re.search(r'href="(https://x\.test/af/Demo/game\.iso[^"]+)"', html).group(1)
 assert anon.get(path_qs(a)).data == b"iso" and "Files</h3>" in html and html.index("game.iso") < html.index("Files</h3>")
 assert html.count(">game.iso<") == 1
 
-# Feather sources come from a plain text file and get a copy button
-(tmp / "feather-sources.txt").write_text("https://a.test/s.json\n\nhttps://b.test\n")
+# Feather sources come from the repo's feather-sources.txt and get a copy button
 html = c.get("/").data.decode()
-assert "https://a.test/s.json\nhttps://b.test</textarea>" in html and "Copy sources" in html
+assert "https://provenance-emu.com/apps.json\nhttps://fizl0" in html and "Copy sources" in html
 
 # custom signing: upload and URL both give a cookie-less install link; Feather sits in its own menu
 html = c.get("/").data.decode()
@@ -171,9 +173,4 @@ for data in ({"ipa": (io.BytesIO(demo), "x.ipa")}, {"url": "https://gh/t.ipa"}):
     assert "/i/custom/" in mf["assets"][0]["url"] and anon.get(path_qs(mf["assets"][0]["url"])).status_code == 200
 assert "Pick an .ipa" in c.post("/sign", data={"url": "file:///etc/passwd"}).data.decode()
 assert not list((tmp / "signed" / "custom").glob(".*"))  # temp files cleaned up
-# CI pushes the sources list with the sync token; junk lines are dropped
-assert anon.put("/feather-sources", data="https://x").status_code == 403
-assert anon.put("/feather-sources", data="https://c.test/a.json\njavascript:alert(1)\n",
-                headers={"Authorization": "Bearer tok"}).status_code == 200
-assert (tmp / "feather-sources.txt").read_text() == "https://c.test/a.json\n"
 print("ok")

@@ -13,7 +13,8 @@ DATA = Path(os.environ.get("DATA", "/data"))
 APPS, SIGNED, FILES = DATA / "apps", DATA / "signed", DATA / "files"
 APP_FILES = DATA / "appfiles"  # appfiles/<ipa name>/* are listed under that app's Install button, not in Files
 CUSTOM = SIGNED / "custom"  # one-off IPAs friends upload or link on the page
-FEATHER_SOURCES = DATA / "feather-sources.txt"  # pushed from the repo's feather-sources.txt by CI
+HERE = Path(__file__).parent  # config files edited on GitHub; the NAS pulls and rebuilds (deploy.sh)
+read_urls = lambda f: [u for u in (HERE / f).read_text().split() if u.startswith(("https://", "http://"))] if (HERE / f).exists() else []
 FEATHER_REPO = "https://github.com/claration/Feather"
 PROFILE = DATA / "adhoc.mobileprovision"
 P12, ASC_KEY = DATA / "cert.p12", DATA / "asc.p8"
@@ -24,7 +25,7 @@ P12_PASSWORD = os.environ.get("P12_PASSWORD", "")
 BUNDLE_ID = os.environ.get("BUNDLE_ID", "")  # wildcard like com.you.*; apps outside it get re-IDed to fit
 PROFILE_NAME = os.environ.get("PROFILE_NAME", "sidedrop adhoc")
 LINK_TTL = int(os.environ.get("LINK_TTL", 7 * 86400))
-SOURCES = os.environ.get("SOURCES", "").split()  # AltStore source.json URLs to mirror into apps/
+SOURCES = read_urls("mirror-sources.txt")  # AltStore source.json URLs to mirror into apps/
 SYNC_TOKEN = os.environ.get("SYNC_TOKEN", "")  # lets CI hit POST /sync after a release
 PROFILE_CERT_DIR = os.environ.get("PROFILE_CERT_DIR", "")  # dir with fullchain.pem + privkey.pem; iOS then shows "Verified"
 
@@ -330,7 +331,7 @@ the "Sign your own IPA" box below works without one.</p>
 <li><a href="{{ dl(f) }}">{{ f.relative_to(FILES) }}</a> <small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></li>
 {% endfor %}</ul></div>{% endif %}
 <p><a href=/logout class=m>Sign out</a></p>""", error=error, enrolled=session.get("enrolled"), apps=apps, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
-        sources=FEATHER_SOURCES.read_text().split() if FEATHER_SOURCES.exists() else [],
+        sources=read_urls("feather-sources.txt"),
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"))
 
@@ -412,16 +413,6 @@ def sign_custom():
 <p><a class=b href="itms-services://?action=download-manifest&url={{ m }}">Install {{ i.title }}</a></p>
 <small>Link works for 7 days. Developer Mode must be on.</small></div><p><a href=/>Back</a></p>""",
                 i=info, m=quote(signed_url(f"/m/custom/{name}.plist"), safe=""))
-
-
-@app.put("/feather-sources")
-def put_feather_sources():
-    """CI uploads feather-sources.txt here on every push that changes it."""
-    if not SYNC_TOKEN or not hmac.compare_digest(request.headers.get("Authorization", ""), f"Bearer {SYNC_TOKEN}"):
-        abort(403)
-    urls = [u for u in request.get_data(as_text=True).split() if u.startswith(("https://", "http://"))]
-    FEATHER_SOURCES.write_text("\n".join(urls) + "\n")
-    return f"{len(urls)} sources\n"
 
 
 @app.post("/sync")

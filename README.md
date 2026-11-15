@@ -6,11 +6,21 @@ A password-protected site for sharing ad hoc iOS apps and large files with frien
 2. iOS sends the server the phone's UDID. The server registers the device with Apple, regenerates the ad hoc profile and re-signs every app.
 3. Safari comes back to the site, where they tap **Install**.
 
-Under **Sign your own IPA**, a logged-in friend can drop an IPA or paste a link to one and get an install link signed with the same profile (stored in `signed/custom/`, deleted after 7 days). A **Feather** menu links to the Feather on-device signer. Add `https://raw.githubusercontent.com/claration/Feather/main/app-repo.json` to `SOURCES` to offer a signed Feather install there. The menu also lists the sources in this repo's `feather-sources.txt` (one URL per line) with a **Copy sources** button. Edit that file on GitHub: the `feather-sources` workflow uploads it to `PUT /feather-sources` with `SYNC_TOKEN` (repo secret `SIDEDROP_SYNC_TOKEN`), so no redeploy is needed.
+Under **Sign your own IPA**, a logged-in friend can drop an IPA or paste a link to one and get an install link signed with the same profile (stored in `signed/custom/`, deleted after 7 days). A **Feather** menu links to the Feather on-device signer. Feather's own repo is in `mirror-sources.txt`, so a signed Feather install shows up there, next to the sources in `feather-sources.txt` with a **Copy sources** button.
 
 Files in `appfiles/<ipa name>/` (e.g. `appfiles/io.github.fizl0.hst/`) are listed under that app's Install button instead, with the same kind of signed link.
 
 Files placed in `files/` show up as download links. The links are signed, last 7 days, work without a login (so `wget`/`curl` can use them) and can be resumed.
+
+## Editing on GitHub
+
+These files can be edited on github.com. The NAS picks up changes within 5 minutes:
+
+- `feather-sources.txt`: sources shown in the Feather menu, one URL per line
+- `mirror-sources.txt`: AltStore sources whose apps are downloaded, signed and listed
+- `app.py`: everything else, including page text
+
+`deploy.sh` runs from a TrueNAS cron job every 5 minutes, in a clone at `/mnt/SSD/sidedrop/repo` that uses a read-only deploy key. It rebuilds and redeploys only when `main` has changed. To deploy right away: `ssh truenas sudo /mnt/SSD/sidedrop/repo/deploy.sh -f`.
 
 ## Setup
 
@@ -19,7 +29,7 @@ Everything lives in one data folder (`/mnt/SSD/sidedrop` in `compose.yaml`), whi
 ```
 asc.p8          App Store Connect API key (Users and Access → Integrations → Keys, role Admin or App Manager)
 cert.p12        Apple Distribution certificate + private key (export from Keychain, or openssl)
-apps/*.ipa      unsigned or dev-signed IPAs to share (or set SOURCES to mirror an AltStore source hourly)
+apps/*.ipa      unsigned or dev-signed IPAs to share (or list AltStore sources in mirror-sources.txt)
 files/          anything you want downloadable
 ```
 
@@ -48,11 +58,7 @@ python test_app.py
 
 ## Auto-updating apps from GitHub releases
 
-Set `SOURCES` to AltStore source URLs, separated by spaces. sidedrop checks them hourly and on page load (at most once a minute), and downloads any new version into `apps/`. Point it at each repo's release asset, not a GitHub Pages copy: release assets update the moment a release is published, while Pages adds build time and a 10-minute CDN cache.
-
-```
-SOURCES=https://github.com/FIZL0/opentennis/releases/latest/download/altstore-source.json https://github.com/FIZL0/partyboard/releases/latest/download/altstore-source.json
-```
+List AltStore source URLs in `mirror-sources.txt`. sidedrop checks them hourly and on page load (at most once a minute), and downloads any new version into `apps/`. Point it at each repo's release asset, not a GitHub Pages copy: release assets update the moment a release is published, while Pages adds build time and a 10-minute CDN cache.
 
 To have new releases downloaded and signed before anyone opens the page, set `SYNC_TOKEN` and have CI call `POST /sync` after a release. For the FIZL0 apps, add this as the last step of `FIZL0/apps` `.github/workflows/source.yml`, which the apps' release scripts already trigger:
 
