@@ -1,0 +1,7 @@
+https://provenance-emu.com/apps.json
+https://fizl0.github.io/apps/source.json
+https://raw.githubusercontent.com/claration/Feather/refs/heads/main/app-repo.json
+https://github.com/chachillie/Flycast-iOS/raw/main/flycast-ios.json
+https://xitrix.github.io/iTorrent/AltStore.json
+https://alt.crystall1ne.dev
+https://repository.apptesters.org

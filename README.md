@@ -6,7 +6,9 @@ A password-protected site for sharing ad hoc iOS apps and large files with frien
 2. iOS sends the server the phone's UDID. The server registers the device with Apple, regenerates the ad hoc profile and re-signs every app.
 3. Safari comes back to the site, where they tap **Install**.
 
-Under **Sign your own IPA**, a logged-in friend can drop an IPA or paste a link to one and get an install link signed with the same profile (stored in `signed/custom/`, deleted after 7 days). A **Feather** menu links to the Feather on-device signer. Add `https://raw.githubusercontent.com/claration/Feather/main/app-repo.json` to `SOURCES` to offer a signed Feather install there.
+Under **Sign your own IPA**, a logged-in friend can drop an IPA or paste a link to one and get an install link signed with the same profile (stored in `signed/custom/`, deleted after 7 days). A **Feather** menu links to the Feather on-device signer. Add `https://raw.githubusercontent.com/claration/Feather/main/app-repo.json` to `SOURCES` to offer a signed Feather install there. The menu also lists the sources in this repo's `feather-sources.txt` (one URL per line) with a **Copy sources** button. Edit that file on GitHub: the `feather-sources` workflow uploads it to `PUT /feather-sources` with `SYNC_TOKEN` (repo secret `SIDEDROP_SYNC_TOKEN`), so no redeploy is needed.
+
+Files in `appfiles/<ipa name>/` (e.g. `appfiles/io.github.fizl0.hst/`) are listed under that app's Install button instead, with the same kind of signed link.
 
 Files placed in `files/` show up as download links. The links are signed, last 7 days, work without a login (so `wget`/`curl` can use them) and can be resumed.
 

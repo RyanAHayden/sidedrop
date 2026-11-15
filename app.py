@@ -11,7 +11,9 @@ from flask import Flask, abort, redirect, render_template_string, request, send_
 
 DATA = Path(os.environ.get("DATA", "/data"))
 APPS, SIGNED, FILES = DATA / "apps", DATA / "signed", DATA / "files"
+APP_FILES = DATA / "appfiles"  # appfiles/<ipa name>/* are listed under that app's Install button, not in Files
 CUSTOM = SIGNED / "custom"  # one-off IPAs friends upload or link on the page
+FEATHER_SOURCES = DATA / "feather-sources.txt"  # pushed from the repo's feather-sources.txt by CI
 FEATHER_REPO = "https://github.com/claration/Feather"
 PROFILE = DATA / "adhoc.mobileprovision"
 P12, ASC_KEY = DATA / "cert.p12", DATA / "asc.p8"
@@ -282,7 +284,8 @@ def home():
             resign()  # ponytail: signs stale IPAs on page load; first visit after an upload waits for it
     except Exception as e:
         error = str(e)
-    apps = [dict(ipa_info(p), name=p.stem) for p in sorted(SIGNED.glob("*.ipa"))] if SIGNED.exists() else []
+    apps = [dict(ipa_info(p), name=p.stem, files=sorted(f for f in (APP_FILES / p.stem).glob("*") if f.is_file()))
+            for p in sorted(SIGNED.glob("*.ipa"))] if SIGNED.exists() else []
     feather = [a for a in apps if "feather" in a["name"].lower()]  # mirrored via SOURCES, shown in its own menu
     apps = [a for a in apps if a not in feather]
     files = sorted(p for p in FILES.rglob("*") if p.is_file()) if FILES.exists() else []
@@ -300,7 +303,8 @@ def home():
 <p class=m>Do this in Safari on the iPhone. It takes about a minute, once per phone.</p>{{ enroll_form }}</div>{% endif %}
 <div class=c><h3>2. Install apps</h3>{% if apps %}<ul>{% for a in apps %}
 <li><a class=b href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Install {{ a.title }}</a>
-<small>v{{ a.short }}</small></li>{% endfor %}</ul>
+<small>v{{ a.short }}</small>{% for f in a.files %}<br><a href="{{ adl(f) }}">{{ f.name }}</a>
+<small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB</small>{% endfor %}</li>{% endfor %}</ul>
 <small>Tap Install, then Install again in the popup and check your home screen.</small>
 
 {% else %}<p class=m>No apps yet.</p>{% endif %}</div>
@@ -313,6 +317,9 @@ def home():
 the "Sign your own IPA" box below works without one.</p>
 {% for a in feather %}<p><a class=b href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Install Feather</a>
 <small>v{{ a.short }}</small></p>{% endfor %}
+{% if sources %}<p class=m>Sources to add in Feather:</p>
+<textarea id=src readonly rows={{ sources|length }} style="width:100%;box-sizing:border-box;font:13px ui-monospace,monospace;background:transparent;color:inherit;border-radius:8px">{{ sources|join('\n') }}</textarea>
+<button type=button onclick="navigator.clipboard.writeText(src.value).then(()=>this.textContent='Copied ✓')">Copy sources</button>{% endif %}
 <p><a href="{{ FEATHER_REPO }}">Feather on GitHub</a> · <a href="{{ FEATHER_REPO }}/releases/latest">latest release</a></p></details>
 <details class=c><summary><b>Sign your own IPA</b></summary>
 <form method=post action=/sign enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Signing…'">
@@ -323,8 +330,9 @@ the "Sign your own IPA" box below works without one.</p>
 <li><a href="{{ dl(f) }}">{{ f.relative_to(FILES) }}</a> <small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></li>
 {% endfor %}</ul></div>{% endif %}
 <p><a href=/logout class=m>Sign out</a></p>""", error=error, enrolled=session.get("enrolled"), apps=apps, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
+        sources=FEATHER_SOURCES.read_text().split() if FEATHER_SOURCES.exists() else [],
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
-        dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"))
+        dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"))
 
 
 @app.post("/login")
@@ -406,6 +414,16 @@ def sign_custom():
                 i=info, m=quote(signed_url(f"/m/custom/{name}.plist"), safe=""))
 
 
+@app.put("/feather-sources")
+def put_feather_sources():
+    """CI uploads feather-sources.txt here on every push that changes it."""
+    if not SYNC_TOKEN or not hmac.compare_digest(request.headers.get("Authorization", ""), f"Bearer {SYNC_TOKEN}"):
+        abort(403)
+    urls = [u for u in request.get_data(as_text=True).split() if u.startswith(("https://", "http://"))]
+    FEATHER_SOURCES.write_text("\n".join(urls) + "\n")
+    return f"{len(urls)} sources\n"
+
+
 @app.post("/sync")
 def sync_now():
     if not SYNC_TOKEN or not hmac.compare_digest(request.headers.get("Authorization", ""), f"Bearer {SYNC_TOKEN}"):
@@ -445,6 +463,12 @@ def ipa(name):
 def file(rel):
     check_sig()
     return send_from_directory(FILES, rel, as_attachment=True)  # handles Range, so downloads resume
+
+
+@app.get("/af/<path:rel>")
+def app_file(rel):
+    check_sig()
+    return send_from_directory(APP_FILES, rel, as_attachment=True)
 
 
 if __name__ == "__main__":

@@ -146,6 +146,18 @@ with zipfile.ZipFile(tmp / "pb2.ipa") as z:
     assert plistlib.loads(z.read("Payload/PB.app/Info.plist"))["CFBundleIdentifier"] == "com.me.pb"
     assert plistlib.loads(z.read("Payload/PB.app/PlugIns/W.appex/Info.plist"))["CFBundleIdentifier"] == "com.me.pb.widget"
     assert z.read("Payload/PB.app/PB") == b"\xca\xfe"
+# per-app files sit under that app's Install button, not in Files
+(tmp / "appfiles" / "Demo").mkdir(parents=True); (tmp / "appfiles" / "Demo" / "game.iso").write_bytes(b"iso")
+html = c.get("/").data.decode()
+a = re.search(r'href="(https://x\.test/af/Demo/game\.iso[^"]+)"', html).group(1).replace("&amp;", "&")
+assert anon.get(path_qs(a)).data == b"iso" and "Files</h3>" in html and html.index("game.iso") < html.index("Files</h3>")
+assert html.count(">game.iso<") == 1
+
+# Feather sources come from a plain text file and get a copy button
+(tmp / "feather-sources.txt").write_text("https://a.test/s.json\n\nhttps://b.test\n")
+html = c.get("/").data.decode()
+assert "https://a.test/s.json\nhttps://b.test</textarea>" in html and "Copy sources" in html
+
 # custom signing: upload and URL both give a cookie-less install link; Feather sits in its own menu
 html = c.get("/").data.decode()
 assert "Sign your own IPA" in html and "claration/Feather" in html
@@ -159,4 +171,9 @@ for data in ({"ipa": (io.BytesIO(demo), "x.ipa")}, {"url": "https://gh/t.ipa"}):
     assert "/i/custom/" in mf["assets"][0]["url"] and anon.get(path_qs(mf["assets"][0]["url"])).status_code == 200
 assert "Pick an .ipa" in c.post("/sign", data={"url": "file:///etc/passwd"}).data.decode()
 assert not list((tmp / "signed" / "custom").glob(".*"))  # temp files cleaned up
+# CI pushes the sources list with the sync token; junk lines are dropped
+assert anon.put("/feather-sources", data="https://x").status_code == 403
+assert anon.put("/feather-sources", data="https://c.test/a.json\njavascript:alert(1)\n",
+                headers={"Authorization": "Bearer tok"}).status_code == 200
+assert (tmp / "feather-sources.txt").read_text() == "https://c.test/a.json\n"
 print("ok")
