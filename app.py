@@ -11,6 +11,8 @@ from flask import Flask, abort, redirect, render_template_string, request, send_
 
 DATA = Path(os.environ.get("DATA", "/data"))
 APPS, SIGNED, FILES = DATA / "apps", DATA / "signed", DATA / "files"
+CUSTOM = SIGNED / "custom"  # one-off IPAs friends upload or link on the page
+FEATHER_REPO = "https://github.com/claration/Feather"
 PROFILE = DATA / "adhoc.mobileprovision"
 P12, ASC_KEY = DATA / "cert.p12", DATA / "asc.p8"
 PASSWORD = os.environ["PASSWORD"]
@@ -158,6 +160,23 @@ def app_entitlements(bid):
     return ents
 
 
+def sign_ipa(src, out):
+    old_id = ipa_info(src)["id"]
+    new_id = fit_bundle_id(old_id)
+    tmp = out.with_name(f".{out.name}.in") if new_id else src
+    if new_id:  # rewrite ourselves: zsign 1.1.2's -b can't find Info.plist
+        retarget(src, tmp, old_id, new_id)
+    ents = out.with_name(f".{out.name}.entitlements.plist")
+    ents.write_bytes(plistlib.dumps(app_entitlements(new_id or old_id)))
+    try:
+        subprocess.run(["zsign", "-q", "-t", out.parent, "-k", P12, "-p", P12_PASSWORD, "-m", PROFILE,
+                        "-e", ents, "-o", out, tmp], check=True, timeout=600)
+    finally:
+        ents.unlink(missing_ok=True)
+        if new_id:
+            tmp.unlink(missing_ok=True)
+
+
 def resign(force=False):
     """Sign every apps/*.ipa whose signed copy is missing or older than the IPA or profile."""
     if not PROFILE.exists():
@@ -166,20 +185,7 @@ def resign(force=False):
     for src in sorted(APPS.glob("*.ipa")):
         out = SIGNED / src.name
         if force or not out.exists() or out.stat().st_mtime < max(src.stat().st_mtime, PROFILE.stat().st_mtime):
-            old_id = ipa_info(src)["id"]
-            new_id = fit_bundle_id(old_id)
-            tmp = SIGNED / f".{src.name}" if new_id else src
-            if new_id:  # rewrite ourselves: zsign 1.1.2's -b can't find Info.plist
-                retarget(src, tmp, old_id, new_id)
-            ents = SIGNED / ".entitlements.plist"
-            ents.write_bytes(plistlib.dumps(app_entitlements(new_id or old_id)))
-            try:
-                subprocess.run(["zsign", "-q", "-t", SIGNED, "-k", P12, "-p", P12_PASSWORD, "-m", PROFILE,
-                                "-e", ents, "-o", out, tmp], check=True, timeout=600)
-            finally:
-                ents.unlink(missing_ok=True)
-                if new_id:
-                    tmp.unlink(missing_ok=True)
+            sign_ipa(src, out)
 
 
 def sync_sources():
@@ -250,7 +256,8 @@ body{font:16px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg);max
 .c{background:var(--card);border-radius:12px;padding:1rem 1.2rem;margin:1rem 0}
 a.b,button{display:inline-block;background:var(--acc);color:#fff;border:0;border-radius:8px;padding:.6rem 1rem;font:inherit;text-decoration:none;cursor:pointer}
 input{font:inherit;padding:.55rem;border-radius:8px;border:1px solid var(--mute);width:100%;box-sizing:border-box;margin:.3rem 0 .8rem;background:transparent;color:inherit}
-small,.m{color:var(--mute)} li{margin:.5rem 0} .err{color:#d33}</style>
+label.drop{display:block;border:2px dashed var(--mute);border-radius:12px;padding:1.2rem;text-align:center;margin:.3rem 0 .8rem}
+summary{cursor:pointer} small,.m{color:var(--mute)} li{margin:.5rem 0} .err{color:#d33}</style>
 <h1>sidedrop</h1>{{ body|safe }}"""
 
 
@@ -276,6 +283,8 @@ def home():
     except Exception as e:
         error = str(e)
     apps = [dict(ipa_info(p), name=p.stem) for p in sorted(SIGNED.glob("*.ipa"))] if SIGNED.exists() else []
+    feather = [a for a in apps if "feather" in a["name"].lower()]  # mirrored via SOURCES, shown in its own menu
+    apps = [a for a in apps if a not in feather]
     files = sorted(p for p in FILES.rglob("*") if p.is_file()) if FILES.exists() else []
     return page("""
 {% if error %}<p class="c err">{{ error }}</p>{% endif %}
@@ -299,10 +308,21 @@ def home():
 <ol><li>Install an app above first. The switch only shows up after that.</li>
 <li>Open Settings → Privacy &amp; Security → <b>Developer Mode</b> (near the bottom) → turn it on → <b>Restart</b>.</li>
 <li>After the restart, tap <b>Turn On</b> and enter your passcode. The apps open normally from then on.</li></ol></div>
+<details class=c><summary><b>Feather</b> <small>on-device signer</small></summary>
+<p class=m>Feather installs and re-signs IPAs right on the iPhone. It needs your own Apple certificate to sign;
+the "Sign your own IPA" box below works without one.</p>
+{% for a in feather %}<p><a class=b href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Install Feather</a>
+<small>v{{ a.short }}</small></p>{% endfor %}
+<p><a href="{{ FEATHER_REPO }}">Feather on GitHub</a> · <a href="{{ FEATHER_REPO }}/releases/latest">latest release</a></p></details>
+<details class=c><summary><b>Sign your own IPA</b></summary>
+<form method=post action=/sign enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Signing…'">
+<label class=drop>Drop an .ipa here or tap to browse<input type=file name=ipa accept=.ipa></label>
+<label>…or paste a link to one<input type=url name=url placeholder="https://…/App.ipa"></label>
+<button>Sign</button></form><small>Signed for registered iPhones. The install link lasts 7 days.</small></details>
 {% if files %}<div class=c><h3>Files</h3><ul>{% for f in files %}
 <li><a href="{{ dl(f) }}">{{ f.relative_to(FILES) }}</a> <small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></li>
 {% endfor %}</ul></div>{% endif %}
-<p><a href=/logout class=m>Sign out</a></p>""", error=error, enrolled=session.get("enrolled"), apps=apps, files=files, FILES=FILES,
+<p><a href=/logout class=m>Sign out</a></p>""", error=error, enrolled=session.get("enrolled"), apps=apps, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"))
 
@@ -346,6 +366,46 @@ def udid(name):
     return redirect(f"{PUBLIC_URL}/?enrolled=1", 301)  # iOS requires a 301 here, then opens it in Safari
 
 
+@app.post("/sign")
+def sign_custom():
+    """Sign one IPA from an upload or URL and hand back an install link."""
+    if not logged_in():
+        abort(403)
+    if not PROFILE.exists():
+        return page("<p class='c err'>No iPhones are registered yet.</p><p><a href=/>Back</a></p>")
+    CUSTOM.mkdir(parents=True, exist_ok=True)
+    for old in CUSTOM.glob("*.ipa"):  # ponytail: cleanup piggybacks on new signs; links die with LINK_TTL anyway
+        if old.stat().st_mtime < time.time() - LINK_TTL:
+            old.unlink(missing_ok=True)
+    name = uuid.uuid4().hex[:16]
+    src, out = CUSTOM / f".{name}.part", CUSTOM / f"{name}.ipa"
+    up, url = request.files.get("ipa"), request.form.get("url", "").strip()
+    try:
+        if up and up.filename:
+            up.save(src)
+        elif url.startswith(("https://", "http://")):
+            # ponytail: no SSRF guard; only logged-in friends reach this
+            with requests.get(url, stream=True, timeout=60) as r:
+                r.raise_for_status()
+                with src.open("wb") as f:
+                    for chunk in r.iter_content(1 << 20):
+                        f.write(chunk)
+        else:
+            return page("<p class='c err'>Pick an .ipa or paste an http(s) link.</p><p><a href=/>Back</a></p>")
+        with lock:
+            sign_ipa(src, out)
+        info = ipa_info(out)
+    except Exception as e:
+        out.unlink(missing_ok=True)
+        return page("<p class='c err'>Couldn't sign that: {{ e }}</p><p><a href=/>Back</a></p>", e=e)
+    finally:
+        src.unlink(missing_ok=True)
+    return page("""<div class=c><h3>{{ i.title }} <small>v{{ i.short }}</small></h3>
+<p><a class=b href="itms-services://?action=download-manifest&url={{ m }}">Install {{ i.title }}</a></p>
+<small>Link works for 7 days. Developer Mode must be on.</small></div><p><a href=/>Back</a></p>""",
+                i=info, m=quote(signed_url(f"/m/custom/{name}.plist"), safe=""))
+
+
 @app.post("/sync")
 def sync_now():
     if not SYNC_TOKEN or not hmac.compare_digest(request.headers.get("Authorization", ""), f"Bearer {SYNC_TOKEN}"):
@@ -362,7 +422,7 @@ def sync_now():
     return "", 202
 
 
-@app.get("/m/<name>.plist")
+@app.get("/m/<path:name>.plist")
 def manifest(name):
     check_sig()
     ipa = SIGNED / f"{name}.ipa"
@@ -375,7 +435,7 @@ def manifest(name):
                      "kind": "software", "title": info["title"]}}]}), 200, {"Content-Type": "text/xml"}
 
 
-@app.get("/i/<name>.ipa")
+@app.get("/i/<path:name>.ipa")
 def ipa(name):
     check_sig()
     return send_from_directory(SIGNED, f"{name}.ipa", mimetype="application/octet-stream")

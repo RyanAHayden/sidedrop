@@ -146,4 +146,17 @@ with zipfile.ZipFile(tmp / "pb2.ipa") as z:
     assert plistlib.loads(z.read("Payload/PB.app/Info.plist"))["CFBundleIdentifier"] == "com.me.pb"
     assert plistlib.loads(z.read("Payload/PB.app/PlugIns/W.appex/Info.plist"))["CFBundleIdentifier"] == "com.me.pb.widget"
     assert z.read("Payload/PB.app/PB") == b"\xca\xfe"
+# custom signing: upload and URL both give a cookie-less install link; Feather sits in its own menu
+html = c.get("/").data.decode()
+assert "Sign your own IPA" in html and "claration/Feather" in html
+assert A.app.test_client().post("/sign").status_code == 403
+demo = (tmp / "apps" / "Demo.ipa").read_bytes()
+import io
+for data in ({"ipa": (io.BytesIO(demo), "x.ipa")}, {"url": "https://gh/t.ipa"}):
+    html = c.post("/sign", data=data, content_type="multipart/form-data").data.decode()
+    m = unquote(re.search(r"download-manifest&url=([^\"]+)", html).group(1))
+    mf = plistlib.loads(anon.get(path_qs(m)).data)["items"][0]
+    assert "/i/custom/" in mf["assets"][0]["url"] and anon.get(path_qs(mf["assets"][0]["url"])).status_code == 200
+assert "Pick an .ipa" in c.post("/sign", data={"url": "file:///etc/passwd"}).data.decode()
+assert not list((tmp / "signed" / "custom").glob(".*"))  # temp files cleaned up
 print("ok")

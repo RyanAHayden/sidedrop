@@ -6,6 +6,8 @@ A password-protected site for sharing ad hoc iOS apps and large files with frien
 2. iOS sends the server the phone's UDID. The server registers the device with Apple, regenerates the ad hoc profile and re-signs every app.
 3. Safari comes back to the site, where they tap **Install**.
 
+Under **Sign your own IPA**, a logged-in friend can drop an IPA or paste a link to one and get an install link signed with the same profile (stored in `signed/custom/`, deleted after 7 days). A **Feather** menu links to the Feather on-device signer. Add `https://raw.githubusercontent.com/claration/Feather/main/app-repo.json` to `SOURCES` to offer a signed Feather install there.
+
 Files placed in `files/` show up as download links. The links are signed, last 7 days, work without a login (so `wget`/`curl` can use them) and can be resumed.
 
 ## Setup
