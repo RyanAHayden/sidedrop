@@ -275,7 +275,7 @@ def sign_profile(data):
 # --- pages ---
 
 PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>sidedrop</title><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=apple-mobile-web-app-title content=sidedrop>
+<title>sidedrop</title><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=theme-color content="#b0bccd"><meta name=apple-mobile-web-app-title content=sidedrop>
 <style>
 :root{color-scheme:light;--bg:#f2f2f7;--cell:#fff;--fg:#000;--mute:#8a8a8e;--sep:rgba(60,60,67,.18);--acc:#007aff;--ok:#34c759;--fill:rgba(118,118,128,.12)}
 body{font:17px/1.35 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:var(--bg);color:var(--fg);max-width:30rem;margin:0 auto;
@@ -317,7 +317,7 @@ ol{padding-left:1.3rem} li{margin:.35rem 0} .ok-badge{width:40px;height:40px;bor
  --gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
  --navbg:linear-gradient(#b0bccd,#889bb3 50%,#7d92ae 51%,#6d84a2);--barbtn:linear-gradient(#8fa1b9,#6a83a6 50%,#5877a2 51%,#4e6d99);
  --bluebtn:linear-gradient(#7aa5ef,#3b72d4 50%,#2861c9 51%,#3a73da);--greenbtn:linear-gradient(#8fd96b,#4caa2b 50%,#3c9a1d 51%,#4cae2a);
- --emboss:0 1px 0 rgba(255,255,255,.75);background:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px)}
+ --emboss:0 1px 0 rgba(255,255,255,.75);background:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);background-color:#c8cfd6}
 body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;background:none;padding-top:0}
 .nav{position:sticky;top:0;z-index:5;height:44px;margin:0 calc(50% - 50vw) 14px;padding:env(safe-area-inset-top) max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left));
  box-sizing:content-box;justify-content:center;background:var(--navbg);box-shadow:inset 0 1px 0 #cdd5df,0 1px 0 #2d3642,0 2px 4px rgba(0,0,0,.25)}
@@ -367,7 +367,22 @@ details[open].row>summary:after{transform:rotate(135deg)}
 .alert .abtns button{height:43px;padding:0;font-size:16px;border:1px solid #0b1a3e;border-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3);
  background:linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.1) 50%,rgba(255,255,255,.05) 51%,rgba(255,255,255,.15))}
 .alert .abtns .ok{background:linear-gradient(rgba(255,255,255,.5),rgba(255,255,255,.2) 50%,rgba(255,255,255,.12) 51%,rgba(255,255,255,.25))}
+/* pull to refresh, Cydia/Tweetie style: sits behind the sticky nav, shows when iOS Safari rubber-bands the page down */
+#ptr{position:absolute;left:0;right:0;top:calc(44px + env(safe-area-inset-top) - 400px);height:400px;z-index:1;display:flex;align-items:flex-end;justify-content:center;
+ gap:14px;padding-bottom:12px;box-sizing:border-box;color:#576c89;text-shadow:var(--emboss);background:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);
+ box-shadow:inset 0 -1px 0 #9aa3ae;pointer-events:none}
+#ptr svg{width:22px;height:40px;transition:transform .18s} #ptr.armed svg.arrow{transform:rotate(180deg)}
+#ptr .spin{display:none;width:20px;height:20px;margin:10px 1px;animation:spin .9s steps(12) infinite} #ptr.loading .spin{display:block} #ptr.loading .arrow{display:none}
+#ptr b{display:block;font-size:13px} #ptr small{display:block;font-size:12px;color:#576c89}
+@keyframes spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
+<div id=ptr aria-hidden=true><svg class=arrow viewBox="0 0 22 40"><path d="M7 0h8v26h7L11 40 0 26h7z" fill="#6f87a8" stroke="#4d6585"/></svg>
+<svg class=spin viewBox="0 0 20 20"><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.08" transform="rotate(0 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.17" transform="rotate(30 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.25" transform="rotate(60 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.33" transform="rotate(90 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.42" transform="rotate(120 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.50" transform="rotate(150 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.58" transform="rotate(180 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.67" transform="rotate(210 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.75" transform="rotate(240 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.83" transform="rotate(270 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.92" transform="rotate(300 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="1.00" transform="rotate(330 10 10)"/></svg>
+<div><b id=ptrT>Pull down to refresh…</b><small id=ptrU></small></div></div>
+<script>(()=>{const d=new Date(),P=document.getElementById("ptr"),T=document.getElementById("ptrT");let busy=0;
+document.getElementById("ptrU").textContent="Last Updated: "+d.toLocaleString("en-US",{month:"numeric",day:"numeric",year:"2-digit",hour:"numeric",minute:"2-digit"}).replace(",","");
+addEventListener("scroll",()=>{if(busy)return;const a=scrollY<-65;P.classList.toggle("armed",a);T.textContent=a?"Release to refresh…":"Pull down to refresh…"},{passive:true});
+addEventListener("touchend",()=>{if(busy||scrollY>=-65)return;busy=1;P.classList.add("loading");T.textContent="Loading…";document.body.style.paddingTop="64px";location.reload()})})()</script>
 <header class=nav><h1><img src=/apple-touch-icon.png alt="">sidedrop</h1><button type=button onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button></header>
 <div class=scrim id=about hidden onclick="if(event.target==this)this.hidden=true"><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
 <h3 id=aboutT>About sidedrop</h3><p>Apps shared between friends, signed for each registered iPhone. Register once in Safari, then tap INSTALL.</p>
