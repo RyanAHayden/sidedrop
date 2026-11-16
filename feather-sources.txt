@@ -5,4 +5,4 @@ https://github.com/chachillie/Flycast-iOS/raw/main/flycast-ios.json
 https://xitrix.github.io/iTorrent/AltStore.json
 https://alt.crystall1ne.dev
 https://repository.apptesters.org
-https://raw.githubusercontent.com/arichornlover/arichornlover.github.io/main/apps.json
+https://raw.githubusercontent.com/MountainofPenguin/Altstore-Repository/main/apps.json
