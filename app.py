@@ -7,7 +7,7 @@ import jwt, requests
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs7, pkcs12
-from flask import Flask, abort, redirect, render_template_string, request, send_from_directory, session, url_for
+from flask import Flask, abort, make_response, redirect, render_template_string, request, send_from_directory, session, url_for
 
 DATA = Path(os.environ.get("DATA", "/data"))
 APPS, SIGNED, FILES = DATA / "apps", DATA / "signed", DATA / "files"
@@ -83,6 +83,16 @@ def asc(method, path, **kw):
     if r.status_code >= 400:
         raise RuntimeError(f"App Store Connect {method} {path}: {r.status_code} {r.text[:300]}")
     return r.json() if r.content else {}
+
+
+def device_token(udid):
+    """Signed UDID kept in a long-lived cookie, so the page knows this phone is in the profile."""
+    return f"{udid}.{hmac.new(SECRET, b'device:' + udid.encode(), 'sha256').hexdigest()[:32]}"
+
+
+def token_udid(tok):
+    udid = tok.partition(".")[0]
+    return udid if udid and hmac.compare_digest(tok, device_token(udid)) else None
 
 
 def profile_udids():
@@ -209,6 +219,7 @@ def sync_sources():
             slug = re.sub(r"[^\w.-]", "", a["bundleIdentifier"])
             # the source's name for it (YouMod, not the IPA's own "YouTube"), shown on its Install button
             (APPS / f".{slug}.third").write_text(a.get("name", "")) if third else (APPS / f".{slug}.third").unlink(missing_ok=True)
+            (APPS / f".{slug}.icon").write_text(a.get("iconURL", ""))  # ponytail: hotlinked, cache locally if a host goes flaky
             marker = APPS / f".{slug}.version"
             if not v.get("downloadURL") or (marker.exists() and marker.read_text() == v["version"]):
                 continue
@@ -284,7 +295,7 @@ button:disabled{opacity:.4;cursor:default} small,.m{color:var(--mute)} small{fon
 .row{display:flex;align-items:center;gap:12px;padding:10px 16px;min-height:44px;position:relative}
 .row+.row:before,details.row+details.row:before{content:"";position:absolute;top:0;right:0;left:76px;border-top:.5px solid var(--sep)}
 .row>div:not(.ico){flex:1;min-width:0} .row small{display:block}
-.ico{width:48px;height:48px;border-radius:11px;flex:none;display:grid;place-items:center;color:#fff;font-weight:700;font-size:20px}
+.ico{width:48px;height:48px;border-radius:11px;object-fit:cover;box-shadow:0 0 0 .5px var(--sep);flex:none;display:grid;place-items:center;color:#fff;font-weight:700;font-size:20px}
 a.get{background:var(--fill);color:var(--acc);border-radius:99px;padding:6px 18px;font-family:inherit;font-size:15px;font-weight:700;flex:none;text-decoration:none}
 .locked .ico{filter:grayscale(.7);opacity:.55} .locked a.get{color:var(--mute)}
 details.row{display:block;padding:0} details.row:before{left:16px!important} details.row>summary{list-style:none;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between}
@@ -308,8 +319,8 @@ def home():
         return page("""<form class=c method=post action=/login>
 <label>Password<input type=password name=password autofocus required></label>
 {% if err %}<p class=err>Wrong password.</p>{% endif %}<button>Sign in</button></form>""", err=request.args.get("err"))
-    if request.args.get("enrolled"):  # the 301 after the profile install lands here in Safari
-        session["enrolled"] = True
+    tok = request.args.get("enrolled") or request.cookies.get("device", "")  # ?enrolled= is the 301 after the profile install
+    enrolled = token_udid(tok) in profile_udids()
     error = None
     sync_if_stale(60)  # ponytail: a new release makes this one page load wait for the download
     try:
@@ -323,9 +334,11 @@ def home():
     third = [a for a in apps if a not in feather and (APPS / f".{a['name']}.third").exists()]
     for a in third:
         a["title"] = (APPS / f".{a['name']}.third").read_text().strip() or a["title"]
+    for a in apps:
+        a["icon"] = (APPS / f".{a['name']}.icon").read_text().strip() if (APPS / f".{a['name']}.icon").exists() else ""
     apps = [a for a in apps if a not in feather and a not in third]
     files = sorted(p for p in FILES.rglob("*") if p.is_file()) if FILES.exists() else []
-    return page("""
+    resp = make_response(page("""
 {% if error %}<p class="c err">{{ error }}</p>{% endif %}
 <div class=steps><span class="{{ 'ok' if enrolled else 'on' }}">Register</span><span class="{{ 'on' if enrolled }}">Install</span><span>Turn on Developer Mode</span></div>
 {% set enroll_form %}<form method=post action=/enroll style="display:flex;flex-direction:column;gap:10px"
@@ -341,9 +354,9 @@ def home():
 <details><summary class=m>Register a different iPhone</summary>{{ enroll_form }}</details></div>
 {% else %}<div class="c hero" id=reg><h2>First, register this iPhone</h2>
 <p class=m>Apps only install on registered phones. Do this in Safari on the iPhone. It takes about a minute, once per phone.</p>
-{{ enroll_form }}<small><a href="/?enrolled=1">Already registered this iPhone? Show the apps</a></small></div>{% endif %}
+{{ enroll_form }}<small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
 {% macro install_list(apps) %}<div class="g{{ '' if enrolled else ' locked' }}">{% for a in apps %}
-<div class=row><div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>
+<div class=row>{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
 <div>{{ a.title }}<small>Version {{ a.short }}</small>{% for f in a.files %}<small><a href="{{ adl(f) }}">↓ {{ f.name }}</a>
 · {{ '%.1f'|format(f.stat().st_size/1e6) }} MB</small>{% endfor %}</div>
 {% if enrolled %}<a class=get aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Get</a>
@@ -376,10 +389,13 @@ the "Sign your own IPA" box below works without one.</p>
 {% if files %}<h3 class=hdr>Files</h3><div class=g>{% for f in files %}
 <div class=row style="padding-left:16px"><div><a href="{{ dl(f) }}">{{ f.relative_to(FILES) }}</a><small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></div></div>
 {% endfor %}</div>{% endif %}
-<p style="text-align:center;margin-top:28px"><a href=/logout>Sign out</a></p>""", error=error, enrolled=session.get("enrolled"), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
+<p style="text-align:center;margin-top:28px"><a href=/logout>Sign out</a></p>""", error=error, enrolled=enrolled, apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
         sources=read_urls("feather-sources.txt"),
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
-        dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"))
+        dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}")))
+    if enrolled and request.args.get("enrolled"):  # survives sign-out; re-checked against the profile on every load
+        resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
+    return resp
 
 
 @app.post("/login")
@@ -418,7 +434,7 @@ def udid(name):
     check_sig()
     attrs = embedded_plist(request.get_data())
     register(attrs["UDID"], f"{name} {attrs.get('PRODUCT', '')}".strip())
-    return redirect(f"{PUBLIC_URL}/?enrolled=1", 301)  # iOS requires a 301 here, then opens it in Safari
+    return redirect(f"{PUBLIC_URL}/?enrolled={device_token(attrs['UDID'])}", 301)  # iOS requires a 301 here, then opens it in Safari
 
 
 @app.post("/sign")
@@ -484,8 +500,10 @@ def manifest(name):
     if not ipa.exists():
         abort(404)
     info = ipa_info(ipa)
+    icon = (APPS / f".{name}.icon").read_text().strip() if (APPS / f".{name}.icon").exists() else ""
     return plistlib.dumps({"items": [{
-        "assets": [{"kind": "software-package", "url": signed_url(f"/i/{name}.ipa", ttl=3600)}],
+        "assets": [{"kind": "software-package", "url": signed_url(f"/i/{name}.ipa", ttl=3600)}]
+                  + [{"kind": k, "url": icon} for k in ("display-image", "full-size-image") if icon],
         "metadata": {"bundle-identifier": info["id"], "bundle-version": info["version"],
                      "kind": "software", "title": info["title"]}}]}), 200, {"Content-Type": "text/xml"}
 

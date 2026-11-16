@@ -77,13 +77,16 @@ A.PROFILE_CERT_DIR = ""
 # iOS posts a CMS-signed plist; we register + regen + sign, then 301 back
 body = b"\x30\x80" + plistlib.dumps({"UDID": "00008130-AAAA", "PRODUCT": "iPhone16,1"}) + b"\x00sig"
 r = A.app.test_client().post(path_qs(url), data=body)  # no cookie, like iOS
-assert r.status_code == 301 and r.location.endswith("/?enrolled=1")
+assert r.status_code == 301 and r.location.endswith("/?enrolled=" + A.device_token("00008130-AAAA"))
 assert calls == [("00008130-AAAA", "Sam script iPhone16,1")]
-# landing back in Safari marks this browser as registered and hides the form behind <details>
+# landing back in Safari sets a device cookie (checked against the profile, survives sign-out); forged tokens do nothing
 html = c.get("/").data
 assert b"First, register this iPhone" in html and b"itms-services" not in html  # apps locked until registered
-html = c.get("/?enrolled=1").data
-assert b"This iPhone is registered" in html and b"<details>" in html and b"This iPhone is registered" in c.get("/").data
+assert b"itms-services" not in c.get("/?enrolled=1").data and b"itms-services" not in c.get("/?enrolled=00008130-AAAA.x").data
+html = c.get(r.location.replace("https://x.test", ""), base_url="https://localhost").data
+assert b"This iPhone is registered" in html and b"<details>" in html
+c.get("/logout", base_url="https://localhost"); c.post("/login", data={"password": "hunter2-but-longer"}, base_url="https://localhost")
+assert b"This iPhone is registered" in c.get("/", base_url="https://localhost").data
 assert A.profile_udids() == {"00008130-AAAA"} and (tmp / "signed" / "Demo.ipa").exists()
 # signed with the concrete app ID, never the profile's wildcard
 assert signed_ents[-1]["application-identifier"] == "TEAM.com.me.demo"
