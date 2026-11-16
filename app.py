@@ -206,7 +206,8 @@ def sync_sources():
             seen.add(a["bundleIdentifier"])
             v = (a.get("versions") or [a])[0]  # newer sources nest versions, older ones are flat
             slug = re.sub(r"[^\w.-]", "", a["bundleIdentifier"])
-            (APPS / f".{slug}.third").touch() if third else (APPS / f".{slug}.third").unlink(missing_ok=True)
+            # the source's name for it (YouMod, not the IPA's own "YouTube"), shown on its Install button
+            (APPS / f".{slug}.third").write_text(a.get("name", "")) if third else (APPS / f".{slug}.third").unlink(missing_ok=True)
             marker = APPS / f".{slug}.version"
             if not v.get("downloadURL") or (marker.exists() and marker.read_text() == v["version"]):
                 continue
@@ -299,6 +300,8 @@ def home():
             for p in sorted(SIGNED.glob("*.ipa"))] if SIGNED.exists() else []
     feather = [a for a in apps if "feather" in a["name"].lower()]  # mirrored via SOURCES, shown in its own menu
     third = [a for a in apps if a not in feather and (APPS / f".{a['name']}.third").exists()]
+    for a in third:
+        a["title"] = (APPS / f".{a['name']}.third").read_text().strip() or a["title"]
     apps = [a for a in apps if a not in feather and a not in third]
     files = sorted(p for p in FILES.rglob("*") if p.is_file()) if FILES.exists() else []
     return page("""
