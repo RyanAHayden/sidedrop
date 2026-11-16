@@ -25,7 +25,12 @@ P12_PASSWORD = os.environ.get("P12_PASSWORD", "")
 BUNDLE_ID = os.environ.get("BUNDLE_ID", "")  # wildcard like com.you.*; apps outside it get re-IDed to fit
 PROFILE_NAME = os.environ.get("PROFILE_NAME", "sidedrop adhoc")
 LINK_TTL = int(os.environ.get("LINK_TTL", 7 * 86400))
-SOURCES = read_urls("mirror-sources.txt")  # AltStore source.json URLs to mirror into apps/
+# AltStore sources to mirror into apps/: one per line, a URL then optionally the bundle IDs to take (else all its apps);
+# third-party-sources.txt's apps are listed under "Third-party apps"
+read_sources = lambda f: [(l.split()[0], l.split()[1:]) for l in (HERE / f).read_text().splitlines()
+                          if l.startswith(("https://", "http://"))] if (HERE / f).exists() else []
+SOURCES = [(u, ids, False) for u, ids in read_sources("mirror-sources.txt")] + \
+          [(u, ids, True) for u, ids in read_sources("third-party-sources.txt")]
 SYNC_TOKEN = os.environ.get("SYNC_TOKEN", "")  # lets CI hit POST /sync after a release
 PROFILE_CERT_DIR = os.environ.get("PROFILE_CERT_DIR", "")  # dir with fullchain.pem + privkey.pem; iOS then shows "Verified"
 
@@ -193,10 +198,13 @@ def resign(force=False):
 
 def sync_sources():
     """Download the newest IPA of each app in SOURCES when its version changes."""
-    for url in SOURCES:
+    for url, ids, third in SOURCES:
         for a in requests.get(url, timeout=30).json().get("apps", []):
+            if ids and a["bundleIdentifier"] not in ids:
+                continue
             v = (a.get("versions") or [a])[0]  # newer sources nest versions, older ones are flat
             slug = re.sub(r"[^\w.-]", "", a["bundleIdentifier"])
+            (APPS / f".{slug}.third").touch() if third else (APPS / f".{slug}.third").unlink(missing_ok=True)
             marker = APPS / f".{slug}.version"
             if not v.get("downloadURL") or (marker.exists() and marker.read_text() == v["version"]):
                 continue
@@ -288,7 +296,8 @@ def home():
     apps = [dict(ipa_info(p), name=p.stem, files=sorted(f for f in (APP_FILES / p.stem).glob("*") if f.is_file()))
             for p in sorted(SIGNED.glob("*.ipa"))] if SIGNED.exists() else []
     feather = [a for a in apps if "feather" in a["name"].lower()]  # mirrored via SOURCES, shown in its own menu
-    apps = [a for a in apps if a not in feather]
+    third = [a for a in apps if a not in feather and (APPS / f".{a['name']}.third").exists()]
+    apps = [a for a in apps if a not in feather and a not in third]
     files = sorted(p for p in FILES.rglob("*") if p.is_file()) if FILES.exists() else []
     return page("""
 {% if error %}<p class="c err">{{ error }}</p>{% endif %}
@@ -302,13 +311,14 @@ def home():
 <details><summary class=m>Register a different iPhone</summary>{{ enroll_form }}</details></div>
 {% else %}<div class=c><h3>1. Register this iPhone</h3>
 <p class=m>Do this in Safari on the iPhone. It takes about a minute, once per phone.</p>{{ enroll_form }}</div>{% endif %}
-<div class=c><h3>2. Install apps</h3>{% if apps %}<ul>{% for a in apps %}
+{% macro install_list(apps) %}<ul>{% for a in apps %}
 <li><a class=b href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Install {{ a.title }}</a>
 <small>v{{ a.short }}</small>{% for f in a.files %}<br><a href="{{ adl(f) }}">{{ f.name }}</a>
-<small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB</small>{% endfor %}</li>{% endfor %}</ul>
+<small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB</small>{% endfor %}</li>{% endfor %}</ul>{% endmacro %}
+<div class=c><h3>2. Install apps</h3>{% if apps %}{{ install_list(apps) }}
 <small>Tap Install, then Install again in the popup and check your home screen.</small>
-
-{% else %}<p class=m>No apps yet.</p>{% endif %}</div>
+{% else %}<p class=m>No apps yet.</p>{% endif %}
+{% if third %}<h4>Third-party apps</h4><p class=m>Made by other people, mirrored from their sources.</p>{{ install_list(third) }}{% endif %}</div>
 <div class=c><h3>3. Enable Developer Mode</h3><p class=m>Needed once per iPhone for apps not from the App Store.</p>
 <ol><li>Install an app above first. The switch only shows up after that.</li>
 <li>Open Settings → Privacy &amp; Security → <b>Developer Mode</b> (near the bottom) → turn it on → <b>Restart</b>.</li>
@@ -330,7 +340,7 @@ the "Sign your own IPA" box below works without one.</p>
 {% if files %}<div class=c><h3>Files</h3><ul>{% for f in files %}
 <li><a href="{{ dl(f) }}">{{ f.relative_to(FILES) }}</a> <small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></li>
 {% endfor %}</ul></div>{% endif %}
-<p><a href=/logout class=m>Sign out</a></p>""", error=error, enrolled=session.get("enrolled"), apps=apps, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
+<p><a href=/logout class=m>Sign out</a></p>""", error=error, enrolled=session.get("enrolled"), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
         sources=read_urls("feather-sources.txt"),
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"))

@@ -18,6 +18,7 @@ These files can be edited on github.com. The NAS picks up changes within 5 minut
 
 - `feather-sources.txt`: sources shown in the Feather menu, one URL per line
 - `mirror-sources.txt`: AltStore sources whose apps are downloaded, signed and listed
+- `third-party-sources.txt`: the same for other people's apps, listed under **Third-party apps**; a URL, then the bundle IDs to take from it (none = all)
 - `app.py`: everything else, including page text
 
 `deploy.sh` runs from a TrueNAS cron job every 5 minutes, in a clone at `/mnt/SSD/sidedrop/repo` that uses a read-only deploy key. It rebuilds and redeploys only when `main` has changed. To deploy right away: `ssh truenas sudo /mnt/SSD/sidedrop/repo/deploy.sh -f`.

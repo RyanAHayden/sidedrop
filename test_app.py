@@ -121,10 +121,19 @@ def fake_get(url, **kw):
     if url.endswith(".json"):
         return Resp({"apps": [{"bundleIdentifier": "io.x.tennis", "versions": [{"version": "1.5", "downloadURL": "https://gh/t.ipa"}]}]})
     return Resp((tmp / "apps" / "Demo.ipa").read_bytes())
-A.requests.get, A.SOURCES = fake_get, ["https://src/source.json"]
+A.requests.get, A.SOURCES = fake_get, [("https://src/source.json", [], False)]
 A.sync_sources(); A.sync_sources()
 assert (tmp / "apps" / "io.x.tennis.ipa").read_bytes() == (tmp / "apps" / "Demo.ipa").read_bytes()
 assert gets.count("https://gh/t.ipa") == 1
+# a third-party source takes only the listed bundle IDs and lists them on their own
+A.SOURCES = [("https://other/source.json", ["io.x.tennis", "nope"], True)]
+A.sync_sources()
+assert (tmp / "apps" / ".io.x.tennis.third").exists()
+assert "Third-party apps" in c.get("/").get_data(as_text=True)
+A.SOURCES = [("https://other/source.json", ["nope"], True)]; (tmp / "apps" / ".io.x.tennis.version").unlink(); A.sync_sources()
+assert not (tmp / "apps" / ".io.x.tennis.version").exists()
+A.SOURCES = [("https://src/source.json", [], False)]; A.sync_sources()
+assert not (tmp / "apps" / ".io.x.tennis.third").exists()
 # page loads check the source, throttled to once a minute
 n = gets.count("https://src/source.json"); A.last_sync[0] = 0
 c.get("/"); c.get("/")
