@@ -199,9 +199,11 @@ def resign(force=False):
 def sync_sources():
     """Download the newest IPA of each app in SOURCES when its version changes."""
     for url, ids, third in SOURCES:
+        seen = set()  # a source can list variants under one bundle ID (iOS 15 builds, …): the first is the main one
         for a in requests.get(url, timeout=30).json().get("apps", []):
-            if ids and a["bundleIdentifier"] not in ids:
+            if (ids and a["bundleIdentifier"] not in ids) or a["bundleIdentifier"] in seen:
                 continue
+            seen.add(a["bundleIdentifier"])
             v = (a.get("versions") or [a])[0]  # newer sources nest versions, older ones are flat
             slug = re.sub(r"[^\w.-]", "", a["bundleIdentifier"])
             (APPS / f".{slug}.third").touch() if third else (APPS / f".{slug}.third").unlink(missing_ok=True)

@@ -1,2 +1,3 @@
 # Other people's apps: a source URL, then the bundle IDs to take from it (none = all its apps)
 https://raw.githubusercontent.com/MountainofPenguin/Altstore-Repository/main/apps.json com.google.ios.youtube
+https://source.ryuksign.com/source.json com.burbn.instagram

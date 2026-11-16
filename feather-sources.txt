@@ -6,3 +6,4 @@ https://xitrix.github.io/iTorrent/AltStore.json
 https://alt.crystall1ne.dev
 https://repository.apptesters.org
 https://raw.githubusercontent.com/MountainofPenguin/Altstore-Repository/main/apps.json
+https://source.ryuksign.com/source.json

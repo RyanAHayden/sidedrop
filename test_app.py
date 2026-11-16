@@ -119,12 +119,13 @@ gets = []
 def fake_get(url, **kw):
     gets.append(url)
     if url.endswith(".json"):
-        return Resp({"apps": [{"bundleIdentifier": "io.x.tennis", "versions": [{"version": "1.5", "downloadURL": "https://gh/t.ipa"}]}]})
+        return Resp({"apps": [{"bundleIdentifier": "io.x.tennis", "versions": [{"version": "1.5", "downloadURL": "https://gh/t.ipa"}]},
+                              {"bundleIdentifier": "io.x.tennis", "versions": [{"version": "1.4", "downloadURL": "https://gh/old.ipa"}]}]})
     return Resp((tmp / "apps" / "Demo.ipa").read_bytes())
 A.requests.get, A.SOURCES = fake_get, [("https://src/source.json", [], False)]
 A.sync_sources(); A.sync_sources()
 assert (tmp / "apps" / "io.x.tennis.ipa").read_bytes() == (tmp / "apps" / "Demo.ipa").read_bytes()
-assert gets.count("https://gh/t.ipa") == 1
+assert gets.count("https://gh/t.ipa") == 1 and "https://gh/old.ipa" not in gets  # first of a bundle ID only
 # a third-party source takes only the listed bundle IDs and lists them on their own
 A.SOURCES = [("https://other/source.json", ["io.x.tennis", "nope"], True)]
 A.sync_sources()
