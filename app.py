@@ -276,9 +276,8 @@ def sign_profile(data):
 
 PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>sidedrop</title><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=apple-mobile-web-app-title content=sidedrop>
-<script>try{localStorage.skeuo&&document.documentElement.classList.add("skeuo")}catch(e){}</script><style>
-:root{color-scheme:light dark;--bg:#f2f2f7;--cell:#fff;--fg:#000;--mute:#8a8a8e;--sep:rgba(60,60,67,.18);--acc:#007aff;--ok:#34c759;--fill:rgba(118,118,128,.12)}
-@media(prefers-color-scheme:dark){:root{--bg:#000;--cell:#1c1c1e;--fg:#fff;--mute:#8d8d93;--sep:rgba(84,84,88,.6);--acc:#0a84ff;--ok:#30d158;--fill:rgba(118,118,128,.24)}}
+<style>
+:root{color-scheme:light;--bg:#f2f2f7;--cell:#fff;--fg:#000;--mute:#8a8a8e;--sep:rgba(60,60,67,.18);--acc:#007aff;--ok:#34c759;--fill:rgba(118,118,128,.12)}
 body{font:17px/1.35 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:var(--bg);color:var(--fg);max-width:30rem;margin:0 auto;
  padding:12px max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left));-webkit-font-smoothing:antialiased}
 h1{font-size:34px;margin:8px 0 2px} h2{font-size:22px;margin:0;text-wrap:balance}
@@ -306,8 +305,6 @@ ol{padding-left:1.3rem} li{margin:.35rem 0} .ok-badge{width:40px;height:40px;bor
 .nudge{animation:nudge .45s} @keyframes nudge{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
 .nav{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 2px}
 .nav h1{margin:0;display:flex;align-items:center;gap:10px} .nav img{width:34px;height:34px;border-radius:8px}
-.nav button{background:none;color:var(--acc);padding:6px 0;font-weight:400}
-.old{display:none} .skeuo .old{display:inline} .skeuo .new{display:none}
 .mini{box-shadow:0 0 0 .5px var(--sep);border-radius:10px;margin:0 0 12px}
 .sw{position:relative;flex:none;width:51px;height:31px}
 .sw input{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;opacity:0;cursor:pointer;z-index:2}
@@ -315,61 +312,77 @@ ol{padding-left:1.3rem} li{margin:.35rem 0} .ok-badge{width:40px;height:40px;bor
 .sw .k{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.25);transition:transform .2s;pointer-events:none}
 .sw input:checked~i{background:var(--ok)} .sw input:checked~.k{transform:translateX(20px)}
 .sw input:focus-visible~i{outline:3px solid var(--acc);outline-offset:2px}
-/* 2012 look: same markup, toggled by the nav button (html.skeuo, kept in localStorage). Single light look by design. */
-html.skeuo{color-scheme:light;--cell:#fff;--fg:#000;--mute:#6d7480;--sep:#e0e0e0;--acc:#385487;--ok:#3c9a1d;--fill:#e6e9ec;
+/* the 2012 look, layered over the base rules above. Single light look by design. */
+:root{color-scheme:light;--cell:#fff;--fg:#000;--mute:#6d7480;--sep:#e0e0e0;--acc:#385487;--ok:#3c9a1d;--fill:#e6e9ec;
  --gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
  --navbg:linear-gradient(#b0bccd,#889bb3 50%,#7d92ae 51%,#6d84a2);--barbtn:linear-gradient(#8fa1b9,#6a83a6 50%,#5877a2 51%,#4e6d99);
  --bluebtn:linear-gradient(#7aa5ef,#3b72d4 50%,#2861c9 51%,#3a73da);--greenbtn:linear-gradient(#8fd96b,#4caa2b 50%,#3c9a1d 51%,#4cae2a);
  --emboss:0 1px 0 rgba(255,255,255,.75);background:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px)}
-.skeuo body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;background:none;padding-top:0}
-.skeuo .nav{position:sticky;top:0;z-index:5;height:44px;margin:0 calc(50% - 50vw) 14px;padding:env(safe-area-inset-top) max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left));
+body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;background:none;padding-top:0}
+.nav{position:sticky;top:0;z-index:5;height:44px;margin:0 calc(50% - 50vw) 14px;padding:env(safe-area-inset-top) max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left));
  box-sizing:content-box;justify-content:center;background:var(--navbg);box-shadow:inset 0 1px 0 #cdd5df,0 1px 0 #2d3642,0 2px 4px rgba(0,0,0,.25)}
-.skeuo .nav h1{font-size:20px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45)} .skeuo .nav img{width:26px;height:26px;border-radius:6px;box-shadow:0 1px 1px rgba(0,0,0,.4)}
-.skeuo .nav button{position:absolute;right:max(8px,env(safe-area-inset-right));bottom:7px;font:700 12px/1.2 sans-serif;font-family:inherit;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45);
+.nav h1{font-size:20px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45)} .nav img{width:26px;height:26px;border-radius:6px;box-shadow:0 1px 1px rgba(0,0,0,.4)}
+.nav button{position:absolute;right:max(8px,env(safe-area-inset-right));bottom:7px;font:700 12px/1.2 sans-serif;font-family:inherit;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45);
  background:var(--barbtn);border:1px solid #375073;border-radius:5px;padding:6px 10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 0 rgba(255,255,255,.25)}
-.skeuo h2{font-size:19px} .skeuo a{color:var(--acc)}
-.skeuo h3.hdr{font-size:17px;font-weight:700;color:#4c566c;text-transform:none;letter-spacing:0;margin:20px 10px 7px;text-shadow:var(--emboss)}
-.skeuo .ftr{font-size:14px;color:#4c566c;text-align:center;text-shadow:var(--emboss);margin:7px 12px 0}
-.skeuo .c,.skeuo .g{border:1px solid #abb2bc;border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8)}
-.skeuo .g .g,.skeuo .mini{box-shadow:none}
-.skeuo .row+.row:before,.skeuo details.row+details.row:before{left:0!important;border-top:1px solid var(--sep)}
-.skeuo a.b,.skeuo button{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.4);font-weight:700;border:1px solid #2b4f8a;border-radius:9px;background:var(--bluebtn);
+h2{font-size:19px} a{color:var(--acc)}
+h3.hdr{font-size:17px;font-weight:700;color:#4c566c;text-transform:none;letter-spacing:0;margin:20px 10px 7px;text-shadow:var(--emboss)}
+.ftr{font-size:14px;color:#4c566c;text-align:center;text-shadow:var(--emboss);margin:7px 12px 0}
+.c,.g{border:1px solid #abb2bc;border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8)}
+.g .g,.mini{box-shadow:none}
+.row+.row:before,details.row+details.row:before{left:0!important;border-top:1px solid var(--sep)}
+a.b,button{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.4);font-weight:700;border:1px solid #2b4f8a;border-radius:9px;background:var(--bluebtn);
  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 1px 2px rgba(0,0,0,.3)}
-.skeuo input{background:#fff;border:1px solid #9aa3ae;border-radius:6px;box-shadow:inset 0 1px 2px rgba(0,0,0,.2)}
-.skeuo label.drop{border:1px solid #9aa3ae;border-radius:8px;color:#6b7684;font-weight:700;text-shadow:var(--emboss);
+input{background:#fff;border:1px solid #9aa3ae;border-radius:6px;box-shadow:inset 0 1px 2px rgba(0,0,0,.2)}
+label.drop{border:1px solid #9aa3ae;border-radius:8px;color:#6b7684;font-weight:700;text-shadow:var(--emboss);
  background:repeating-linear-gradient(90deg,#d5dae0 0 5px,#dadfe4 5px 7px);box-shadow:inset 0 2px 5px rgba(0,0,0,.3),0 1px 0 #fff}
-.skeuo label.drop input{border:0;box-shadow:none;background:none}
-.skeuo textarea{border:1px solid #b7bec8!important;background:linear-gradient(#eef0f3,#fff 12px)!important;box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}
-.skeuo .steps{color:#4c566c;font-weight:700;text-shadow:var(--emboss)}
-.skeuo .steps span:before{height:9px;border-radius:5px;border:1px solid #8c96a3;background:linear-gradient(#b9bfc7,#e6e9ec);box-shadow:inset 0 1px 2px rgba(0,0,0,.25),0 1px 0 #fff}
-.skeuo .steps .on{color:#1d3e78} .skeuo .steps .on:before{background:var(--gloss),linear-gradient(90deg,#2a6fd8 0 50%,transparent 50%),linear-gradient(#b9bfc7,#e6e9ec)}
-.skeuo .steps .ok:before{background:var(--gloss),linear-gradient(#5fc23a,#3a9a1d);border-color:#2f7a17}
-.skeuo .ico{box-shadow:0 1px 3px rgba(0,0,0,.45);position:relative} .skeuo div.ico:after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--gloss)}
-.skeuo .ok-badge{background:var(--gloss),var(--greenbtn);border:1px solid #2f7a17;text-shadow:0 -1px 0 rgba(0,0,0,.35);box-shadow:0 1px 2px rgba(0,0,0,.3)}
+label.drop input{border:0;box-shadow:none;background:none}
+textarea{border:1px solid #b7bec8!important;background:linear-gradient(#eef0f3,#fff 12px)!important;box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}
+.steps{color:#4c566c;font-weight:700;text-shadow:var(--emboss)}
+.steps span:before{height:9px;border-radius:5px;border:1px solid #8c96a3;background:linear-gradient(#b9bfc7,#e6e9ec);box-shadow:inset 0 1px 2px rgba(0,0,0,.25),0 1px 0 #fff}
+.steps .on{color:#1d3e78} .steps .on:before{background:var(--gloss),linear-gradient(90deg,#2a6fd8 0 50%,transparent 50%),linear-gradient(#b9bfc7,#e6e9ec)}
+.steps .ok:before{background:var(--gloss),linear-gradient(#5fc23a,#3a9a1d);border-color:#2f7a17}
+.ico{box-shadow:0 1px 3px rgba(0,0,0,.45);position:relative} div.ico:after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--gloss)}
+.ok-badge{background:var(--gloss),var(--greenbtn);border:1px solid #2f7a17;text-shadow:0 -1px 0 rgba(0,0,0,.35);box-shadow:0 1px 2px rgba(0,0,0,.3)}
 /* App Store, 2012: one tap on the green INSTALL starts the install */
-.skeuo a.get{font-size:12px;letter-spacing:.02em;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-radius:4px;padding:5px 10px;border:1px solid #2f7a17;
+a.get{font-size:12px;letter-spacing:.02em;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-radius:4px;padding:5px 10px;border:1px solid #2f7a17;
  background:var(--greenbtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 1px 1px rgba(0,0,0,.15)}
-.skeuo a.get:active{background:linear-gradient(#3c9a1d,#5bb83a)}
-.skeuo .locked a.get{color:#5b6573;text-shadow:var(--emboss);border-color:#9aa3ae;background:linear-gradient(#fdfdfd,#e3e6ea);box-shadow:inset 0 1px 0 #fff}
-.skeuo details.row>summary{font-weight:700} .skeuo details.row>summary:after{content:"";width:8px;height:8px;margin:6px 4px 0 0;border:solid #7f8a99;border-width:3px 3px 0 0;transform:rotate(45deg)}
-.skeuo details[open].row>summary:after{transform:rotate(135deg)}
-.skeuo .sw{width:79px;height:27px}
-.skeuo .sw i{border:1px solid #a7a7a7;border-radius:14px;overflow:hidden;background:linear-gradient(#e6e6e6,#fefefe);box-shadow:inset 0 2px 3px rgba(0,0,0,.3);font:700 16px/25px sans-serif;font-family:inherit}
-.skeuo .sw i:before{content:"ON";position:absolute;inset:0 auto 0 0;width:79px;padding-left:12px;box-sizing:border-box;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
- background:linear-gradient(#1b68d8,#3f8cf3 55%,#5da1f6);transform:translateX(-52px);transition:transform .2s}
-.skeuo .sw i:after{content:"OFF";position:absolute;right:12px;color:#808080}
-.skeuo .sw .k{top:-1px;left:-1px;width:29px;height:29px;background:linear-gradient(#cfcfcf,#fcfcfc);border:1px solid #a3a3a3;box-sizing:border-box;box-shadow:0 1px 2px rgba(0,0,0,.3)}
-.skeuo .sw input:checked~i{background:linear-gradient(#e6e6e6,#fefefe)} .skeuo .sw input:checked~i:before{transform:none} .skeuo .sw input:checked~i:after{opacity:0}
-.skeuo .sw input:checked~.k{transform:translateX(52px)}
+a.get:active{background:linear-gradient(#3c9a1d,#5bb83a)}
+.locked a.get{color:#5b6573;text-shadow:var(--emboss);border-color:#9aa3ae;background:linear-gradient(#fdfdfd,#e3e6ea);box-shadow:inset 0 1px 0 #fff}
+details.row>summary{font-weight:700} details.row>summary:after{content:"";width:8px;height:8px;margin:6px 4px 0 0;border:solid #7f8a99;border-width:3px 3px 0 0;transform:rotate(45deg)}
+details[open].row>summary:after{transform:rotate(135deg)}
+.sw{width:79px;height:27px}
+.sw i{border:1px solid #a7a7a7;border-radius:14px;overflow:hidden;background:linear-gradient(#e6e6e6,#fefefe);box-shadow:inset 0 2px 3px rgba(0,0,0,.3);font:700 16px/25px sans-serif;font-family:inherit}
+.sw i:before{content:"ON";position:absolute;inset:0 auto 0 0;width:79px;padding-left:12px;box-sizing:border-box;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
+ background:linear-gradient(#1b68d8,#3f8cf3 55%,#5da1f6);transform:translateX(-79px);transition:transform .2s}
+.sw i:after{content:"OFF";position:absolute;right:12px;color:#808080}
+.sw .k{top:-1px;left:-1px;width:29px;height:29px;background:linear-gradient(#cfcfcf,#fcfcfc);border:1px solid #a3a3a3;box-sizing:border-box;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.sw input:checked~i{background:linear-gradient(#e6e6e6,#fefefe)} .sw input:checked~i:before{transform:none} .sw input:checked~i:after{opacity:0}
+.sw input:checked~.k{transform:translateX(52px)}
+.scrim[hidden]{display:none} .scrim{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:16px;background:radial-gradient(rgba(0,0,0,.2),rgba(0,0,0,.6))}
+.alert{width:min(284px,100%);box-sizing:border-box;border-radius:10px;border:2px solid rgba(255,255,255,.85);padding:16px 14px 14px;text-align:center;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);
+ background:linear-gradient(rgba(255,255,255,.25),rgba(255,255,255,.06) 40px,transparent 41px),rgba(4,20,70,.88);box-shadow:0 4px 18px rgba(0,0,0,.6),inset 0 0 0 1px #000;animation:pop .3s ease-out}
+@keyframes pop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.07);opacity:1}100%{transform:scale(1)}}
+.alert h3{margin:0 0 6px;font-size:17px} .alert p{margin:0 0 12px;font-size:15px}
+.abtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.alert .abtns button{height:43px;padding:0;font-size:16px;border:1px solid #0b1a3e;border-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3);
+ background:linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.1) 50%,rgba(255,255,255,.05) 51%,rgba(255,255,255,.15))}
+.alert .abtns .ok{background:linear-gradient(rgba(255,255,255,.5),rgba(255,255,255,.2) 50%,rgba(255,255,255,.12) 51%,rgba(255,255,255,.25))}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
-<header class=nav><h1><img src=/apple-touch-icon.png alt="">sidedrop</h1><button type=button id=look aria-pressed=false
- onclick="let on=document.documentElement.classList.toggle('skeuo');try{on?localStorage.skeuo=1:localStorage.removeItem('skeuo')}catch(e){};sync()">2012</button></header>
-<script>function sync(){let on=document.documentElement.classList.contains("skeuo");look.textContent=on?"Modern":"2012";look.setAttribute("aria-pressed",on)}sync()</script>
+<header class=nav><h1><img src=/apple-touch-icon.png alt="">sidedrop</h1><button type=button onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button></header>
+<div class=scrim id=about hidden onclick="if(event.target==this)this.hidden=true"><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
+<h3 id=aboutT>About sidedrop</h3><p>Apps shared between friends, signed for each registered iPhone. Register once in Safari, then tap INSTALL.</p>
+{% if stats %}<p>{{ stats[0] }} of 100 iPhones registered.{% if stats[1] %} Apps keep working until {{ stats[1].strftime('%B %-d, %Y') }}.{% endif %}</p>{% endif %}
+<div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){d.open=true;d.scrollIntoView()}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
+<script>addEventListener("keydown",e=>{if(e.key=="Escape")about.hidden=true})</script>
 {{ body|safe }}"""
 
 
 def page(body, **ctx):
-    return render_template_string(PAGE, body=render_template_string(body, **ctx))
+    stats = None
+    if logged_in() and PROFILE.exists():  # for the About alert: devices used, and when the profile (so every app) expires
+        prof = embedded_plist(PROFILE.read_bytes())
+        stats = (len(prof.get("ProvisionedDevices", [])), prof.get("ExpirationDate"))
+    return render_template_string(PAGE, body=render_template_string(body, **ctx), stats=stats)
 
 
 @app.get("/")
@@ -411,7 +424,7 @@ def home():
 <li>You'll land back here automatically, registered.</li></ol>{% endset %}
 <script>addEventListener("pageshow",()=>document.querySelectorAll("input[name=name]").forEach(i=>i.oninput()))</script>
 {% if enrolled %}<div class="c hero"><div style="display:flex;gap:12px;align-items:center"><div class=ok-badge>✓</div>
-<div><h2>This iPhone is registered</h2><small>Tap <span class=new>Get</span><span class=old>Install</span> on any app below.</small></div></div>
+<div><h2>This iPhone is registered</h2><small>Tap Install on any app below.</small></div></div>
 <details><summary class=m>Register a different iPhone</summary>{{ enroll_form }}</details></div>
 {% else %}<div class="c hero" id=reg><h2>First, register this iPhone</h2>
 <p class=m>Apps only install on registered phones. Do this in Safari on the iPhone. It takes about a minute, once per phone.</p>
@@ -420,14 +433,14 @@ def home():
 <div class=row>{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
 <div>{{ a.title }}<small>Version {{ a.short }}</small>{% for f in a.files %}<small><a href="{{ adl(f) }}">↓ {{ f.name }}</a>
 · {{ '%.1f'|format(f.stat().st_size/1e6) }} MB</small>{% endfor %}</div>
-{% if enrolled %}<a class=get aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}"><span class=new>Get</span><span class=old>INSTALL</span></a>
+{% if enrolled %}<a class=get aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">INSTALL</a>
 {% else %}<a class=get aria-label="Register first" href=#reg onclick="let r=document.getElementById('reg');r.classList.remove('nudge');void r.offsetWidth;r.classList.add('nudge');r.querySelector('input').focus()">🔒</a>{% endif %}</div>
 {% endfor %}</div>{% endmacro %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}
-<p class=ftr>{% if enrolled %}Tap <span class=new>Get</span><span class=old>Install</span>, then Install in the popup, and check your home screen.{% else %}Register above to unlock these.{% endif %}</p>
+<p class=ftr>{% if enrolled %}Tap Install, then Install in the popup, and check your home screen.{% else %}Register above to unlock these.{% endif %}</p>
 {% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
-<h3 class=hdr>If an app won't open</h3><div class=g><details class=row><summary>Turn on Developer Mode</summary>
+<h3 class=hdr>If an app won't open</h3><div class=g><details class=row id=dev><summary>Turn on Developer Mode</summary>
 <p class=m>Needed once per iPhone for apps not from the App Store.</p>
 <ol><li>Install an app above first. The switch only shows up after that.</li>
 <li>Open Settings → Privacy &amp; Security → <b>Developer Mode</b> (near the bottom) → turn it on → <b>Restart</b>.</li>
@@ -440,7 +453,7 @@ the "Sign your own IPA" box below works without one.</p>
 {% for a in feather %}<p>{% if enrolled %}<a class=b href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Install Feather</a>
 {% else %}<a class=b href=#reg>Register to install Feather</a>{% endif %} <small style="display:inline">v{{ a.short }}</small></p>{% endfor %}
 {% if sources %}<p class=m>Sources to add in Feather:</p>
-<textarea id=src readonly rows={{ sources|length }} style="width:100%;box-sizing:border-box;font:13px ui-monospace,monospace;background:var(--fill);color:inherit;border:0;border-radius:10px;padding:8px">{{ sources|join('\n') }}</textarea>
+<textarea id=src readonly rows={{ sources|length }} wrap=off style="width:calc(100% - 32px);box-sizing:border-box;font:13px ui-monospace,monospace;background:var(--fill);color:inherit;border:0;border-radius:10px;padding:8px">{{ sources|join('\n') }}</textarea>
 <p><button type=button onclick="navigator.clipboard.writeText(src.value).then(()=>this.textContent='Copied ✓')">Copy sources</button></p>{% endif %}
 <p><a href="{{ FEATHER_REPO }}">Feather on GitHub</a> · <a href="{{ FEATHER_REPO }}/releases/latest">latest release</a></p></details>
 <details class=row><summary>Sign your own IPA</summary>
