@@ -1,5 +1,5 @@
 """sidedrop: password-gated UDID enrollment, ad hoc OTA installs and private file downloads."""
-import base64, hashlib, hmac, os, plistlib, re, subprocess, threading, time, uuid, zipfile
+import base64, hashlib, hmac, os, plistlib, re, subprocess, threading, time, uuid, zipfile, zlib
 from pathlib import Path
 from urllib.parse import quote
 
@@ -35,6 +35,7 @@ SYNC_TOKEN = os.environ.get("SYNC_TOKEN", "")  # lets CI hit POST /sync after a 
 PROFILE_CERT_DIR = os.environ.get("PROFILE_CERT_DIR", "")  # dir with fullchain.pem + privkey.pem; iOS then shows "Verified"
 
 app = Flask(__name__)
+app.jinja_env.filters["hue"] = lambda s: zlib.crc32(s.encode()) % 360  # stable icon color per app
 app.secret_key = SECRET
 app.config.update(SESSION_COOKIE_SECURE=PUBLIC_URL.startswith("https"), SESSION_COOKIE_HTTPONLY=True,
                   SESSION_COOKIE_SAMESITE="Lax", PERMANENT_SESSION_LIFETIME=30 * 86400)
@@ -262,16 +263,36 @@ def sign_profile(data):
 
 # --- pages ---
 
-PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>sidedrop</title><style>
-:root{color-scheme:light dark;--fg:#111;--bg:#fafafa;--card:#fff;--mute:#666;--acc:#0a66ff}
-@media(prefers-color-scheme:dark){:root{--fg:#eee;--bg:#111;--card:#1c1c1e;--mute:#999;--acc:#4c8dff}}
-body{font:16px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg);max-width:34rem;margin:0 auto;padding:1.5rem 1rem}
-.c{background:var(--card);border-radius:12px;padding:1rem 1.2rem;margin:1rem 0}
-a.b,button{display:inline-block;background:var(--acc);color:#fff;border:0;border-radius:8px;padding:.6rem 1rem;font:inherit;text-decoration:none;cursor:pointer}
-input{font:inherit;padding:.55rem;border-radius:8px;border:1px solid var(--mute);width:100%;box-sizing:border-box;margin:.3rem 0 .8rem;background:transparent;color:inherit}
-label.drop{display:block;border:2px dashed var(--mute);border-radius:12px;padding:1.2rem;text-align:center;margin:.3rem 0 .8rem}
-summary{cursor:pointer} small,.m{color:var(--mute)} li{margin:.5rem 0} .err{color:#d33}</style>
+:root{color-scheme:light dark;--bg:#f2f2f7;--cell:#fff;--fg:#000;--mute:#8a8a8e;--sep:rgba(60,60,67,.18);--acc:#007aff;--ok:#34c759;--fill:rgba(118,118,128,.12)}
+@media(prefers-color-scheme:dark){:root{--bg:#000;--cell:#1c1c1e;--fg:#fff;--mute:#8d8d93;--sep:rgba(84,84,88,.6);--acc:#0a84ff;--ok:#30d158;--fill:rgba(118,118,128,.24)}}
+body{font:17px/1.35 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:var(--bg);color:var(--fg);max-width:30rem;margin:0 auto;
+ padding:12px max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left));-webkit-font-smoothing:antialiased}
+h1{font-size:34px;margin:8px 0 2px} h2{font-size:22px;margin:0;text-wrap:balance}
+h3.hdr{font-size:13px;font-weight:400;color:var(--mute);text-transform:uppercase;letter-spacing:.02em;margin:22px 16px 6px}
+.c,.g{background:var(--cell);border-radius:12px;padding:1rem 1.1rem;margin:0 0 1rem;overflow:hidden}
+.g{padding:0;margin:0} .ftr{font-size:13px;color:var(--mute);margin:6px 16px 0}
+.hero{border-radius:16px;padding:20px 18px;display:flex;flex-direction:column;gap:12px} .hero p{margin:0}
+a.b,button{display:inline-block;background:var(--acc);color:#fff;border:0;border-radius:12px;padding:.75rem 1rem;font-family:inherit;font-size:17px;font-weight:600;line-height:1.2;text-decoration:none;cursor:pointer;text-align:center}
+input{font:inherit;padding:12px 14px;border-radius:10px;border:0;width:100%;box-sizing:border-box;background:var(--fill);color:inherit}
+label.drop{display:block;border:2px dashed var(--sep);border-radius:12px;padding:1.2rem;text-align:center;color:var(--mute)}
+button:disabled{opacity:.4;cursor:default} small,.m{color:var(--mute)} small{font-size:13px} .err{color:#ff3b30} a{color:var(--acc);text-decoration:none}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:14px 0 20px;font-size:12px;color:var(--mute)}
+.steps span:before{content:"";display:block;height:4px;border-radius:2px;background:var(--fill);margin-bottom:6px}
+.steps .on{color:var(--fg);font-weight:600} .steps .on:before{background:var(--acc)} .steps .ok:before{background:var(--ok)}
+.row{display:flex;align-items:center;gap:12px;padding:10px 16px;min-height:44px;position:relative}
+.row+.row:before,details.row+details.row:before{content:"";position:absolute;top:0;right:0;left:76px;border-top:.5px solid var(--sep)}
+.row>div:not(.ico){flex:1;min-width:0} .row small{display:block}
+.ico{width:48px;height:48px;border-radius:11px;flex:none;display:grid;place-items:center;color:#fff;font-weight:700;font-size:20px}
+a.get{background:var(--fill);color:var(--acc);border-radius:99px;padding:6px 18px;font-family:inherit;font-size:15px;font-weight:700;flex:none;text-decoration:none}
+.locked .ico{filter:grayscale(.7);opacity:.55} .locked a.get{color:var(--mute)}
+details.row{display:block;padding:0} details.row:before{left:16px!important} details.row>summary{list-style:none;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between}
+details.row>summary::-webkit-details-marker{display:none} details.row>summary:after{content:"›";color:var(--mute);font-size:20px;line-height:1;transition:transform .2s}
+details[open].row>summary:after{transform:rotate(90deg)} details.row>:not(summary){margin:0 16px 12px}
+ol{padding-left:1.3rem} li{margin:.35rem 0} .ok-badge{width:40px;height:40px;border-radius:50%;background:var(--ok);color:#fff;display:grid;place-items:center;font-size:22px;flex:none}
+.nudge{animation:nudge .45s} @keyframes nudge{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
 <h1>sidedrop</h1>{{ body|safe }}"""
 
 
@@ -306,46 +327,56 @@ def home():
     files = sorted(p for p in FILES.rglob("*") if p.is_file()) if FILES.exists() else []
     return page("""
 {% if error %}<p class="c err">{{ error }}</p>{% endif %}
-{% set enroll_form %}<form method=post action=/enroll onsubmit="document.getElementById('next').hidden=false">
-<label>Your name<input name=name required maxlength=30></label><button>Register iPhone</button></form>
+<div class=steps><span class="{{ 'ok' if enrolled else 'on' }}">Register</span><span class="{{ 'on' if enrolled }}">Install</span><span>Turn on Developer Mode</span></div>
+{% set enroll_form %}<form method=post action=/enroll style="display:flex;flex-direction:column;gap:10px"
+ onsubmit="document.getElementById('next').hidden=false;this.querySelector('button').textContent='Check the popup…'">
+<input name=name required maxlength=30 placeholder="Your name" aria-label="Your name" autocomplete=given-name
+ oninput="this.form.querySelector('button').disabled=!this.value.trim()"><button disabled>Register iPhone</button></form>
 <ol id=next hidden><li>Tap <b>Allow</b>, then <b>Close</b>.</li><li>Open the <b>Settings</b> app.</li>
 <li>Tap <b>Profile Downloaded</b> near the top.</li><li>Tap <b>Install</b>, enter your passcode, tap <b>Install</b> again.</li>
 <li>You'll land back here automatically, registered.</li></ol>{% endset %}
-{% if enrolled %}<div class=c><h3>✅ This iPhone is registered</h3>
-<small>You can delete the "sidedrop" profile in Settings → General → VPN &amp; Device Management.</small>
+<script>addEventListener("pageshow",()=>document.querySelectorAll("input[name=name]").forEach(i=>i.oninput()))</script>
+{% if enrolled %}<div class="c hero"><div style="display:flex;gap:12px;align-items:center"><div class=ok-badge>✓</div>
+<div><h2>This iPhone is registered</h2><small>Tap Get on any app below.</small></div></div>
 <details><summary class=m>Register a different iPhone</summary>{{ enroll_form }}</details></div>
-{% else %}<div class=c><h3>1. Register this iPhone</h3>
-<p class=m>Do this in Safari on the iPhone. It takes about a minute, once per phone.</p>{{ enroll_form }}</div>{% endif %}
-{% macro install_list(apps) %}<ul>{% for a in apps %}
-<li><a class=b href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Install {{ a.title }}</a>
-<small>v{{ a.short }}</small>{% for f in a.files %}<br><a href="{{ adl(f) }}">{{ f.name }}</a>
-<small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB</small>{% endfor %}</li>{% endfor %}</ul>{% endmacro %}
-<div class=c><h3>2. Install apps</h3>{% if apps %}{{ install_list(apps) }}
-<small>Tap Install, then Install again in the popup and check your home screen.</small>
-{% else %}<p class=m>No apps yet.</p>{% endif %}
-{% if third %}<h4>Third-party apps</h4><p class=m>Made by other people, mirrored from their sources.</p>{{ install_list(third) }}{% endif %}</div>
-<div class=c><h3>3. Enable Developer Mode</h3><p class=m>Needed once per iPhone for apps not from the App Store.</p>
+{% else %}<div class="c hero" id=reg><h2>First, register this iPhone</h2>
+<p class=m>Apps only install on registered phones. Do this in Safari on the iPhone. It takes about a minute, once per phone.</p>
+{{ enroll_form }}<small><a href="/?enrolled=1">Already registered this iPhone? Show the apps</a></small></div>{% endif %}
+{% macro install_list(apps) %}<div class="g{{ '' if enrolled else ' locked' }}">{% for a in apps %}
+<div class=row><div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>
+<div>{{ a.title }}<small>Version {{ a.short }}</small>{% for f in a.files %}<small><a href="{{ adl(f) }}">↓ {{ f.name }}</a>
+· {{ '%.1f'|format(f.stat().st_size/1e6) }} MB</small>{% endfor %}</div>
+{% if enrolled %}<a class=get aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Get</a>
+{% else %}<a class=get aria-label="Register first" href=#reg onclick="let r=document.getElementById('reg');r.classList.remove('nudge');void r.offsetWidth;r.classList.add('nudge');r.querySelector('input').focus()">🔒</a>{% endif %}</div>
+{% endfor %}</div>{% endmacro %}
+<h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}
+<p class=ftr>{% if enrolled %}Tap Get, then Install in the popup, and check your home screen.{% else %}Register above to unlock these.{% endif %}</p>
+{% else %}<p class="c m">No apps yet.</p>{% endif %}
+{% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
+<h3 class=hdr>If an app won't open</h3><div class=g><details class=row><summary>Turn on Developer Mode</summary>
+<p class=m>Needed once per iPhone for apps not from the App Store.</p>
 <ol><li>Install an app above first. The switch only shows up after that.</li>
 <li>Open Settings → Privacy &amp; Security → <b>Developer Mode</b> (near the bottom) → turn it on → <b>Restart</b>.</li>
-<li>After the restart, tap <b>Turn On</b> and enter your passcode. The apps open normally from then on.</li></ol></div>
-<details class=c><summary><b>Feather</b> <small>on-device signer</small></summary>
+<li>After the restart, tap <b>Turn On</b> and enter your passcode. The apps open normally from then on.</li></ol></details></div>
+<h3 class=hdr>More</h3><div class=g>
+<details class=row><summary><span>Feather <small style="display:inline">on-device signer</small></span></summary>
 <p class=m>Feather installs and re-signs IPAs right on the iPhone. It needs your own Apple certificate to sign;
 the "Sign your own IPA" box below works without one.</p>
-{% for a in feather %}<p><a class=b href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Install Feather</a>
-<small>v{{ a.short }}</small></p>{% endfor %}
+{% for a in feather %}<p>{% if enrolled %}<a class=b href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Install Feather</a>
+{% else %}<a class=b href=#reg>Register to install Feather</a>{% endif %} <small style="display:inline">v{{ a.short }}</small></p>{% endfor %}
 {% if sources %}<p class=m>Sources to add in Feather:</p>
-<textarea id=src readonly rows={{ sources|length }} style="width:100%;box-sizing:border-box;font:13px ui-monospace,monospace;background:transparent;color:inherit;border-radius:8px">{{ sources|join('\n') }}</textarea>
-<button type=button onclick="navigator.clipboard.writeText(src.value).then(()=>this.textContent='Copied ✓')">Copy sources</button>{% endif %}
+<textarea id=src readonly rows={{ sources|length }} style="width:100%;box-sizing:border-box;font:13px ui-monospace,monospace;background:var(--fill);color:inherit;border:0;border-radius:10px;padding:8px">{{ sources|join('\n') }}</textarea>
+<p><button type=button onclick="navigator.clipboard.writeText(src.value).then(()=>this.textContent='Copied ✓')">Copy sources</button></p>{% endif %}
 <p><a href="{{ FEATHER_REPO }}">Feather on GitHub</a> · <a href="{{ FEATHER_REPO }}/releases/latest">latest release</a></p></details>
-<details class=c><summary><b>Sign your own IPA</b></summary>
-<form method=post action=/sign enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Signing…'">
-<label class=drop>Drop an .ipa here or tap to browse<input type=file name=ipa accept=.ipa></label>
-<label>…or paste a link to one<input type=url name=url placeholder="https://…/App.ipa"></label>
-<button>Sign</button></form><small>Signed for registered iPhones. The install link lasts 7 days.</small></details>
-{% if files %}<div class=c><h3>Files</h3><ul>{% for f in files %}
-<li><a href="{{ dl(f) }}">{{ f.relative_to(FILES) }}</a> <small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></li>
-{% endfor %}</ul></div>{% endif %}
-<p><a href=/logout class=m>Sign out</a></p>""", error=error, enrolled=session.get("enrolled"), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
+<details class=row><summary>Sign your own IPA</summary>
+<form method=post action=/sign enctype=multipart/form-data style="display:flex;flex-direction:column;gap:10px" onsubmit="this.querySelector('button').textContent='Signing…'">
+<label class=drop>Drop an .ipa here or tap to browse<input type=file name=ipa accept=.ipa style="background:none"></label>
+<input type=url name=url placeholder="…or paste a link to an .ipa" aria-label="Link to an .ipa">
+<button>Sign</button></form><p><small>Signed for registered iPhones. The install link lasts 7 days.</small></p></details></div>
+{% if files %}<h3 class=hdr>Files</h3><div class=g>{% for f in files %}
+<div class=row style="padding-left:16px"><div><a href="{{ dl(f) }}">{{ f.relative_to(FILES) }}</a><small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></div></div>
+{% endfor %}</div>{% endif %}
+<p style="text-align:center;margin-top:28px"><a href=/logout>Sign out</a></p>""", error=error, enrolled=session.get("enrolled"), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
         sources=read_urls("feather-sources.txt"),
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"))

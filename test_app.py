@@ -80,7 +80,8 @@ r = A.app.test_client().post(path_qs(url), data=body)  # no cookie, like iOS
 assert r.status_code == 301 and r.location.endswith("/?enrolled=1")
 assert calls == [("00008130-AAAA", "Sam script iPhone16,1")]
 # landing back in Safari marks this browser as registered and hides the form behind <details>
-assert b"Register this iPhone" in c.get("/").data
+html = c.get("/").data
+assert b"First, register this iPhone" in html and b"itms-services" not in html  # apps locked until registered
 html = c.get("/?enrolled=1").data
 assert b"This iPhone is registered" in html and b"<details>" in html and b"This iPhone is registered" in c.get("/").data
 assert A.profile_udids() == {"00008130-AAAA"} and (tmp / "signed" / "Demo.ipa").exists()
@@ -94,7 +95,7 @@ assert A.app.test_client().get("/f/big.bin?e=1&s=x").status_code == 403
 
 # install page -> manifest -> ipa, all cookie-less
 html = c.get("/").data.decode()
-assert "v1.2<" in html  # marketing version, not the build number
+assert "Version 1.2<" in html  # marketing version, not the build number
 m = unquote(re.search(r"download-manifest&url=([^\"]+)", html).group(1))
 anon = A.app.test_client()
 mf = plistlib.loads(anon.get(path_qs(m)).data)["items"][0]
@@ -165,7 +166,7 @@ with zipfile.ZipFile(tmp / "pb2.ipa") as z:
 html = c.get("/").data.decode()
 a = re.search(r'href="(https://x\.test/af/Demo/game\.iso[^"]+)"', html).group(1).replace("&amp;", "&")
 assert anon.get(path_qs(a)).data == b"iso" and "Files</h3>" in html and html.index("game.iso") < html.index("Files</h3>")
-assert html.count(">game.iso<") == 1
+assert html.count("game.iso<") == 1
 
 # Feather sources come from the repo's feather-sources.txt and get a copy button
 html = c.get("/").data.decode()
