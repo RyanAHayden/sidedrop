@@ -84,7 +84,7 @@ html = c.get("/").data
 assert b"First, register this iPhone" in html and b"itms-services" not in html  # apps locked until registered
 assert b"itms-services" not in c.get("/?enrolled=1").data and b"itms-services" not in c.get("/?enrolled=00008130-AAAA.x").data
 html = c.get(r.location.replace("https://x.test", ""), base_url="https://localhost").data
-assert b"This iPhone is registered" in html and b"<details>" in html
+assert b"This iPhone is registered" in html and b"Register a different iPhone" in html
 c.get("/logout", base_url="https://localhost"); c.post("/login", data={"password": "hunter2-but-longer"}, base_url="https://localhost")
 assert b"This iPhone is registered" in c.get("/", base_url="https://localhost").data
 assert A.profile_udids() == {"00008130-AAAA"} and (tmp / "signed" / "Demo.ipa").exists()
@@ -170,7 +170,7 @@ html = c.get("/").data.decode()
 a = re.search(r'href="(https://x\.test/af/Demo/game\.iso[^"]+)"', html).group(1).replace("&amp;", "&")
 assert anon.get(path_qs(a)).data == b"iso" and "Files</h3>" in html and html.index("game.iso") < html.index("Files</h3>")
 assert html.count("game.iso<") == 1
-assert 'class="get grey"' in html and "Download game.iso" in html  # files turn INSTALL grey and become steps
+assert "steps(this)" in html and "Download game.iso" in html  # files turn INSTALL grey and become steps
 (tmp / "appfiles" / "Demo" / "labels.txt").write_text("game.iso = the game disc\n")
 html = c.get("/").data.decode()
 assert "Download the game disc" in html and "labels.txt" not in html

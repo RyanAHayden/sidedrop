@@ -276,82 +276,49 @@ def sign_profile(data):
 
 PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>sidedrop</title><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=theme-color content="#b0bccd"><meta name=apple-mobile-web-app-status-bar-style content=black-translucent><meta name=apple-mobile-web-app-title content=sidedrop>
+<script>try{localStorage.dark&&document.documentElement.classList.add("dark")}catch(e){}</script>
 <style>
-:root{color-scheme:light;--bg:#f2f2f7;--cell:#fff;--fg:#000;--mute:#8a8a8e;--sep:rgba(60,60,67,.18);--acc:#007aff;--ok:#34c759;--fill:rgba(118,118,128,.12)}
-body{font:17px/1.35 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:var(--bg);color:var(--fg);max-width:30rem;margin:0 auto;
- padding:12px max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left));-webkit-font-smoothing:antialiased}
-h1{font-size:34px;margin:8px 0 2px} h2{font-size:22px;margin:0;text-wrap:balance}
-h3.hdr{font-size:13px;font-weight:400;color:var(--mute);text-transform:uppercase;letter-spacing:.02em;margin:22px 16px 6px}
-.c,.g{background:var(--cell);border-radius:12px;padding:1rem 1.1rem;margin:0 0 1rem;overflow:hidden}
-.g{padding:0;margin:0} .ftr{font-size:13px;color:var(--mute);margin:6px 16px 0}
-.hero{border-radius:16px;padding:20px 18px;display:flex;flex-direction:column;gap:12px} .hero p{margin:0}
-a.b,button{display:inline-block;background:var(--acc);color:#fff;border:0;border-radius:12px;padding:.75rem 1rem;font-family:inherit;font-size:17px;font-weight:600;line-height:1.2;text-decoration:none;cursor:pointer;text-align:center}
-input{font:inherit;padding:12px 14px;border-radius:10px;border:0;width:100%;box-sizing:border-box;background:var(--fill);color:inherit}
-label.drop{display:block;border:2px dashed var(--sep);border-radius:12px;padding:1.2rem;text-align:center;color:var(--mute)}
-button:disabled{opacity:.4;cursor:default} small,.m{color:var(--mute)} small{font-size:13px} .err{color:#ff3b30} a{color:var(--acc);text-decoration:none}
-.row{display:flex;align-items:center;gap:12px;padding:10px 16px;min-height:44px;position:relative}
-.row+.row:before,details.row+details.row:before{content:"";position:absolute;top:0;right:0;left:76px;border-top:.5px solid var(--sep)}
-.row>div:not(.ico){flex:1;min-width:0} .row small{display:block}
-.ico{width:48px;height:48px;border-radius:11px;object-fit:cover;box-shadow:0 0 0 .5px var(--sep);flex:none;display:grid;place-items:center;color:#fff;font-weight:700;font-size:20px}
-a.get{background:var(--fill);color:var(--acc);border-radius:99px;padding:6px 18px;font-family:inherit;font-size:15px;font-weight:700;flex:none;text-decoration:none}
-.locked .ico{filter:grayscale(.7);opacity:.55} .locked a.get{color:var(--mute)}
-details.row{display:block;padding:0} details.row:before{left:16px!important} details.row>summary{list-style:none;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between}
-details.row>summary::-webkit-details-marker{display:none} details.row>summary:after{content:"›";color:var(--mute);font-size:20px;line-height:1;transition:transform .2s}
-details[open].row>summary:after{transform:rotate(90deg)} details.row>:not(summary){margin:0 16px 12px}
-ol{padding-left:1.3rem} li{margin:.35rem 0} .ok-badge{width:40px;height:40px;border-radius:50%;background:var(--ok);color:#fff;display:grid;place-items:center;font-size:22px;flex:none}
-.nudge{animation:nudge .45s} @keyframes nudge{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
-.nav{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 2px}
-.nav h1{margin:0;display:flex;align-items:center;gap:10px} .nav img{width:34px;height:34px;border-radius:8px}
-.mini{box-shadow:0 0 0 .5px var(--sep);border-radius:10px;margin:0 0 12px}
-.sw{position:relative;flex:none;width:51px;height:31px}
-.sw input{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;opacity:0;cursor:pointer;z-index:2}
-.sw i{position:absolute;inset:0;border-radius:16px;background:var(--fill);transition:background .2s}
-.sw .k{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.25);transition:transform .2s;pointer-events:none}
-.sw input:checked~i{background:var(--ok)} .sw input:checked~.k{transform:translateX(20px)}
-.sw input:focus-visible~i{outline:3px solid var(--acc);outline-offset:2px}
-/* the 2012 look, layered over the base rules above. Single light look by design. */
-:root{color-scheme:light;--cell:#fff;--fg:#000;--mute:#6d7480;--sep:#e0e0e0;--acc:#385487;--ok:#3c9a1d;--fill:#e6e9ec;
- --gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
+/* 2012 iOS look (pinstripes, glossy bars, App Store buttons). Single light look by design. */
+:root{color-scheme:light;--mute:#6d7480;--sep:#e0e0e0;--line:#abb2bc;--acc:#385487;--head:#4c566c;
+ --pin:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);--gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
  --navbg:linear-gradient(#b0bccd,#889bb3 50%,#7d92ae 51%,#6d84a2);--barbtn:linear-gradient(#8fa1b9,#6a83a6 50%,#5877a2 51%,#4e6d99);
  --bluebtn:linear-gradient(#7aa5ef,#3b72d4 50%,#2861c9 51%,#3a73da);--greenbtn:linear-gradient(#8fd96b,#4caa2b 50%,#3c9a1d 51%,#4cae2a);
- --emboss:0 1px 0 rgba(255,255,255,.75);background:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);background-color:#c8cfd6}
-body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;background:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);min-height:100vh;box-sizing:border-box;padding-top:calc(58px + env(safe-area-inset-top))}
-body.ptr-loading{padding-top:calc(122px + env(safe-area-inset-top))}
-.nav{position:fixed;top:0;left:0;right:0;z-index:5;height:44px;margin:0;padding:env(safe-area-inset-top) max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left));
- box-sizing:content-box;justify-content:center;background:var(--navbg);box-shadow:inset 0 1px 0 #cdd5df,0 1px 0 #2d3642,0 2px 4px rgba(0,0,0,.25)}
-.nav h1{font-size:20px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45)} .nav img{width:26px;height:26px;border-radius:6px;box-shadow:0 1px 1px rgba(0,0,0,.4)}
-.nav button{position:absolute;right:max(8px,env(safe-area-inset-right));bottom:7px;font:700 12px/1.2 sans-serif;font-family:inherit;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45);
- background:var(--barbtn);border:1px solid #375073;border-radius:5px;padding:6px 10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 0 rgba(255,255,255,.25)}
-h2{font-size:19px} a{color:var(--acc)}
-h3.hdr{font-size:17px;font-weight:700;color:#4c566c;text-transform:none;letter-spacing:0;margin:20px 10px 7px;text-shadow:var(--emboss)}
-.ftr{font-size:14px;color:#4c566c;text-align:center;text-shadow:var(--emboss);margin:7px 12px 0}
-.c,.g{border:1px solid #abb2bc;border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8)}
-.g .g,.mini{box-shadow:none}
-.row+.row:before,details.row+details.row:before{left:0!important;border-top:1px solid var(--sep)}
-a.b,button{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.4);font-weight:700;border:1px solid #2b4f8a;border-radius:9px;background:var(--bluebtn);
- box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 1px 2px rgba(0,0,0,.3)}
-input{background:#fff;border:1px solid #9aa3ae;border-radius:6px;box-shadow:inset 0 1px 2px rgba(0,0,0,.2)}
-label.drop{border:1px solid #9aa3ae;border-radius:8px;color:#6b7684;font-weight:700;text-shadow:var(--emboss);
+ --greybtn:linear-gradient(#fdfdfd,#e3e6ea);--emboss:0 1px 0 rgba(255,255,255,.75);background:#c8cfd6}
+/* fixed backdrop: stays put while iOS rubber-bands the page, so the bounce shows pinstripes instead of a flat color */
+body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
+body{max-width:30rem;margin:0 auto;font:17px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;-webkit-font-smoothing:antialiased;
+ padding:calc(56px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) calc(72px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
+a{color:var(--acc);text-decoration:none} small,.m{color:var(--mute)} small{font-size:13px} .err{color:#d70015} h2{font-size:19px;margin:0}
+button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5c542;outline-offset:2px}
+.nav{position:fixed;top:0;left:0;right:0;z-index:5;height:44px;padding:env(safe-area-inset-top) max(7px,env(safe-area-inset-right)) 0 max(7px,env(safe-area-inset-left));
+ display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:var(--navbg);box-shadow:inset 0 1px 0 #cdd5df,0 1px 0 #2d3642,0 2px 4px rgba(0,0,0,.25)}
+.nav h1{margin:0;font-size:20px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45)}
+.nav .bar{justify-self:start;width:auto;font-size:12px;font-weight:700;line-height:1.2;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45);background:var(--barbtn);border:1px solid #375073;
+ border-radius:5px;padding:6px 10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 0 rgba(255,255,255,.25)} .nav .bar.r{justify-self:end}
+h3.hdr{font-size:17px;font-weight:700;color:var(--head);margin:20px 10px 7px;text-shadow:var(--emboss)}
+.ftr{font-size:14px;color:var(--head);text-align:center;text-shadow:var(--emboss);margin:7px 12px 0}
+.c,.g{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8);overflow:hidden}
+.c{padding:14px;margin:0 0 12px;display:flex;flex-direction:column;gap:10px} .c p{margin:0}
+a.b,button{display:block;box-sizing:border-box;width:100%;font:inherit;font-weight:700;line-height:1.2;text-align:center;cursor:pointer;padding:11px;color:#fff;
+ text-shadow:0 -1px 0 rgba(0,0,0,.4);border:1px solid #2b4f8a;border-radius:9px;background:var(--bluebtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 1px 2px rgba(0,0,0,.3)}
+a.b.grey,button.grey{color:#38404b;text-shadow:var(--emboss);border-color:#8d97a5;background:linear-gradient(#fff,#e9ebee 50%,#dde0e5 51%,#eceef1)}
+button:disabled{opacity:.5;cursor:default}
+input{font:inherit;width:100%;box-sizing:border-box;padding:10px 12px;background:#fff;border:1px solid #9aa3ae;border-radius:6px;box-shadow:inset 0 1px 2px rgba(0,0,0,.2);color:var(--acc)}
+label.drop{display:block;padding:18px 12px;text-align:center;border:1px solid #9aa3ae;border-radius:8px;color:#6b7684;font-weight:700;text-shadow:var(--emboss);
  background:repeating-linear-gradient(90deg,#d5dae0 0 5px,#dadfe4 5px 7px);box-shadow:inset 0 2px 5px rgba(0,0,0,.3),0 1px 0 #fff}
-label.drop input{border:0;box-shadow:none;background:none}
-textarea{border:1px solid #b7bec8!important;background:linear-gradient(#eef0f3,#fff 12px)!important;box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}
-.ico{box-shadow:0 1px 3px rgba(0,0,0,.45);position:relative} div.ico:after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--gloss)}
-.ok-badge{background:var(--gloss),var(--greenbtn);border:1px solid #2f7a17;text-shadow:0 -1px 0 rgba(0,0,0,.35);box-shadow:0 1px 2px rgba(0,0,0,.3)}
-/* App Store, 2012: one tap on the green INSTALL starts the install */
-a.get{font-size:12px;letter-spacing:.02em;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-radius:4px;padding:5px 10px;border:1px solid #2f7a17;
- background:var(--greenbtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 1px 1px rgba(0,0,0,.15)}
-a.get:active{background:linear-gradient(#3c9a1d,#5bb83a)}
-.locked a.get{color:#5b6573;text-shadow:var(--emboss);border-color:#9aa3ae;background:linear-gradient(#fdfdfd,#e3e6ea);box-shadow:inset 0 1px 0 #fff}
-details.row>summary{font-weight:700} details.row>summary:after{content:"";width:8px;height:8px;margin:6px 4px 0 0;border:solid #7f8a99;border-width:3px 3px 0 0;transform:rotate(45deg)}
-details[open].row>summary:after{transform:rotate(135deg)}
-.sw{width:79px;height:27px}
-.sw i{border:1px solid #a7a7a7;border-radius:14px;overflow:hidden;background:linear-gradient(#e6e6e6,#fefefe);box-shadow:inset 0 2px 3px rgba(0,0,0,.3);font:700 16px/25px sans-serif;font-family:inherit}
-.sw i:before{content:"ON";position:absolute;inset:0 auto 0 0;width:79px;padding-left:12px;box-sizing:border-box;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
- background:linear-gradient(#1b68d8,#3f8cf3 55%,#5da1f6);transform:translateX(-79px);transition:transform .2s}
-.sw i:after{content:"OFF";position:absolute;right:12px;color:#808080}
-.sw .k{top:-1px;left:-1px;width:29px;height:29px;background:linear-gradient(#cfcfcf,#fcfcfc);border:1px solid #a3a3a3;box-sizing:border-box;box-shadow:0 1px 2px rgba(0,0,0,.3)}
-.sw input:checked~i{background:linear-gradient(#e6e6e6,#fefefe)} .sw input:checked~i:before{transform:none} .sw input:checked~i:after{opacity:0}
-.sw input:checked~.k{transform:translateX(52px)}
+label.drop input{border:0;box-shadow:none;background:none;padding:8px 0 0;font-size:13px}
+textarea{width:100%;box-sizing:border-box;font:12px/1.5 ui-monospace,Menlo,monospace;border:1px solid #b7bec8;border-radius:6px;padding:8px;color:#333;resize:none;
+ background:linear-gradient(#eef0f3,#fff 12px);box-shadow:inset 0 1px 2px rgba(0,0,0,.15);white-space:pre;overflow-x:auto}
+ol{margin:0;padding-left:1.3rem} li{margin:.35rem 0}
+.row{display:flex;align-items:center;gap:10px;min-height:44px;padding:9px 10px;border-top:1px solid var(--sep)}
+.g>:first-child{border-top:0!important} .row>div:not(.ico){flex:1;min-width:0} .row small{display:block}
+.ico{position:relative;width:50px;height:50px;flex:none;border-radius:10px;object-fit:cover;display:grid;place-items:center;color:#fff;font-weight:700;font-size:21px;
+ text-shadow:0 -1px 0 rgba(0,0,0,.3);box-shadow:0 1px 3px rgba(0,0,0,.45)} div.ico:after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--gloss)}
+.locked .ico{filter:grayscale(.8);opacity:.6}
+details{border-top:1px solid var(--sep)} details>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;
+ padding:0 10px;font-weight:700} details>summary::-webkit-details-marker{display:none}
+details>summary:after{content:"";flex:none;width:8px;height:8px;margin-right:4px;border:solid #7f8a99;border-width:3px 3px 0 0;transform:rotate(45deg);transition:transform .2s}
+details[open]>summary:after{transform:rotate(135deg)} details>:not(summary){margin:0 10px 12px}
 .scrim[hidden]{display:none} .scrim{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:16px;background:radial-gradient(rgba(0,0,0,.2),rgba(0,0,0,.6))}
 .alert{width:min(284px,100%);box-sizing:border-box;border-radius:10px;border:2px solid rgba(255,255,255,.85);padding:16px 14px 14px;text-align:center;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);
  background:linear-gradient(rgba(255,255,255,.25),rgba(255,255,255,.06) 40px,transparent 41px),rgba(4,20,70,.88);box-shadow:0 4px 18px rgba(0,0,0,.6),inset 0 0 0 1px #000;animation:pop .3s ease-out}
@@ -361,43 +328,23 @@ details[open].row>summary:after{transform:rotate(135deg)}
 .alert .abtns button{height:43px;padding:0;font-size:16px;border:1px solid #0b1a3e;border-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3);
  background:linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.1) 50%,rgba(255,255,255,.05) 51%,rgba(255,255,255,.15))}
 .alert .abtns .ok{background:linear-gradient(rgba(255,255,255,.5),rgba(255,255,255,.2) 50%,rgba(255,255,255,.12) 51%,rgba(255,255,255,.25))}
-/* pull to refresh, Cydia/Tweetie style. iOS clips anything above the page while it rubber-bands, so the panel is fixed under the nav,
-   behind the page (z-index:-1), and the page's own opaque pinstripes hide it until a pull slides the page down */
-#ptr{position:fixed;left:50%;transform:translateX(-50%);width:min(100%,30rem);top:calc(44px + env(safe-area-inset-top));height:60vh;z-index:-1;display:flex;
- align-items:flex-start;justify-content:center;gap:14px;padding-top:12px;box-sizing:border-box;color:#576c89;text-shadow:var(--emboss);
- background:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);box-shadow:inset 0 4px 6px -3px rgba(0,0,0,.35);pointer-events:none}
-#ptr svg{width:22px;height:40px;transition:transform .18s} #ptr.armed svg.arrow{transform:rotate(180deg)}
-#ptr .spin{display:none;width:20px;height:20px;margin:10px 1px;animation:spin .9s steps(12) infinite} #ptr.loading .spin{display:block} #ptr.loading .arrow{display:none}
-#ptr b{display:block;font-size:13px} #ptr small{display:block;font-size:12px;color:#576c89}
-@keyframes spin{to{transform:rotate(360deg)}}
-.welcome{display:flex;gap:14px;align-items:center;margin-top:4px} .welcome img{width:72px;height:72px;flex:none;border-radius:14px;box-shadow:0 2px 4px rgba(0,0,0,.45)}
-.welcome h2{font-size:21px} .welcome p{margin:3px 0 0;font-size:14px}
-/* apps with extra files: grey INSTALL (old App Store price button) opens numbered steps under the row */
-button.get.grey{font:700 12px/1.2 sans-serif;font-family:inherit;letter-spacing:.02em;padding:5px 10px;border-radius:4px;color:#4e5866;text-shadow:var(--emboss);
- border:1px solid #9aa3ae;background:linear-gradient(#fdfdfd,#e3e6ea);box-shadow:inset 0 1px 0 #fff,0 1px 1px rgba(0,0,0,.12)}
-button.get.grey:active{background:linear-gradient(#d5d9de,#eef0f2)}
-a.get.blue{border-color:#2b4f8a;background:var(--bluebtn)}
-.steps{border-top:1px solid var(--sep);background:linear-gradient(#f6f8fa,#fff);max-height:60rem;overflow:hidden;transition:max-height .3s ease}
-.steps.collapsed{max-height:0;border-top-color:transparent}
-.steps+.row:before{content:"";position:absolute;top:0;right:0;left:0;border-top:1px solid var(--sep)}
-.step{display:flex;align-items:center;gap:10px;padding:8px 16px 8px 20px} .step+.step{border-top:1px dashed #d4d9df}
-.step>div{flex:1;min-width:0} .step b{display:block;font-size:15px} .step small{display:block}
-.num{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
- background:var(--gloss),linear-gradient(#7f8a99,#5b6573);border:1px solid #4a525d}
-.step.ok .num{background:var(--gloss),var(--greenbtn);border-color:#2f7a17;font-size:0} .step.ok .num:after{content:"✓";font-size:14px}
+/* Dark Mode (More tab switch, off by default, kept in localStorage): gunmetal bars, dark pinstripes, inverted emboss */
+html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6fa8ff;--head:#8b9099;--emboss:0 -1px 0 #000;
+ --pin:repeating-linear-gradient(90deg,#1b1d21 0 5px,#202227 5px 7px);--navbg:linear-gradient(#5f656f,#3b4048 50%,#30343b 51%,#23262b);
+ --barbtn:linear-gradient(#4a4f58,#24272c);--greybtn:linear-gradient(#4a4f58,#2c2f34);background:#1d1f23}
+.dark body{color:#e6e8eb} .dark .nav{box-shadow:inset 0 1px 0 #7a808a,0 1px 0 #0b0c0e,0 2px 4px rgba(0,0,0,.5)} .dark .nav .bar{border-color:#111}
+.dark .c,.dark .g{background:#2c2f34;border-color:#0d0e10;box-shadow:0 1px 0 rgba(255,255,255,.06)}
+.dark .row,.dark details>summary{background:linear-gradient(#34373d,#2a2d32);box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
+.dark input{background:#1f2125;border-color:#0d0e10;color:#e6e8eb;box-shadow:inset 0 1px 3px #000} .dark textarea{background:#1f2125;border-color:#0d0e10;color:#ccc}
+.dark label.drop{background:repeating-linear-gradient(90deg,#16181b 0 5px,#1a1c1f 5px 7px);border-color:#0d0e10;color:#8b9099;box-shadow:inset 0 2px 5px #000,0 1px 0 rgba(255,255,255,.06)}
+.dark a.b.grey,.dark button.grey{color:#e6e8eb;border-color:#111;background:linear-gradient(#4a4f58,#2c2f34 50%,#24272c 51%,#2c2f34);box-shadow:inset 0 1px 0 rgba(255,255,255,.15)}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
-<div id=ptr aria-hidden=true><svg class=arrow viewBox="0 0 22 40"><path d="M7 0h8v26h7L11 40 0 26h7z" fill="#6f87a8" stroke="#4d6585"/></svg>
-<svg class=spin viewBox="0 0 20 20"><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.08" transform="rotate(0 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.17" transform="rotate(30 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.25" transform="rotate(60 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.33" transform="rotate(90 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.42" transform="rotate(120 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.50" transform="rotate(150 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.58" transform="rotate(180 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.67" transform="rotate(210 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.75" transform="rotate(240 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.83" transform="rotate(270 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.92" transform="rotate(300 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="1.00" transform="rotate(330 10 10)"/></svg>
-<div><b id=ptrT>Pull down to refresh…</b><small id=ptrU></small></div></div>
-<script>(()=>{const d=new Date(),P=document.getElementById("ptr"),T=document.getElementById("ptrT");let busy=0;
-document.getElementById("ptrU").textContent="Last Updated: "+d.toLocaleString("en-US",{month:"numeric",day:"numeric",year:"2-digit",hour:"numeric",minute:"2-digit"}).replace(",","");
-addEventListener("scroll",()=>{if(busy)return;const a=scrollY<-65;P.classList.toggle("armed",a);T.textContent=a?"Release to refresh…":"Pull down to refresh…"},{passive:true});
-addEventListener("touchend",()=>{if(busy||scrollY>=-65)return;busy=1;P.classList.add("loading");T.textContent="Loading…";document.body.classList.add("ptr-loading");location.reload()})})()</script>
-<header class=nav><h1><img src=/apple-touch-icon.png alt="">sidedrop</h1><button type=button onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button></header>
+<header class=nav><button type=button class=bar onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button><h1 id=navT>sidedrop</h1>
+<button type=button class="bar r" onclick="location.reload()">Reload</button></header>
 <div class=scrim id=about hidden onclick="if(event.target==this)this.hidden=true"><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
-<h3 id=aboutT>About sidedrop</h3><p>Apps shared between friends, signed for each registered iPhone. Register once in Safari, then tap INSTALL.</p>
+<h3 id=aboutT>About sidedrop</h3><p>Apps shared between friends, signed for each registered iPhone. Register once in Safari, then tap GET.</p>
 {% if stats %}<p>{{ stats[0] }} of 100 iPhones registered.{% if stats[1] %} Apps keep working until {{ stats[1].strftime('%B %-d, %Y') }}.{% endif %}</p>{% endif %}
-<div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){d.open=true;d.scrollIntoView()}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
+<div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){location.hash='more';d.open=true;setTimeout(()=>d.scrollIntoView(),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
 <script>addEventListener("keydown",e=>{if(e.key=="Escape")about.hidden=true})</script>
 {{ body|safe }}"""
 
@@ -413,7 +360,7 @@ def page(body, **ctx):
     if logged_in() and PROFILE.exists():  # for the About alert: devices used, and when the profile (so every app) expires
         prof = embedded_plist(PROFILE.read_bytes())
         stats = (len(prof.get("ProvisionedDevices", [])), prof.get("ExpirationDate"))
-    return render_template_string(PAGE, body=render_template_string(body, **ctx), stats=stats)
+    return render_template_string(PAGE, body=render_template_string(body, stats=stats, **ctx), stats=stats)
 
 
 @app.get("/")
@@ -443,10 +390,60 @@ def home():
         a["icon"] = (APPS / f".{a['name']}.icon").read_text().strip() if (APPS / f".{a['name']}.icon").exists() else ""
     apps = [a for a in apps if a not in feather and a not in third]
     files = sorted(p for p in FILES.rglob("*") if p.is_file()) if FILES.exists() else []
-    resp = make_response(page("""
+    resp = make_response(page("""<style>
+.splash{display:flex;align-items:center;gap:14px;padding:2px 6px 4px} .splash img{width:76px;height:76px;flex:none;border-radius:15px;box-shadow:0 3px 6px rgba(0,0,0,.45)}
+.splash h2{font-size:23px;font-weight:400;letter-spacing:-.3px;line-height:1.15;text-shadow:var(--emboss)} .splash p{margin:3px 0 0;font-size:16px;text-shadow:var(--emboss)}
+.splash p a{font-weight:700}
+/* iOS 5 App Store price button: grey GET, a tap turns it into a green INSTALL, a second tap installs */
+.get{flex:none;display:inline-block;width:auto;min-width:62px;box-sizing:border-box;text-align:center;font-size:12px;font-weight:700;letter-spacing:.02em;line-height:1.2;font-family:inherit;padding:5px 10px;
+ border-radius:4px;cursor:pointer;white-space:nowrap;color:#4e5866;text-shadow:var(--emboss);border:1px solid #9aa3ae;background:var(--greybtn);box-shadow:inset 0 1px 0 #fff,0 1px 1px rgba(0,0,0,.12)}
+.get.go{min-width:76px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-color:#2f7a17;background:var(--greenbtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+.get.blue{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-color:#2b4f8a;background:var(--bluebtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+.get[aria-expanded=true]{color:#7d8794;background:linear-gradient(#c9ced5,#dfe3e8);box-shadow:inset 0 1px 3px rgba(0,0,0,.3)}
+.locked .get{min-width:44px}
+.steps{background:linear-gradient(#f3f5f8,#fff);max-height:0;overflow:hidden;transition:max-height .28s ease} .steps.open{max-height:40rem;border-top:1px solid var(--sep)}
+.step{display:flex;align-items:center;gap:10px;padding:8px 10px 8px 20px} .step+.step{border-top:1px dashed #d4d9df}
+.step>div{flex:1;min-width:0} .step b{display:block;font-size:15px} .step small{display:block}
+.num{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
+ background:var(--gloss),linear-gradient(#7f8a99,#5b6573);border:1px solid #4a525d}
+.step.ok .num{background:var(--gloss),var(--greenbtn);border-color:#2f7a17;font-size:0} .step.ok .num:after{content:"✓";font-size:14px}
+.nudge{animation:nudge .45s} @keyframes nudge{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+/* More tab: Cydia-style rows */
+.green{background:#e9f8e4} .kv{display:flex;justify-content:space-between;gap:10px;padding:11px 12px;border-top:1px solid #d6e6cf} .kv span{color:var(--acc);text-align:right}
+.split{display:grid;grid-template-columns:1fr 1fr;margin-top:12px} .pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.tile{display:flex;align-items:center;gap:9px;min-height:50px;padding:8px 10px;box-sizing:border-box;font-weight:700;color:#000;background:#fff;cursor:pointer;text-align:left;border:0;border-radius:0;box-shadow:none;text-shadow:none;line-height:1.35}
+.split .tile+.tile{border-left:1px solid var(--sep)} .pair .tile{border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8)}
+.tile:after{content:"";margin-left:auto;flex:none;width:8px;height:8px;border:solid #6f7a88;border-width:3px 3px 0 0;transform:rotate(45deg);margin-right:4px}
+.tile:active{background:linear-gradient(#058cf5,#015fe6);color:#fff}
+.tic{position:relative;flex:none;width:30px;height:30px;border-radius:7px;display:grid;place-items:center;box-shadow:0 1px 2px rgba(0,0,0,.4)}
+.tic:after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--gloss)} .tic svg{width:19px;height:19px}
+.out{margin-top:20px}
+.sw{position:relative;flex:none;width:79px;height:27px}
+.sw input{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;opacity:0;cursor:pointer;z-index:2}
+.sw i{position:absolute;inset:0;border:1px solid #a7a7a7;border-radius:14px;overflow:hidden;background:linear-gradient(#e6e6e6,#fefefe);box-shadow:inset 0 2px 3px rgba(0,0,0,.3);font-size:16px;font-weight:700;line-height:25px;font-style:normal}
+.sw i:before{content:"ON";position:absolute;inset:0 auto 0 0;width:79px;padding-left:12px;box-sizing:border-box;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
+ background:linear-gradient(#1b68d8,#3f8cf3 55%,#5da1f6);transform:translateX(-79px);transition:transform .2s}
+.sw i:after{content:"OFF";position:absolute;right:12px;color:#808080}
+.sw .k{position:absolute;top:-1px;left:-1px;width:29px;height:29px;border-radius:50%;background:linear-gradient(#cfcfcf,#fcfcfc);border:1px solid #a3a3a3;box-sizing:border-box;
+ box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .2s;pointer-events:none}
+.sw input:checked~i:before{transform:none} .sw input:checked~i:after{opacity:0} .sw input:checked~.k{transform:translateX(52px)}
+.mini{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.dark .get{color:#c9ced5;border-color:#111;box-shadow:inset 0 1px 0 rgba(255,255,255,.15)} .dark .get[aria-expanded=true]{color:#8b9099;background:linear-gradient(#1f2125,#2a2d32);box-shadow:inset 0 1px 3px #000}
+.dark .steps{background:linear-gradient(#26292d,#2c2f34)} .dark .step+.step{border-top-color:#3a3d42}
+.dark .green{background:#24302a} .dark .kv{border-top-color:#1a221d}
+.dark .tile{background:linear-gradient(#34373d,#2a2d32);color:#e6e8eb} .dark .pair .tile{border-color:#0d0e10} .dark .split .tile+.tile{border-left-color:#17191c} .dark .tile:after{border-color:#777}
+.dark .sw i{border-color:#111;background:linear-gradient(#2b2e33,#3c4047);box-shadow:inset 0 1px 3px rgba(0,0,0,.8)} .dark .sw i:after{color:#9aa0a8}
+.dark .sw i:before{background:linear-gradient(#0b4fb0,#3d8cf0)} .dark .sw .k{background:linear-gradient(#6a6f78,#3c4047);border-color:#111}
+/* Cydia tab bar */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;
+ padding:2px max(4px,env(safe-area-inset-right)) calc(2px + env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left));
+ background:linear-gradient(#3a3a3a,#1a1a1a 50%,#000 51%,#0a0a0a);border-top:1px solid #000;box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+.tabs a{display:grid;justify-items:center;gap:1px;padding:4px 0 3px;border-radius:3px;color:#999;font-size:10px;font-weight:700}
+.tabs svg{width:30px;height:30px;fill:#8d8d8d}
+.tabs a[aria-current]{background:rgba(255,255,255,.14);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.tabs a[aria-current] svg{fill:url(#tabglow);filter:drop-shadow(0 0 3px rgba(88,170,255,.7))}
+</style>
 {% if error %}<p class="c err">{{ error }}</p>{% endif %}
-<div class="c welcome"><img src=/apple-touch-icon.png alt=""><div><h2>Welcome to sidedrop</h2>
-<p class=m>{% if enrolled %}Apps from friends, signed for this iPhone. Tap INSTALL on any app below.{% else %}Apps from friends, signed for your iPhone. Register it below to get started.{% endif %}</p></div></div>
 {% set enroll_form %}<form method=post action=/enroll style="display:flex;flex-direction:column;gap:10px"
  onsubmit="document.getElementById('next').hidden=false;this.querySelector('button').textContent='Check the popup…'">
 <input name=name required maxlength=30 placeholder="Your name" aria-label="Your name" autocomplete=given-name
@@ -454,55 +451,96 @@ def home():
 <ol id=next hidden><li>Tap <b>Allow</b>, then <b>Close</b>.</li><li>Open the <b>Settings</b> app.</li>
 <li>Tap <b>Profile Downloaded</b> near the top.</li><li>Tap <b>Install</b>, enter your passcode, tap <b>Install</b> again.</li>
 <li>You'll land back here automatically, registered.</li></ol>{% endset %}
-<script>addEventListener("pageshow",()=>document.querySelectorAll("input[name=name]").forEach(i=>i.oninput()))</script>
-{% if not enrolled %}<div class="c hero" id=reg><h2>First, register this iPhone</h2>
-<p class=m>Apps only install on registered phones. Do this in Safari on the iPhone. It takes about a minute, once per phone.</p>
-{{ enroll_form }}<small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
+{% macro install(a) %}{% if not enrolled %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>
+{% elif a.files %}<button type=button class=get aria-expanded=false onclick="steps(this)">GET</button>
+{% else %}<a class=get data-arm aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">GET</a>{% endif %}{% endmacro %}
 {% macro install_list(apps) %}<div class="g{{ '' if enrolled else ' locked' }}">{% for a in apps %}
 <div class=row>{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
-<div>{{ a.title }}<small>Version {{ a.short }}{% if a.files %} · needs {{ a.files|length }} file{{ 's' if a.files|length > 1 }}{% endif %}</small></div>
-{% if enrolled and a.files %}<button type=button class="get grey" onclick="this.hidden=true;let s=this.closest('.row').nextElementSibling;s.classList.remove('collapsed');s.querySelector('a').focus()">INSTALL</button>
-{% elif enrolled %}<a class=get aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">INSTALL</a>
-{% else %}<a class=get aria-label="Register first" href=#reg onclick="let r=document.getElementById('reg');r.classList.remove('nudge');void r.offsetWidth;r.classList.add('nudge');r.querySelector('input').focus()">🔒</a>{% endif %}</div>
-{% if enrolled and a.files %}{% set labels = file_labels(a.files[0].parent) %}<div class="steps collapsed">
-<div class=step><span class=num>1</span><div><b>Install the app</b></div><a class=get aria-label="Install {{ a.title }}" onclick="this.closest('.step').classList.add('ok')"
+<div>{{ a.title }}<small>Version {{ a.short }}{% if a.files %} · needs {{ a.files|length }} file{{ 's' if a.files|length > 1 }}{% endif %}</small></div>{{ install(a) }}</div>
+{% if enrolled and a.files %}{% set labels = file_labels(a.files[0].parent) %}<div class=steps>
+<div class=step><span class=num>1</span><div><b>Install the app</b></div><a class="get go" aria-label="Install {{ a.title }}" onclick="this.closest('.step').classList.add('ok')"
  href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">INSTALL</a></div>
 {% for f in a.files %}<div class=step><span class=num>{{ loop.index + 1 }}</span><div><b>Download {{ labels.get(f.name, f.name) }}</b>
 <small>{% if f.name in labels %}{{ f.name }} · {% endif %}{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · save to Files</small></div>
 <a class="get blue" href="{{ adl(f) }}" onclick="this.closest('.step').classList.add('ok')">DOWNLOAD</a></div>{% endfor %}</div>{% endif %}
 {% endfor %}</div>{% endmacro %}
-<h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}
-{% if not enrolled %}<p class=ftr>Register above to unlock these.</p>{% endif %}
-{% else %}<p class="c m">No apps yet.</p>{% endif %}
+
+<section class=page id=t-apps data-title=sidedrop>
+<div class=splash><img src=/apple-touch-icon.png alt=""><div><h2>Welcome to sidedrop</h2><p>by <a href="https://github.com/RyanAHayden">Ryan Hayden</a></p></div></div>
+{% if not enrolled %}<h3 class=hdr>First, register this iPhone</h3><div class=c id=reg>
+<p class=m>Apps only install on registered phones. Do this in Safari on the iPhone. It takes about a minute, once per phone.</p>
+{{ enroll_form }}<small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
+<h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
-<h3 class=hdr>If an app won't open</h3><div class=g><details class=row id=dev><summary>Turn on Developer Mode</summary>
+</section>
+
+<section class=page id=t-feather data-title=Feather>
+<h3 class=hdr>Feather</h3><div class="g{{ '' if enrolled else ' locked' }}">{% for a in feather %}
+<div class=row><div class=ico style="background:linear-gradient(#ffd27a,#e08a12)"><svg viewBox="0 0 24 24" width=28 height=28 fill="#fff"><path d="M20 3c-8 1-13 6-14 14l-2 4 1 1 4-2c8-1 12-6 13-14-2 2-5 3-8 3 2-1 5-3 6-6z"/></svg></div>
+<div>Feather<small>On-device signer · Version {{ a.short }}</small></div>{{ install(a) }}</div>{% else %}<div class=row><div class=m>Feather isn't mirrored right now.</div></div>{% endfor %}</div>
+<p class=ftr>Installs and re-signs IPAs on the iPhone. It needs your own Apple certificate. <a href="{{ FEATHER_REPO }}">GitHub</a></p>
+{% if sources %}<h3 class=hdr>Sources</h3><div class=c>
+<textarea id=src readonly rows={{ sources|length }} wrap=off aria-label="Sources to add in Feather">{{ sources|join('\n') }}</textarea>
+<button type=button class=grey onclick="navigator.clipboard.writeText(src.value).then(()=>this.textContent='Copied ✓',()=>src.select())">Copy sources</button></div>{% endif %}
+<h3 class=hdr>Sign your own IPA</h3>
+<form class=c method=post action=/sign enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Signing…'">
+<label class=drop>Drop an .ipa here or tap to browse<input type=file name=ipa accept=.ipa></label>
+<input type=url name=url placeholder="…or paste a link to an .ipa" aria-label="Link to an .ipa">
+<button>Sign</button><small>Signed for registered iPhones. The install link lasts 7 days.</small></form>
+</section>
+
+<section class=page id=t-files data-title=Files>
+<h3 class=hdr>Files</h3>{% if files %}<div class=g>{% for f in files %}
+<div class=row><div>{{ f.relative_to(FILES) }}<small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></div><a class="get blue" href="{{ dl(f) }}">DOWNLOAD</a></div>
+{% endfor %}</div>{% else %}<p class="c m">No files right now.</p>{% endif %}
+<p class=ftr>Game discs are under each app's GET.</p>
+</section>
+
+<section class=page id=t-more data-title=More>
+<h3 class=hdr>This iPhone</h3><div class="g green">
+<div class=kv><b>Status</b><span>{{ 'Registered' if enrolled else 'Not registered' }}</span></div>
+{% if stats %}<div class=kv><b>iPhones used</b><span>{{ stats[0] }} of 100</span></div>
+{% if stats[1] %}<div class=kv><b>Apps work until</b><span>{{ stats[1].strftime('%b %-d, %Y') }}</span></div>{% endif %}{% endif %}</div>
+{% if enrolled %}<p class=ftr>This iPhone is registered and can install every app.</p>{% endif %}
+<div class="g split">
+{% if enrolled %}<button type=button class=tile onclick="let d=document.getElementById('other');d.open=true;d.scrollIntoView({behavior:'smooth'})">{% else %}<a class=tile href=#apps>{% endif %}
+<span class=tic style="background:linear-gradient(#8fd96b,#3c9a1d)"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#3c9a1d"/></svg></span>Register{% if enrolled %}</button>{% else %}</a>{% endif %}
+<a class=tile href=#feather><span class=tic style="background:linear-gradient(#b7c0cc,#5d6878)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</a></div>
+<div class=pair>
+<button type=button class=tile onclick="let d=document.getElementById('dev');d.open=true;d.scrollIntoView({behavior:'smooth'})"><span class=tic style="background:linear-gradient(#bfc4c9,#5f666e)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-dasharray="2.4 2"><circle cx="12" cy="12" r="7"/></svg></span>Help</button>
+<button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:linear-gradient(#8fc6ff,#2a72d6)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
+<h3 class=hdr>Display</h3><div class=g><div class=row><div>Dark Mode</div><label class=sw><input type=checkbox id=darkSw aria-label="Dark Mode"
+ onchange="document.documentElement.classList.toggle('dark',this.checked);try{this.checked?localStorage.dark=1:localStorage.removeItem('dark')}catch(e){}"><i></i><span class=k></span></label></div></div>
+<h3 class=hdr>Help</h3><div class=g>
+<details id=dev><summary>Turn on Developer Mode</summary>
 <p class=m>Needed once per iPhone for apps not from the App Store.</p>
-<ol><li>Install an app above first. The switch only shows up after that.</li>
+<ol><li>Install an app first. The switch only shows up after that.</li>
 <li>Open Settings → Privacy &amp; Security → <b>Developer Mode</b> (near the bottom) → turn it on → <b>Restart</b>.</li>
 <li>After the restart, tap <b>Turn On</b> and enter your passcode. The apps open normally from then on.</li></ol>
-<div class="g mini"><div class=row><div>Developer Mode</div><label class=sw><input type=checkbox checked aria-label="Developer Mode (example of the switch)"><i></i><span class=k></span></label></div></div></details></div>
-{% if enrolled %}<h3 class=hdr>This iPhone</h3><div class="c hero"><div style="display:flex;gap:12px;align-items:center"><div class=ok-badge>✓</div>
-<div><h2>This iPhone is registered</h2><small>It can install every app above.</small></div></div>
-<details><summary class=m>Register a different iPhone</summary>{{ enroll_form }}</details></div>{% endif %}
-<h3 class=hdr>More</h3><div class=g>
-<details class=row><summary><span>Feather <small style="display:inline">on-device signer</small></span></summary>
-<p class=m>Feather installs and re-signs IPAs right on the iPhone. It needs your own Apple certificate to sign;
-the "Sign your own IPA" box below works without one.</p>
-{% for a in feather %}<p>{% if enrolled %}<a class=b href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Install Feather</a>
-{% else %}<a class=b href=#reg>Register to install Feather</a>{% endif %} <small style="display:inline">v{{ a.short }}</small></p>{% endfor %}
-{% if sources %}<p class=m>Sources to add in Feather:</p>
-<textarea id=src readonly rows={{ sources|length }} wrap=off style="width:calc(100% - 32px);box-sizing:border-box;font:13px ui-monospace,monospace;background:var(--fill);color:inherit;border:0;border-radius:10px;padding:8px">{{ sources|join('\n') }}</textarea>
-<p><button type=button onclick="navigator.clipboard.writeText(src.value).then(()=>this.textContent='Copied ✓')">Copy sources</button></p>{% endif %}
-<p><a href="{{ FEATHER_REPO }}">Feather on GitHub</a> · <a href="{{ FEATHER_REPO }}/releases/latest">latest release</a></p></details>
-<details class=row><summary>Sign your own IPA</summary>
-<form method=post action=/sign enctype=multipart/form-data style="display:flex;flex-direction:column;gap:10px" onsubmit="this.querySelector('button').textContent='Signing…'">
-<label class=drop>Drop an .ipa here or tap to browse<input type=file name=ipa accept=.ipa style="background:none"></label>
-<input type=url name=url placeholder="…or paste a link to an .ipa" aria-label="Link to an .ipa">
-<button>Sign</button></form><p><small>Signed for registered iPhones. The install link lasts 7 days.</small></p></details></div>
-{% if files %}<h3 class=hdr>Files</h3><div class=g>{% for f in files %}
-<div class=row style="padding-left:16px"><div><a href="{{ dl(f) }}">{{ f.relative_to(FILES) }}</a><small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></div></div>
-{% endfor %}</div>{% endif %}
-<p style="text-align:center;margin-top:28px"><a href=/logout>Sign out</a></p>""", error=error, enrolled=enrolled, apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
+<div class=mini><div class=row><div>Developer Mode</div><label class=sw><input type=checkbox checked aria-label="Developer Mode (example of the switch)"><i></i><span class=k></span></label></div></div></details>
+{% if enrolled %}<details id=other><summary>Register a different iPhone</summary>{{ enroll_form }}</details>{% endif %}</div>
+<a class="b grey out" href=/logout>Sign out</a>
+</section>
+
+<nav class=tabs aria-label=Sections>
+<a href=#apps><svg viewBox="0 0 30 30"><path d="M4 4h9v9H4zm13 0h9v9h-9zM4 17h9v9H4zm13 0h9v9h-9z"/></svg>Apps</a>
+<a href=#feather><svg viewBox="0 0 30 30"><path d="M25 4c-10 1-16 8-17 17l-3 5 1 1 5-3c10-1 15-7 16-17-3 2-6 4-10 4 3-1 6-4 8-7z"/></svg>Feather</a>
+<a href=#files><svg viewBox="0 0 30 30"><path d="M3 7h10l3 3h11v15H3z"/></svg>Files</a>
+<a href=#more><svg viewBox="0 0 30 30"><circle cx="7" cy="15" r="3"/><circle cx="15" cy="15" r="3"/><circle cx="23" cy="15" r="3"/></svg>More</a></nav>
+<svg width=0 height=0 style="position:absolute" aria-hidden=true><linearGradient id=tabglow x1=0 y1=0 x2=0 y2=1><stop offset=0 stop-color="#cfe9ff"/><stop offset=.5 stop-color="#5fb4ff"/><stop offset=.51 stop-color="#1d8af2"/><stop offset=1 stop-color="#3fa0ff"/></linearGradient></svg>
+<script>
+function show(){let t=location.hash.slice(1);if(!document.getElementById("t-"+t))t="apps";
+ document.querySelectorAll(".page").forEach(p=>p.hidden=p.id!="t-"+t);
+ document.querySelectorAll(".tabs a").forEach(a=>a.getAttribute("href")=="#"+t?a.setAttribute("aria-current","page"):a.removeAttribute("aria-current"));
+ navT.textContent=document.getElementById("t-"+t).dataset.title;scrollTo(0,0)}
+addEventListener("hashchange",show);show();
+function disarm(keep){document.querySelectorAll(".get.go[data-arm]").forEach(b=>{if(b!=keep){b.classList.remove("go");b.textContent="GET"}})}
+function arm(b){if(b.classList.contains("go")){setTimeout(()=>disarm(),1500);return true}disarm(b);b.classList.add("go");b.textContent="INSTALL";return false}
+addEventListener("click",e=>{if(!e.target.closest("[data-arm]"))disarm()});
+function steps(b){let open=b.getAttribute("aria-expanded")!="true";b.setAttribute("aria-expanded",open);b.closest(".row").nextElementSibling.classList.toggle("open",open)}
+function nudge(){location.hash="apps";let r=document.getElementById("reg");r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");r.querySelector("input").focus();return false}
+addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());darkSw.checked=document.documentElement.classList.contains("dark")});
+</script>""", error=error, enrolled=enrolled, apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
         sources=read_urls("feather-sources.txt"),
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
