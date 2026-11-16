@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="180" height="180">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4c6a9a"/><stop offset=".55" stop-color="#22355a"/><stop offset="1" stop-color="#0f1a30"/></linearGradient>
+    <radialGradient id="drop" cx=".38" cy=".42" r=".75"><stop offset="0" stop-color="#c9f0ff"/><stop offset=".35" stop-color="#47b3ff"/><stop offset=".8" stop-color="#0d64d8"/><stop offset="1" stop-color="#083a8c"/></radialGradient>
+    <radialGradient id="pool" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#7fd0ff" stop-opacity=".55"/><stop offset="1" stop-color="#7fd0ff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="tray" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f6f8"/><stop offset=".5" stop-color="#c3c9d1"/><stop offset=".51" stop-color="#aab2bc"/><stop offset="1" stop-color="#d6dbe1"/></linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset="1" stop-color="#fff" stop-opacity=".08"/></linearGradient>
+  </defs>
+  <rect width="100" height="100" fill="url(#bg)"/>
+  <path d="M14 70h72l-6 18H20z" fill="url(#tray)" stroke="#5b6573"/>
+  <path d="M20 70h60l-3 6H23z" fill="#1a2742" opacity=".85"/>
+  <ellipse cx="50" cy="73" rx="22" ry="3" fill="url(#pool)"/>
+  <g transform="rotate(-24 50 44)">
+    <ellipse cx="52" cy="70" rx="13" ry="3" opacity=".25"/>
+    <path d="M50 10C50 10 29 37 29 51a21 21 0 0 0 42 0C71 37 50 10 50 10z" fill="url(#drop)" stroke="#06306f" stroke-width="1.4"/>
+    <ellipse cx="37" cy="40" rx="3" ry="6.5" transform="rotate(30 37 40)" fill="#fff" opacity=".8"/>
+    <ellipse cx="57" cy="60" rx="5" ry="2.5" fill="#fff" opacity=".35"/>
+    <path d="M51 42v15m-6-6 6 6 6-6" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+  <!-- 2012 gloss, baked in: iOS 7+ no longer adds it -->
+  <path d="M0 0h100v44C70 52 30 52 0 44z" fill="url(#gloss)"/>
+</svg>

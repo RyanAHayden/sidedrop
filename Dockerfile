@@ -7,7 +7,7 @@ RUN echo "$ZSIGN_SHA256  /tmp/zsign.tgz" | sha256sum -c && tar xzf /tmp/zsign.tg
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py *-sources.txt ./
+COPY app.py icon.png *-sources.txt ./
 USER 568:568
 EXPOSE 8080
 # gthread so a few big downloads don't block page loads

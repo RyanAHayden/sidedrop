@@ -275,7 +275,8 @@ def sign_profile(data):
 # --- pages ---
 
 PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>sidedrop</title><style>
+<title>sidedrop</title><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=apple-mobile-web-app-title content=sidedrop>
+<script>try{localStorage.skeuo&&document.documentElement.classList.add("skeuo")}catch(e){}</script><style>
 :root{color-scheme:light dark;--bg:#f2f2f7;--cell:#fff;--fg:#000;--mute:#8a8a8e;--sep:rgba(60,60,67,.18);--acc:#007aff;--ok:#34c759;--fill:rgba(118,118,128,.12)}
 @media(prefers-color-scheme:dark){:root{--bg:#000;--cell:#1c1c1e;--fg:#fff;--mute:#8d8d93;--sep:rgba(84,84,88,.6);--acc:#0a84ff;--ok:#30d158;--fill:rgba(118,118,128,.24)}}
 body{font:17px/1.35 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:var(--bg);color:var(--fg);max-width:30rem;margin:0 auto;
@@ -303,8 +304,68 @@ details.row>summary::-webkit-details-marker{display:none} details.row>summary:af
 details[open].row>summary:after{transform:rotate(90deg)} details.row>:not(summary){margin:0 16px 12px}
 ol{padding-left:1.3rem} li{margin:.35rem 0} .ok-badge{width:40px;height:40px;border-radius:50%;background:var(--ok);color:#fff;display:grid;place-items:center;font-size:22px;flex:none}
 .nudge{animation:nudge .45s} @keyframes nudge{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 2px}
+.nav h1{margin:0;display:flex;align-items:center;gap:10px} .nav img{width:34px;height:34px;border-radius:8px}
+.nav button{background:none;color:var(--acc);padding:6px 0;font-weight:400}
+.old{display:none} .skeuo .old{display:inline} .skeuo .new{display:none}
+.mini{box-shadow:0 0 0 .5px var(--sep);border-radius:10px;margin:0 0 12px}
+.sw{position:relative;flex:none;width:51px;height:31px}
+.sw input{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;opacity:0;cursor:pointer;z-index:2}
+.sw i{position:absolute;inset:0;border-radius:16px;background:var(--fill);transition:background .2s}
+.sw .k{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.25);transition:transform .2s;pointer-events:none}
+.sw input:checked~i{background:var(--ok)} .sw input:checked~.k{transform:translateX(20px)}
+.sw input:focus-visible~i{outline:3px solid var(--acc);outline-offset:2px}
+/* 2012 look: same markup, toggled by the nav button (html.skeuo, kept in localStorage). Single light look by design. */
+html.skeuo{color-scheme:light;--cell:#fff;--fg:#000;--mute:#6d7480;--sep:#e0e0e0;--acc:#385487;--ok:#3c9a1d;--fill:#e6e9ec;
+ --gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
+ --navbg:linear-gradient(#b0bccd,#889bb3 50%,#7d92ae 51%,#6d84a2);--barbtn:linear-gradient(#8fa1b9,#6a83a6 50%,#5877a2 51%,#4e6d99);
+ --bluebtn:linear-gradient(#7aa5ef,#3b72d4 50%,#2861c9 51%,#3a73da);--greenbtn:linear-gradient(#8fd96b,#4caa2b 50%,#3c9a1d 51%,#4cae2a);
+ --emboss:0 1px 0 rgba(255,255,255,.75);background:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px)}
+.skeuo body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;background:none;padding-top:0}
+.skeuo .nav{position:sticky;top:0;z-index:5;height:44px;margin:0 calc(50% - 50vw) 14px;padding:env(safe-area-inset-top) max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left));
+ box-sizing:content-box;justify-content:center;background:var(--navbg);box-shadow:inset 0 1px 0 #cdd5df,0 1px 0 #2d3642,0 2px 4px rgba(0,0,0,.25)}
+.skeuo .nav h1{font-size:20px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45)} .skeuo .nav img{width:26px;height:26px;border-radius:6px;box-shadow:0 1px 1px rgba(0,0,0,.4)}
+.skeuo .nav button{position:absolute;right:max(8px,env(safe-area-inset-right));bottom:7px;font:700 12px/1.2 sans-serif;font-family:inherit;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45);
+ background:var(--barbtn);border:1px solid #375073;border-radius:5px;padding:6px 10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 0 rgba(255,255,255,.25)}
+.skeuo h2{font-size:19px} .skeuo a{color:var(--acc)}
+.skeuo h3.hdr{font-size:17px;font-weight:700;color:#4c566c;text-transform:none;letter-spacing:0;margin:20px 10px 7px;text-shadow:var(--emboss)}
+.skeuo .ftr{font-size:14px;color:#4c566c;text-align:center;text-shadow:var(--emboss);margin:7px 12px 0}
+.skeuo .c,.skeuo .g{border:1px solid #abb2bc;border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8)}
+.skeuo .g .g,.skeuo .mini{box-shadow:none}
+.skeuo .row+.row:before,.skeuo details.row+details.row:before{left:0!important;border-top:1px solid var(--sep)}
+.skeuo a.b,.skeuo button{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.4);font-weight:700;border:1px solid #2b4f8a;border-radius:9px;background:var(--bluebtn);
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 1px 2px rgba(0,0,0,.3)}
+.skeuo input{background:#fff;border:1px solid #9aa3ae;border-radius:6px;box-shadow:inset 0 1px 2px rgba(0,0,0,.2)}
+.skeuo label.drop{border:1px solid #9aa3ae;border-radius:8px;color:#6b7684;font-weight:700;text-shadow:var(--emboss);
+ background:repeating-linear-gradient(90deg,#d5dae0 0 5px,#dadfe4 5px 7px);box-shadow:inset 0 2px 5px rgba(0,0,0,.3),0 1px 0 #fff}
+.skeuo label.drop input{border:0;box-shadow:none;background:none}
+.skeuo textarea{border:1px solid #b7bec8!important;background:linear-gradient(#eef0f3,#fff 12px)!important;box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}
+.skeuo .steps{color:#4c566c;font-weight:700;text-shadow:var(--emboss)}
+.skeuo .steps span:before{height:9px;border-radius:5px;border:1px solid #8c96a3;background:linear-gradient(#b9bfc7,#e6e9ec);box-shadow:inset 0 1px 2px rgba(0,0,0,.25),0 1px 0 #fff}
+.skeuo .steps .on{color:#1d3e78} .skeuo .steps .on:before{background:var(--gloss),linear-gradient(90deg,#2a6fd8 0 50%,transparent 50%),linear-gradient(#b9bfc7,#e6e9ec)}
+.skeuo .steps .ok:before{background:var(--gloss),linear-gradient(#5fc23a,#3a9a1d);border-color:#2f7a17}
+.skeuo .ico{box-shadow:0 1px 3px rgba(0,0,0,.45);position:relative} .skeuo div.ico:after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--gloss)}
+.skeuo .ok-badge{background:var(--gloss),var(--greenbtn);border:1px solid #2f7a17;text-shadow:0 -1px 0 rgba(0,0,0,.35);box-shadow:0 1px 2px rgba(0,0,0,.3)}
+/* App Store, 2012: one tap on the green INSTALL starts the install */
+.skeuo a.get{font-size:12px;letter-spacing:.02em;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-radius:4px;padding:5px 10px;border:1px solid #2f7a17;
+ background:var(--greenbtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 1px 1px rgba(0,0,0,.15)}
+.skeuo a.get:active{background:linear-gradient(#3c9a1d,#5bb83a)}
+.skeuo .locked a.get{color:#5b6573;text-shadow:var(--emboss);border-color:#9aa3ae;background:linear-gradient(#fdfdfd,#e3e6ea);box-shadow:inset 0 1px 0 #fff}
+.skeuo details.row>summary{font-weight:700} .skeuo details.row>summary:after{content:"";width:8px;height:8px;margin:6px 4px 0 0;border:solid #7f8a99;border-width:3px 3px 0 0;transform:rotate(45deg)}
+.skeuo details[open].row>summary:after{transform:rotate(135deg)}
+.skeuo .sw{width:79px;height:27px}
+.skeuo .sw i{border:1px solid #a7a7a7;border-radius:14px;overflow:hidden;background:linear-gradient(#e6e6e6,#fefefe);box-shadow:inset 0 2px 3px rgba(0,0,0,.3);font:700 16px/25px sans-serif;font-family:inherit}
+.skeuo .sw i:before{content:"ON";position:absolute;inset:0 auto 0 0;width:79px;padding-left:12px;box-sizing:border-box;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
+ background:linear-gradient(#1b68d8,#3f8cf3 55%,#5da1f6);transform:translateX(-52px);transition:transform .2s}
+.skeuo .sw i:after{content:"OFF";position:absolute;right:12px;color:#808080}
+.skeuo .sw .k{top:-1px;left:-1px;width:29px;height:29px;background:linear-gradient(#cfcfcf,#fcfcfc);border:1px solid #a3a3a3;box-sizing:border-box;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.skeuo .sw input:checked~i{background:linear-gradient(#e6e6e6,#fefefe)} .skeuo .sw input:checked~i:before{transform:none} .skeuo .sw input:checked~i:after{opacity:0}
+.skeuo .sw input:checked~.k{transform:translateX(52px)}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
-<h1>sidedrop</h1>{{ body|safe }}"""
+<header class=nav><h1><img src=/apple-touch-icon.png alt="">sidedrop</h1><button type=button id=look aria-pressed=false
+ onclick="let on=document.documentElement.classList.toggle('skeuo');try{on?localStorage.skeuo=1:localStorage.removeItem('skeuo')}catch(e){};sync()">2012</button></header>
+<script>function sync(){let on=document.documentElement.classList.contains("skeuo");look.textContent=on?"Modern":"2012";look.setAttribute("aria-pressed",on)}sync()</script>
+{{ body|safe }}"""
 
 
 def page(body, **ctx):
@@ -350,7 +411,7 @@ def home():
 <li>You'll land back here automatically, registered.</li></ol>{% endset %}
 <script>addEventListener("pageshow",()=>document.querySelectorAll("input[name=name]").forEach(i=>i.oninput()))</script>
 {% if enrolled %}<div class="c hero"><div style="display:flex;gap:12px;align-items:center"><div class=ok-badge>✓</div>
-<div><h2>This iPhone is registered</h2><small>Tap Get on any app below.</small></div></div>
+<div><h2>This iPhone is registered</h2><small>Tap <span class=new>Get</span><span class=old>Install</span> on any app below.</small></div></div>
 <details><summary class=m>Register a different iPhone</summary>{{ enroll_form }}</details></div>
 {% else %}<div class="c hero" id=reg><h2>First, register this iPhone</h2>
 <p class=m>Apps only install on registered phones. Do this in Safari on the iPhone. It takes about a minute, once per phone.</p>
@@ -359,18 +420,19 @@ def home():
 <div class=row>{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
 <div>{{ a.title }}<small>Version {{ a.short }}</small>{% for f in a.files %}<small><a href="{{ adl(f) }}">↓ {{ f.name }}</a>
 · {{ '%.1f'|format(f.stat().st_size/1e6) }} MB</small>{% endfor %}</div>
-{% if enrolled %}<a class=get aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">Get</a>
+{% if enrolled %}<a class=get aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}"><span class=new>Get</span><span class=old>INSTALL</span></a>
 {% else %}<a class=get aria-label="Register first" href=#reg onclick="let r=document.getElementById('reg');r.classList.remove('nudge');void r.offsetWidth;r.classList.add('nudge');r.querySelector('input').focus()">🔒</a>{% endif %}</div>
 {% endfor %}</div>{% endmacro %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}
-<p class=ftr>{% if enrolled %}Tap Get, then Install in the popup, and check your home screen.{% else %}Register above to unlock these.{% endif %}</p>
+<p class=ftr>{% if enrolled %}Tap <span class=new>Get</span><span class=old>Install</span>, then Install in the popup, and check your home screen.{% else %}Register above to unlock these.{% endif %}</p>
 {% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
 <h3 class=hdr>If an app won't open</h3><div class=g><details class=row><summary>Turn on Developer Mode</summary>
 <p class=m>Needed once per iPhone for apps not from the App Store.</p>
 <ol><li>Install an app above first. The switch only shows up after that.</li>
 <li>Open Settings → Privacy &amp; Security → <b>Developer Mode</b> (near the bottom) → turn it on → <b>Restart</b>.</li>
-<li>After the restart, tap <b>Turn On</b> and enter your passcode. The apps open normally from then on.</li></ol></details></div>
+<li>After the restart, tap <b>Turn On</b> and enter your passcode. The apps open normally from then on.</li></ol>
+<div class="g mini"><div class=row><div>Developer Mode</div><label class=sw><input type=checkbox checked aria-label="Developer Mode (example of the switch)"><i></i><span class=k></span></label></div></div></details></div>
 <h3 class=hdr>More</h3><div class=g>
 <details class=row><summary><span>Feather <small style="display:inline">on-device signer</small></span></summary>
 <p class=m>Feather installs and re-signs IPAs right on the iPhone. It needs your own Apple certificate to sign;
@@ -396,6 +458,11 @@ the "Sign your own IPA" box below works without one.</p>
     if enrolled and request.args.get("enrolled"):  # survives sign-out; re-checked against the profile on every load
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
     return resp
+
+
+@app.get("/apple-touch-icon.png")
+def touch_icon():
+    return send_from_directory(HERE, "icon.png", max_age=86400)  # source: icon.svg (rsvg-convert -w 180 icon.svg -o icon.png)
 
 
 @app.post("/login")
