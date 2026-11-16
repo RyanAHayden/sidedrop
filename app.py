@@ -289,9 +289,6 @@ a.b,button{display:inline-block;background:var(--acc);color:#fff;border:0;border
 input{font:inherit;padding:12px 14px;border-radius:10px;border:0;width:100%;box-sizing:border-box;background:var(--fill);color:inherit}
 label.drop{display:block;border:2px dashed var(--sep);border-radius:12px;padding:1.2rem;text-align:center;color:var(--mute)}
 button:disabled{opacity:.4;cursor:default} small,.m{color:var(--mute)} small{font-size:13px} .err{color:#ff3b30} a{color:var(--acc);text-decoration:none}
-.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:14px 0 20px;font-size:12px;color:var(--mute)}
-.steps span:before{content:"";display:block;height:4px;border-radius:2px;background:var(--fill);margin-bottom:6px}
-.steps .on{color:var(--fg);font-weight:600} .steps .on:before{background:var(--acc)} .steps .ok:before{background:var(--ok)}
 .row{display:flex;align-items:center;gap:12px;padding:10px 16px;min-height:44px;position:relative}
 .row+.row:before,details.row+details.row:before{content:"";position:absolute;top:0;right:0;left:76px;border-top:.5px solid var(--sep)}
 .row>div:not(.ico){flex:1;min-width:0} .row small{display:block}
@@ -337,10 +334,6 @@ label.drop{border:1px solid #9aa3ae;border-radius:8px;color:#6b7684;font-weight:
  background:repeating-linear-gradient(90deg,#d5dae0 0 5px,#dadfe4 5px 7px);box-shadow:inset 0 2px 5px rgba(0,0,0,.3),0 1px 0 #fff}
 label.drop input{border:0;box-shadow:none;background:none}
 textarea{border:1px solid #b7bec8!important;background:linear-gradient(#eef0f3,#fff 12px)!important;box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}
-.steps{color:#4c566c;font-weight:700;text-shadow:var(--emboss)}
-.steps span:before{height:9px;border-radius:5px;border:1px solid #8c96a3;background:linear-gradient(#b9bfc7,#e6e9ec);box-shadow:inset 0 1px 2px rgba(0,0,0,.25),0 1px 0 #fff}
-.steps .on{color:#1d3e78} .steps .on:before{background:var(--gloss),linear-gradient(90deg,#2a6fd8 0 50%,transparent 50%),linear-gradient(#b9bfc7,#e6e9ec)}
-.steps .ok:before{background:var(--gloss),linear-gradient(#5fc23a,#3a9a1d);border-color:#2f7a17}
 .ico{box-shadow:0 1px 3px rgba(0,0,0,.45);position:relative} div.ico:after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--gloss)}
 .ok-badge{background:var(--gloss),var(--greenbtn);border:1px solid #2f7a17;text-shadow:0 -1px 0 rgba(0,0,0,.35);box-shadow:0 1px 2px rgba(0,0,0,.3)}
 /* App Store, 2012: one tap on the green INSTALL starts the install */
@@ -375,6 +368,8 @@ details[open].row>summary:after{transform:rotate(135deg)}
 #ptr .spin{display:none;width:20px;height:20px;margin:10px 1px;animation:spin .9s steps(12) infinite} #ptr.loading .spin{display:block} #ptr.loading .arrow{display:none}
 #ptr b{display:block;font-size:13px} #ptr small{display:block;font-size:12px;color:#576c89}
 @keyframes spin{to{transform:rotate(360deg)}}
+.welcome{display:flex;gap:14px;align-items:center;margin-top:4px} .welcome img{width:72px;height:72px;flex:none;border-radius:14px;box-shadow:0 2px 4px rgba(0,0,0,.45)}
+.welcome h2{font-size:21px} .welcome p{margin:3px 0 0;font-size:14px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
 <div id=ptr aria-hidden=true><svg class=arrow viewBox="0 0 22 40"><path d="M7 0h8v26h7L11 40 0 26h7z" fill="#6f87a8" stroke="#4d6585"/></svg>
 <svg class=spin viewBox="0 0 20 20"><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.08" transform="rotate(0 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.17" transform="rotate(30 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.25" transform="rotate(60 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.33" transform="rotate(90 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.42" transform="rotate(120 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.50" transform="rotate(150 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.58" transform="rotate(180 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.67" transform="rotate(210 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.75" transform="rotate(240 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.83" transform="rotate(270 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.92" transform="rotate(300 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="1.00" transform="rotate(330 10 10)"/></svg>
@@ -429,7 +424,8 @@ def home():
     files = sorted(p for p in FILES.rglob("*") if p.is_file()) if FILES.exists() else []
     resp = make_response(page("""
 {% if error %}<p class="c err">{{ error }}</p>{% endif %}
-<div class=steps><span class="{{ 'ok' if enrolled else 'on' }}">Register</span><span class="{{ 'on' if enrolled }}">Install</span><span>Turn on Developer Mode</span></div>
+<div class="c welcome"><img src=/apple-touch-icon.png alt=""><div><h2>Welcome to sidedrop</h2>
+<p class=m>{% if enrolled %}Apps from friends, signed for this iPhone. Tap INSTALL on any app below.{% else %}Apps from friends, signed for your iPhone. Register it below to get started.{% endif %}</p></div></div>
 {% set enroll_form %}<form method=post action=/enroll style="display:flex;flex-direction:column;gap:10px"
  onsubmit="document.getElementById('next').hidden=false;this.querySelector('button').textContent='Check the popup…'">
 <input name=name required maxlength=30 placeholder="Your name" aria-label="Your name" autocomplete=given-name
@@ -438,10 +434,7 @@ def home():
 <li>Tap <b>Profile Downloaded</b> near the top.</li><li>Tap <b>Install</b>, enter your passcode, tap <b>Install</b> again.</li>
 <li>You'll land back here automatically, registered.</li></ol>{% endset %}
 <script>addEventListener("pageshow",()=>document.querySelectorAll("input[name=name]").forEach(i=>i.oninput()))</script>
-{% if enrolled %}<div class="c hero"><div style="display:flex;gap:12px;align-items:center"><div class=ok-badge>✓</div>
-<div><h2>This iPhone is registered</h2><small>Tap Install on any app below.</small></div></div>
-<details><summary class=m>Register a different iPhone</summary>{{ enroll_form }}</details></div>
-{% else %}<div class="c hero" id=reg><h2>First, register this iPhone</h2>
+{% if not enrolled %}<div class="c hero" id=reg><h2>First, register this iPhone</h2>
 <p class=m>Apps only install on registered phones. Do this in Safari on the iPhone. It takes about a minute, once per phone.</p>
 {{ enroll_form }}<small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
 {% macro install_list(apps) %}<div class="g{{ '' if enrolled else ' locked' }}">{% for a in apps %}
@@ -461,6 +454,9 @@ def home():
 <li>Open Settings → Privacy &amp; Security → <b>Developer Mode</b> (near the bottom) → turn it on → <b>Restart</b>.</li>
 <li>After the restart, tap <b>Turn On</b> and enter your passcode. The apps open normally from then on.</li></ol>
 <div class="g mini"><div class=row><div>Developer Mode</div><label class=sw><input type=checkbox checked aria-label="Developer Mode (example of the switch)"><i></i><span class=k></span></label></div></div></details></div>
+{% if enrolled %}<h3 class=hdr>This iPhone</h3><div class="c hero"><div style="display:flex;gap:12px;align-items:center"><div class=ok-badge>✓</div>
+<div><h2>This iPhone is registered</h2><small>It can install every app above.</small></div></div>
+<details><summary class=m>Register a different iPhone</summary>{{ enroll_form }}</details></div>{% endif %}
 <h3 class=hdr>More</h3><div class=g>
 <details class=row><summary><span>Feather <small style="display:inline">on-device signer</small></span></summary>
 <p class=m>Feather installs and re-signs IPAs right on the iPhone. It needs your own Apple certificate to sign;
