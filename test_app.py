@@ -170,6 +170,10 @@ html = c.get("/").data.decode()
 a = re.search(r'href="(https://x\.test/af/Demo/game\.iso[^"]+)"', html).group(1).replace("&amp;", "&")
 assert anon.get(path_qs(a)).data == b"iso" and "Files</h3>" in html and html.index("game.iso") < html.index("Files</h3>")
 assert html.count("game.iso<") == 1
+assert 'class="get grey"' in html and "Download game.iso" in html  # files turn INSTALL grey and become steps
+(tmp / "appfiles" / "Demo" / "labels.txt").write_text("game.iso = the game disc\n")
+html = c.get("/").data.decode()
+assert "Download the game disc" in html and "labels.txt" not in html
 
 # Feather sources come from the repo's feather-sources.txt and get a copy button
 html = c.get("/").data.decode()

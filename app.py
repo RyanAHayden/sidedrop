@@ -275,7 +275,7 @@ def sign_profile(data):
 # --- pages ---
 
 PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>sidedrop</title><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=theme-color content="#b0bccd"><meta name=apple-mobile-web-app-title content=sidedrop>
+<title>sidedrop</title><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=theme-color content="#b0bccd"><meta name=apple-mobile-web-app-status-bar-style content=black-translucent><meta name=apple-mobile-web-app-title content=sidedrop>
 <style>
 :root{color-scheme:light;--bg:#f2f2f7;--cell:#fff;--fg:#000;--mute:#8a8a8e;--sep:rgba(60,60,67,.18);--acc:#007aff;--ok:#34c759;--fill:rgba(118,118,128,.12)}
 body{font:17px/1.35 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:var(--bg);color:var(--fg);max-width:30rem;margin:0 auto;
@@ -315,8 +315,9 @@ ol{padding-left:1.3rem} li{margin:.35rem 0} .ok-badge{width:40px;height:40px;bor
  --navbg:linear-gradient(#b0bccd,#889bb3 50%,#7d92ae 51%,#6d84a2);--barbtn:linear-gradient(#8fa1b9,#6a83a6 50%,#5877a2 51%,#4e6d99);
  --bluebtn:linear-gradient(#7aa5ef,#3b72d4 50%,#2861c9 51%,#3a73da);--greenbtn:linear-gradient(#8fd96b,#4caa2b 50%,#3c9a1d 51%,#4cae2a);
  --emboss:0 1px 0 rgba(255,255,255,.75);background:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);background-color:#c8cfd6}
-body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;background:none;padding-top:0}
-.nav{position:sticky;top:0;z-index:5;height:44px;margin:0 calc(50% - 50vw) 14px;padding:env(safe-area-inset-top) max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left));
+body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;background:none;padding-top:calc(58px + env(safe-area-inset-top))}
+body.ptr-loading{padding-top:calc(122px + env(safe-area-inset-top))}
+.nav{position:fixed;top:0;left:0;right:0;z-index:5;height:44px;margin:0;padding:env(safe-area-inset-top) max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left));
  box-sizing:content-box;justify-content:center;background:var(--navbg);box-shadow:inset 0 1px 0 #cdd5df,0 1px 0 #2d3642,0 2px 4px rgba(0,0,0,.25)}
 .nav h1{font-size:20px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45)} .nav img{width:26px;height:26px;border-radius:6px;box-shadow:0 1px 1px rgba(0,0,0,.4)}
 .nav button{position:absolute;right:max(8px,env(safe-area-inset-right));bottom:7px;font:700 12px/1.2 sans-serif;font-family:inherit;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45);
@@ -370,6 +371,19 @@ details[open].row>summary:after{transform:rotate(135deg)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .welcome{display:flex;gap:14px;align-items:center;margin-top:4px} .welcome img{width:72px;height:72px;flex:none;border-radius:14px;box-shadow:0 2px 4px rgba(0,0,0,.45)}
 .welcome h2{font-size:21px} .welcome p{margin:3px 0 0;font-size:14px}
+/* apps with extra files: grey INSTALL (old App Store price button) opens numbered steps under the row */
+button.get.grey{font:700 12px/1.2 sans-serif;font-family:inherit;letter-spacing:.02em;padding:5px 10px;border-radius:4px;color:#4e5866;text-shadow:var(--emboss);
+ border:1px solid #9aa3ae;background:linear-gradient(#fdfdfd,#e3e6ea);box-shadow:inset 0 1px 0 #fff,0 1px 1px rgba(0,0,0,.12)}
+button.get.grey:active{background:linear-gradient(#d5d9de,#eef0f2)}
+a.get.blue{border-color:#2b4f8a;background:var(--bluebtn)}
+.steps{border-top:1px solid var(--sep);background:linear-gradient(#f6f8fa,#fff);max-height:60rem;overflow:hidden;transition:max-height .3s ease}
+.steps.collapsed{max-height:0;border-top-color:transparent}
+.steps+.row:before{content:"";position:absolute;top:0;right:0;left:0;border-top:1px solid var(--sep)}
+.step{display:flex;align-items:center;gap:10px;padding:8px 16px 8px 20px} .step+.step{border-top:1px dashed #d4d9df}
+.step>div{flex:1;min-width:0} .step b{display:block;font-size:15px} .step small{display:block}
+.num{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
+ background:var(--gloss),linear-gradient(#7f8a99,#5b6573);border:1px solid #4a525d}
+.step.ok .num{background:var(--gloss),var(--greenbtn);border-color:#2f7a17;font-size:0} .step.ok .num:after{content:"✓";font-size:14px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
 <div id=ptr aria-hidden=true><svg class=arrow viewBox="0 0 22 40"><path d="M7 0h8v26h7L11 40 0 26h7z" fill="#6f87a8" stroke="#4d6585"/></svg>
 <svg class=spin viewBox="0 0 20 20"><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.08" transform="rotate(0 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.17" transform="rotate(30 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.25" transform="rotate(60 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.33" transform="rotate(90 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.42" transform="rotate(120 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.50" transform="rotate(150 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.58" transform="rotate(180 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.67" transform="rotate(210 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.75" transform="rotate(240 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.83" transform="rotate(270 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="0.92" transform="rotate(300 10 10)"/><rect x="9" y="1" width="2" height="5" rx="1" fill="#576c89" opacity="1.00" transform="rotate(330 10 10)"/></svg>
@@ -377,7 +391,7 @@ details[open].row>summary:after{transform:rotate(135deg)}
 <script>(()=>{const d=new Date(),P=document.getElementById("ptr"),T=document.getElementById("ptrT");let busy=0;
 document.getElementById("ptrU").textContent="Last Updated: "+d.toLocaleString("en-US",{month:"numeric",day:"numeric",year:"2-digit",hour:"numeric",minute:"2-digit"}).replace(",","");
 addEventListener("scroll",()=>{if(busy)return;const a=scrollY<-65;P.classList.toggle("armed",a);T.textContent=a?"Release to refresh…":"Pull down to refresh…"},{passive:true});
-addEventListener("touchend",()=>{if(busy||scrollY>=-65)return;busy=1;P.classList.add("loading");T.textContent="Loading…";document.body.style.paddingTop="64px";location.reload()})})()</script>
+addEventListener("touchend",()=>{if(busy||scrollY>=-65)return;busy=1;P.classList.add("loading");T.textContent="Loading…";document.body.classList.add("ptr-loading");location.reload()})})()</script>
 <header class=nav><h1><img src=/apple-touch-icon.png alt="">sidedrop</h1><button type=button onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button></header>
 <div class=scrim id=about hidden onclick="if(event.target==this)this.hidden=true"><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
 <h3 id=aboutT>About sidedrop</h3><p>Apps shared between friends, signed for each registered iPhone. Register once in Safari, then tap INSTALL.</p>
@@ -385,6 +399,12 @@ addEventListener("touchend",()=>{if(busy||scrollY>=-65)return;busy=1;P.classList
 <div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){d.open=true;d.scrollIntoView()}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
 <script>addEventListener("keydown",e=>{if(e.key=="Escape")about.hidden=true})</script>
 {{ body|safe }}"""
+
+
+def file_labels(folder):
+    """appfiles/<app>/labels.txt: one "file name = label" line per file, e.g. "GMPE01.iso = the game disc"."""
+    f = folder / "labels.txt"
+    return {k.strip(): v.strip() for k, _, v in (l.partition("=") for l in f.read_text().splitlines() if "=" in l)} if f.exists() else {}
 
 
 def page(body, **ctx):
@@ -412,7 +432,7 @@ def home():
             resign()  # ponytail: signs stale IPAs on page load; first visit after an upload waits for it
     except Exception as e:
         error = str(e)
-    apps = [dict(ipa_info(p), name=p.stem, files=sorted(f for f in (APP_FILES / p.stem).glob("*") if f.is_file()))
+    apps = [dict(ipa_info(p), name=p.stem, files=sorted(f for f in (APP_FILES / p.stem).glob("*") if f.is_file() and f.name != "labels.txt"))
             for p in sorted(SIGNED.glob("*.ipa"))] if SIGNED.exists() else []
     feather = [a for a in apps if "feather" in a["name"].lower()]  # mirrored via SOURCES, shown in its own menu
     third = [a for a in apps if a not in feather and (APPS / f".{a['name']}.third").exists()]
@@ -439,13 +459,19 @@ def home():
 {{ enroll_form }}<small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
 {% macro install_list(apps) %}<div class="g{{ '' if enrolled else ' locked' }}">{% for a in apps %}
 <div class=row>{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
-<div>{{ a.title }}<small>Version {{ a.short }}</small>{% for f in a.files %}<small><a href="{{ adl(f) }}">↓ {{ f.name }}</a>
-· {{ '%.1f'|format(f.stat().st_size/1e6) }} MB</small>{% endfor %}</div>
-{% if enrolled %}<a class=get aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">INSTALL</a>
+<div>{{ a.title }}<small>Version {{ a.short }}{% if a.files %} · needs {{ a.files|length }} file{{ 's' if a.files|length > 1 }}{% endif %}</small></div>
+{% if enrolled and a.files %}<button type=button class="get grey" onclick="this.hidden=true;let s=this.closest('.row').nextElementSibling;s.classList.remove('collapsed');s.querySelector('a').focus()">INSTALL</button>
+{% elif enrolled %}<a class=get aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">INSTALL</a>
 {% else %}<a class=get aria-label="Register first" href=#reg onclick="let r=document.getElementById('reg');r.classList.remove('nudge');void r.offsetWidth;r.classList.add('nudge');r.querySelector('input').focus()">🔒</a>{% endif %}</div>
+{% if enrolled and a.files %}{% set labels = file_labels(a.files[0].parent) %}<div class="steps collapsed">
+<div class=step><span class=num>1</span><div><b>Install the app</b></div><a class=get aria-label="Install {{ a.title }}" onclick="this.closest('.step').classList.add('ok')"
+ href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">INSTALL</a></div>
+{% for f in a.files %}<div class=step><span class=num>{{ loop.index + 1 }}</span><div><b>Download {{ labels.get(f.name, f.name) }}</b>
+<small>{% if f.name in labels %}{{ f.name }} · {% endif %}{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · save to Files</small></div>
+<a class="get blue" href="{{ adl(f) }}" onclick="this.closest('.step').classList.add('ok')">DOWNLOAD</a></div>{% endfor %}</div>{% endif %}
 {% endfor %}</div>{% endmacro %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}
-<p class=ftr>{% if enrolled %}Tap Install, then Install in the popup, and check your home screen.{% else %}Register above to unlock these.{% endif %}</p>
+<p class=ftr>{% if enrolled %}Tap Install, then Install in the popup, and check your home screen. A grey Install means the app needs a file too.{% else %}Register above to unlock these.{% endif %}</p>
 {% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
 <h3 class=hdr>If an app won't open</h3><div class=g><details class=row id=dev><summary>Turn on Developer Mode</summary>
@@ -478,7 +504,8 @@ the "Sign your own IPA" box below works without one.</p>
 <p style="text-align:center;margin-top:28px"><a href=/logout>Sign out</a></p>""", error=error, enrolled=enrolled, apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
         sources=read_urls("feather-sources.txt"),
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
-        dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}")))
+        dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
+        file_labels=file_labels))
     if enrolled and request.args.get("enrolled"):  # survives sign-out; re-checked against the profile on every load
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
     return resp
