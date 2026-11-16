@@ -471,7 +471,7 @@ def home():
 <a class="get blue" href="{{ adl(f) }}" onclick="this.closest('.step').classList.add('ok')">DOWNLOAD</a></div>{% endfor %}</div>{% endif %}
 {% endfor %}</div>{% endmacro %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}
-<p class=ftr>{% if enrolled %}{% set nf = apps|selectattr('files')|list|length %}{% if nf == apps|length %}Tap INSTALL for the steps: install the app, then download its file and save it to Files.{% elif nf %}Green INSTALL installs right away. Grey INSTALL shows steps, since that app also needs a file.{% else %}Tap INSTALL, then Install in the popup, and check your home screen.{% endif %}{% else %}Register above to unlock these.{% endif %}</p>
+{% if not enrolled %}<p class=ftr>Register above to unlock these.</p>{% endif %}
 {% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
 <h3 class=hdr>If an app won't open</h3><div class=g><details class=row id=dev><summary>Turn on Developer Mode</summary>
