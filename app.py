@@ -315,7 +315,7 @@ ol{padding-left:1.3rem} li{margin:.35rem 0} .ok-badge{width:40px;height:40px;bor
  --navbg:linear-gradient(#b0bccd,#889bb3 50%,#7d92ae 51%,#6d84a2);--barbtn:linear-gradient(#8fa1b9,#6a83a6 50%,#5877a2 51%,#4e6d99);
  --bluebtn:linear-gradient(#7aa5ef,#3b72d4 50%,#2861c9 51%,#3a73da);--greenbtn:linear-gradient(#8fd96b,#4caa2b 50%,#3c9a1d 51%,#4cae2a);
  --emboss:0 1px 0 rgba(255,255,255,.75);background:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);background-color:#c8cfd6}
-body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;background:none;padding-top:calc(58px + env(safe-area-inset-top))}
+body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;background:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);min-height:100vh;box-sizing:border-box;padding-top:calc(58px + env(safe-area-inset-top))}
 body.ptr-loading{padding-top:calc(122px + env(safe-area-inset-top))}
 .nav{position:fixed;top:0;left:0;right:0;z-index:5;height:44px;margin:0;padding:env(safe-area-inset-top) max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left));
  box-sizing:content-box;justify-content:center;background:var(--navbg);box-shadow:inset 0 1px 0 #cdd5df,0 1px 0 #2d3642,0 2px 4px rgba(0,0,0,.25)}
@@ -361,10 +361,11 @@ details[open].row>summary:after{transform:rotate(135deg)}
 .alert .abtns button{height:43px;padding:0;font-size:16px;border:1px solid #0b1a3e;border-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3);
  background:linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.1) 50%,rgba(255,255,255,.05) 51%,rgba(255,255,255,.15))}
 .alert .abtns .ok{background:linear-gradient(rgba(255,255,255,.5),rgba(255,255,255,.2) 50%,rgba(255,255,255,.12) 51%,rgba(255,255,255,.25))}
-/* pull to refresh, Cydia/Tweetie style: sits behind the sticky nav, shows when iOS Safari rubber-bands the page down */
-#ptr{position:absolute;left:0;right:0;top:calc(44px + env(safe-area-inset-top) - 400px);height:400px;z-index:1;display:flex;align-items:flex-end;justify-content:center;
- gap:14px;padding-bottom:12px;box-sizing:border-box;color:#576c89;text-shadow:var(--emboss);background:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);
- box-shadow:inset 0 -1px 0 #9aa3ae;pointer-events:none}
+/* pull to refresh, Cydia/Tweetie style. iOS clips anything above the page while it rubber-bands, so the panel is fixed under the nav,
+   behind the page (z-index:-1), and the page's own opaque pinstripes hide it until a pull slides the page down */
+#ptr{position:fixed;left:50%;transform:translateX(-50%);width:min(100%,30rem);top:calc(44px + env(safe-area-inset-top));height:60vh;z-index:-1;display:flex;
+ align-items:flex-start;justify-content:center;gap:14px;padding-top:12px;box-sizing:border-box;color:#576c89;text-shadow:var(--emboss);
+ background:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);box-shadow:inset 0 4px 6px -3px rgba(0,0,0,.35);pointer-events:none}
 #ptr svg{width:22px;height:40px;transition:transform .18s} #ptr.armed svg.arrow{transform:rotate(180deg)}
 #ptr .spin{display:none;width:20px;height:20px;margin:10px 1px;animation:spin .9s steps(12) infinite} #ptr.loading .spin{display:block} #ptr.loading .arrow{display:none}
 #ptr b{display:block;font-size:13px} #ptr small{display:block;font-size:12px;color:#576c89}
