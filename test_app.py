@@ -84,7 +84,7 @@ html = c.get("/").data
 assert b"First, set up this iPhone" in html and b"/static/sdp1.jpg" in html and b"itms-services" not in html  # apps locked until registered
 assert b"itms-services" not in c.get("/?enrolled=1").data and b"itms-services" not in c.get("/?enrolled=00008130-AAAA.x").data
 html = c.get(r.location.replace("https://x.test", ""), base_url="https://localhost").data
-assert b"This iPhone is registered" in html and b"Register a different iPhone" in html and b"/static/sdp1.jpg" in html
+assert b"This iPhone is registered" in html and b"Add another iPhone" in html and b"/static/sdp1.jpg" in html
 c.get("/logout", base_url="https://localhost"); c.post("/login", data={"password": "hunter2-but-longer"}, base_url="https://localhost")
 assert b"This iPhone is registered" in c.get("/", base_url="https://localhost").data
 assert A.profile_udids() == {"00008130-AAAA"} and (tmp / "signed" / "Demo.ipa").exists()

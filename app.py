@@ -615,7 +615,9 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <li>After the restart, tap <b>Turn On</b> and enter your passcode. The apps open normally from then on.</li></ol>
 <div class=mini><div class=row><div>Developer Mode</div><label class=sw><input type=checkbox checked aria-label="Developer Mode (example of the switch)"><i></i><span class=k></span></label></div></div></details>
 {% if enrolled %}<details><summary>Turn off Stolen Device Protection</summary>{{ sdp_steps }}</details>
-<details id=other><summary>Register a different iPhone</summary><p class=m>Turn off Stolen Device Protection on that iPhone first.</p>{{ enroll_form }}</details>{% endif %}</div>
+<details id=other><summary>Add another iPhone</summary><p class=m>An iPhone can only register itself. Open this link in Safari on the other iPhone and follow the setup there.</p>
+<div style="display:flex;flex-direction:column;gap:10px"><input id=site readonly value="{{ public_url }}" aria-label="Link to open on the other iPhone" onfocus="this.select()">
+<button type=button class=grey onclick="navigator.clipboard.writeText(site.value).then(()=>this.textContent='Copied ✓',()=>site.select())">Copy Link</button></div></details>{% endif %}</div>
 <h3 class=hdr id=sign>Sign your own IPA</h3>
 <form class=c method=post action=/sign enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Signing…'">
 <input type=file name=ipa id=ipaf accept=.ipa class=vh onchange="ipal.textContent=this.files[0]?this.files[0].name:'Choose .ipa File'"><label class="b grey" for=ipaf id=ipal>Choose .ipa File</label>
@@ -656,7 +658,7 @@ try{if(localStorage.sdp)sdpDone()}catch(e){}
 function nudge(){location.hash="apps";let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();darkSw.checked=document.documentElement.classList.contains("dark")});
-</script>""", error=error, enrolled=enrolled, updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
+</script>""", error=error, enrolled=enrolled, public_url=PUBLIC_URL, updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
         sources=read_urls("feather-sources.txt"),
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
