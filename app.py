@@ -412,9 +412,10 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5
 /* pressed states (UIKit's *Pressed art); iOS only shows :active once the page has a touch listener, added below */
 .nav .bar:not(.back):active{background:linear-gradient(#8b97af,#283e6b);border-color:#1c2c4f;border-top-color:#30343c}
 .dark .nav .bar:not(.back):active{background:linear-gradient(#2a2d32,#121316)}
+.alert .abtns button,.alert .abtns .ok{background-origin:border-box!important}  /* the background shorthands reset it; without it the gradient tiles into the see-through border and its bright top shows as a line at the bottom */
 .alert .abtns button:active{background:linear-gradient(rgba(185,185,185,.82),rgba(62,62,62,.61) 50%,rgba(3,3,3,.61) 50%,rgba(24,24,24,.57))}
 .sw:active .k{background:linear-gradient(#bcbcbc,#e6e6e6)} .dark .sw:active .k{background:linear-gradient(#55595f,#2e3136)}
-.sw.drag i:before{transform:translateX(calc(var(--x) - 52px));transition:none} .sw.drag .k{transform:translateX(var(--x));transition:none} .sw.drag i:after{opacity:1;transform:translateX(var(--x))}
+.sw{touch-action:none} .sw.drag i:before{transform:translateX(calc(var(--x) - 65px));transition:none}  /* blue ends at the knob's center */ .sw.drag .k{transform:translateX(var(--x));transition:none} .sw.drag i:after{opacity:1;transform:translateX(var(--x))}
 #sb.on{pointer-events:auto}
 /* chrome isn't text: no selection or callout on a long press (holding the scroll indicator selected the tab labels) */
 .nav,.tabs,#sb,.sw,button,.get,.abtns,.grabbing{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none} #sb::before{content:"";position:absolute;inset:-12px -2px -12px -26px} #sb.grab{width:7px;right:1px;border-radius:4px}
@@ -448,6 +449,7 @@ details[open]>summary:after{transform:rotate(135deg)} details>:not(summary){marg
 .abtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 /* UIKit alert buttons: UIPopupAlertSheetDefaultButton (Cancel), UIPopupAlertSheetButton (OK), UIPopupAlertSheetButtonPress */
 .alert .abtns button{height:43px;padding:0;font-size:16px;border:1px solid rgba(0,0,0,.3);border-radius:6px;box-shadow:none;
+ 
  background:linear-gradient(rgba(255,255,255,.62),rgba(255,255,255,.1) 50%,rgba(255,255,255,0) 50%,rgba(255,255,255,.1))}
 .alert .abtns .ok{background:linear-gradient(rgba(255,255,255,.81),rgba(255,255,255,.3) 50%,rgba(255,255,255,.2) 50%,rgba(255,255,255,.3))}
 /* Dark Mode (follows the phone, or the More tab switch): gunmetal bars, dark pinstripes, inverted emboss */
@@ -477,11 +479,11 @@ function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.leng
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(180 12 12)" opacity=.52 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(210 12 12)" opacity=.44 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(240 12 12)" opacity=.36 />
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(270 12 12)" opacity=.3 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(300 12 12)" opacity=.25 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(330 12 12)" opacity=.2 /></g></svg>
 Reloading Data</div></div>
-<div class=scrim id=about hidden onclick="if(event.target==this)this.hidden=true"><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
+<div class=scrim id=about hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
 <h3 id=aboutT>About sidedrop</h3><p>Apps shared between friends, signed for each registered iPhone. Register once in Safari, then tap GET.</p>
 {% if stats %}<p>{{ stats[0] }} of 100 iPhones registered.{% if stats[1] %} Apps keep working until {{ stats[1].strftime('%B %-d, %Y') }}.{% endif %}</p>{% endif %}
 <div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){location.hash='more';d.open=true;setTimeout(()=>goTo(d),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
-<script>addEventListener("keydown",e=>{if(e.key=="Escape")about.hidden=true})
+<script>/* alerts are modal like UIAlertView: only their buttons close them */
 /* body is the scroller; scrollIntoView would also scroll the locked <html> and drag the fixed nav down */
 /* clamp to the real bottom: iOS lets a smooth scroll on a non-root scroller overshoot past the end, then snaps back on the next touch */
 function goTo(el){let b=document.body;b.scrollTo({top:Math.min(b.scrollTop+el.getBoundingClientRect().top-56,b.scrollHeight-b.clientHeight),behavior:"smooth"})}
@@ -504,8 +506,9 @@ addEventListener("DOMContentLoaded",()=>{
   w.addEventListener("touchmove",e=>{let d=e.touches[0].clientX-x0;if(!mv&&Math.abs(d)<4)return;mv=true;e.preventDefault();w.classList.add("drag");w.style.setProperty("--x",Math.min(52,Math.max(0,s0+d))+"px")},{passive:false});
   /* iOS still sends a click after the drag, which would toggle it back: swallow that one */
   w.addEventListener("click",e=>{if(w.skip){e.preventDefault();w.skip=0}},true);
-  w.addEventListener("touchend",e=>{if(!mv)return;e.preventDefault();let on=parseFloat(w.style.getPropertyValue("--x"))>26;w.classList.remove("drag");
-   w.skip=1;setTimeout(()=>w.skip=0,400);if(on!=i.checked){i.checked=on;i.dispatchEvent(new Event("change"))}})})})  // Safari ignores user-scalable=no for pinch
+  let end=e=>{if(!mv)return;mv=false;if(e.cancelable)e.preventDefault();let on=parseFloat(w.style.getPropertyValue("--x"))>26;w.classList.remove("drag");
+   w.skip=1;setTimeout(()=>w.skip=0,400);if(on!=i.checked){i.checked=on;i.dispatchEvent(new Event("change"))}};
+  w.addEventListener("touchend",end);w.addEventListener("touchcancel",end)})})  // iOS ends a gesture it took over with touchcancel  // Safari ignores user-scalable=no for pinch
 function reloadData(){reloading.hidden=false;fetch("/refresh",{method:"POST"}).catch(()=>{}).finally(()=>{history.replaceState(null,"","/"+location.hash);location.reload()})}  // replace() to the same /#tab only jumps to the hash, it never reloads</script>
 {% if back %}<section class=page>{{ body|safe }}</section>{% else %}{{ body|safe }}{% endif %}""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
 
@@ -680,7 +683,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 
 <section class=page id=t-apps data-title=sidedrop>
 <div class=splash><img src=/apple-touch-icon.png alt=""><div><h2>Welcome to sidedrop</h2><p>by <a href="https://github.com/RyanAHayden">Ryan Hayden</a></p></div></div>
-{% if just_enrolled %}<div class=scrim id=welcome onclick="if(event.target==this)welcomeOk()"><div class=alert role=alertdialog aria-modal=true aria-labelledby=welT>
+{% if just_enrolled %}<div class=scrim id=welcome><div class=alert role=alertdialog aria-modal=true aria-labelledby=welT>
 <h3 id=welT>Setup Complete</h3><p>This iPhone is registered. Enjoy!</p><p>Tap GET to install apps.</p>
 <div class=abtns style="grid-template-columns:1fr"><button type=button class=ok onclick="welcomeOk()">OK</button></div></div></div>
 <script>function welcomeOk(){welcome.hidden=true;history.replaceState(null,"","/")}</script>{% endif %}
@@ -702,7 +705,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% for day, group in recent %}<div class=cyh>New at {{ day.strftime('%b %-d, %Y') }}</div>{% for a in group %}{{ cyrow(a, False) }}{% endfor %}{% endfor %}</div>
 {% if not recent %}<p class="c m">No apps yet.</p>{% endif %}
 <p class=ftr>{% if enrolled %}Updates show for apps you installed from here on this iPhone.{% else %}Register this iPhone to get updates.{% endif %}</p>
-<div class=scrim id=upq hidden onclick="if(event.target==this)this.hidden=true"><div class=alert role=alertdialog aria-modal=true aria-labelledby=upqT>
+<div class=scrim id=upq hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=upqT>
 <h3 id=upqT>Update</h3><p id=upqL></p><div class=abtns><button type=button onclick="upq.hidden=true">Cancel</button><button type=button class=ok onclick="upgradeGo()">Confirm</button></div></div></div>
 </section>
 
