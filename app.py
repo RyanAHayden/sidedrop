@@ -423,6 +423,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5
 .sw:active .k{background:linear-gradient(#bcbcbc,#e6e6e6)} .dark .sw:active .k{background:linear-gradient(#55595f,#2e3136)}
 .sw{touch-action:none} .sw.drag i:before{transform:translateX(calc(var(--x) - 65px));transition:none}  /* blue ends at the knob's center */ .sw.drag .k{transform:translateX(var(--x));transition:none} .sw.drag i:after{opacity:1;transform:translateX(var(--x))}
 #sb.on{pointer-events:auto}
+*{-webkit-tap-highlight-color:transparent}  /* no grey tap flash; controls have their own pressed looks */
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none} input,textarea,#src{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}  /* app, not a document: holding never selects, except fields and Feather's sources */ #sb::before{content:"";position:absolute;inset:-12px -2px -12px -26px} #sb.grab{width:7px;right:1px;border-radius:4px}
 h3.hdr{font-size:17px;font-weight:700;color:var(--head);margin:20px 10px 7px;text-shadow:var(--emboss)}
 .ftr{font-size:14px;color:var(--head);text-align:center;text-shadow:var(--emboss);margin:7px 12px 0}
