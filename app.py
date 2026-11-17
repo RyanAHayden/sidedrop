@@ -1,5 +1,5 @@
 """sidedrop: password-gated UDID enrollment, ad hoc OTA installs and private file downloads."""
-import base64, datetime, hashlib, hmac, itertools, json, os, plistlib, re, subprocess, threading, time, uuid, zipfile, zlib
+import base64, datetime, hashlib, hmac, itertools, json, os, plistlib, re, secrets, subprocess, threading, time, uuid, zipfile, zlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import quote
@@ -32,7 +32,8 @@ read_sources = lambda f: [(l.split()[0], l.split()[1:]) for l in (HERE / f).read
                           if l.startswith(("https://", "http://"))] if (HERE / f).exists() else []
 SOURCES = [(u, ids, False) for u, ids in read_sources("mirror-sources.txt")] + \
           [(u, ids, True) for u, ids in read_sources("third-party-sources.txt")]
-SYNC_TOKEN = os.environ.get("SYNC_TOKEN", "")  # lets CI hit POST /sync after a release
+SYNC_TOKEN = os.environ.get("SYNC_TOKEN", "")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")  # unlocks /admin (disable iPhones); unset = no admin page  # lets CI hit POST /sync after a release
 PROFILE_CERT_DIR = os.environ.get("PROFILE_CERT_DIR", "")  # dir with fullchain.pem + privkey.pem; iOS then shows "Verified"
 
 app = Flask(__name__)
@@ -42,13 +43,31 @@ app.config.update(SESSION_COOKIE_SECURE=PUBLIC_URL.startswith("https"), SESSION_
                   SESSION_COOKIE_SAMESITE="Lax", PERMANENT_SESSION_LIFETIME=30 * 86400)
 lock = threading.Lock()  # ponytail: one global lock for ASC + signing, fine for a handful of friends
 INSTALLED, installed_lock = DATA / "installed.json", threading.Lock()  # {udid: {app: "short/build"}} from INSTALL taps, for Changes
+SEEN = DATA / "seen.json"  # {udid: unix time} last page load per registered iPhone, for the admin page
 
 
-def installed():
+def load_json(path):
     try:
-        return json.loads(INSTALLED.read_text())
+        return json.loads(path.read_text())
     except (OSError, ValueError):
         return {}
+
+
+def save_json(path, data):
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data))
+    tmp.replace(path)
+
+
+installed = lambda: load_json(INSTALLED)
+
+
+def touch_seen(udid):
+    with installed_lock:
+        seen = load_json(SEEN)
+        if time.time() - seen.get(udid, 0) > 3600:  # ponytail: hourly granularity keeps this to one write an hour per phone
+            seen[udid] = int(time.time())
+            save_json(SEEN, seen)
 
 
 # --- signed links: iOS installd and wget fetch without cookies, so links carry their own auth ---
@@ -409,6 +428,8 @@ def home():
 {% if err %}<p class=err>Wrong password.</p>{% endif %}<button>Sign in</button></form>""", err=request.args.get("err"))
     tok = request.args.get("enrolled") or request.cookies.get("device", "")  # ?enrolled= is the 301 after the profile install
     enrolled = token_udid(tok) in profile_udids()
+    if enrolled:
+        touch_seen(token_udid(tok))
     error = None
     sync_if_stale(60)  # ponytail: a new release makes this one page load wait for the download
     try:
@@ -599,8 +620,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% if stats[1] %}<div class=kv><b>Apps work until</b><span>{{ stats[1].strftime('%b %-d, %Y') }}</span></div>{% endif %}{% endif %}</div>
 {% if enrolled %}<p class=ftr>This iPhone is registered and can install every app.</p>{% endif %}
 <div class="g split">
-{% if enrolled %}<button type=button class=tile onclick="let d=document.getElementById('other');d.open=true;goTo(d)">{% else %}<a class=tile href=#apps>{% endif %}
-<span class=tic style="background:linear-gradient(#8fd96b,#3c9a1d)"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#3c9a1d"/></svg></span>Register{% if enrolled %}</button>{% else %}</a>{% endif %}
+{% if enrolled and admin_on %}<a class=tile href=/admin><span class=tic style="background:linear-gradient(#ffb36b,#d9650f)"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="#fff"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z" fill="#fff"/></svg></span>Manage</a>
+{% else %}<a class=tile href=#apps><span class=tic style="background:linear-gradient(#8fd96b,#3c9a1d)"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#3c9a1d"/></svg></span>Register</a>{% endif %}
 <button type=button class=tile onclick="goTo(document.getElementById('sign'))"><span class=tic style="background:linear-gradient(#b7c0cc,#5d6878)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</button></div>
 <div class=pair>
 <button type=button class=tile onclick="let d=document.getElementById('dev');d.open=true;goTo(d)"><span class=tic style="background:linear-gradient(#bfc4c9,#5f666e)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-dasharray="2.4 2"><circle cx="12" cy="12" r="7"/></svg></span>Help</button>
@@ -616,10 +637,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <figure class=shot><figcaption><span class=num>c</span><span>Turn it <b>on</b>, tap <b>Restart</b>, then <b>Turn On</b> after the restart</span></figcaption>
 <img src=/static/dev3.jpg alt="The Developer Mode switch turned on, circled" width=640 height=305></figure>
 <div class=warn><span aria-hidden=true>💡</span><div>Don't see it? Install an app first, then look again.</div></div></details>
-{% if enrolled %}<details><summary>Turn off Stolen Device Protection</summary>{{ sdp_steps }}</details>
-<details id=other><summary>Add another iPhone</summary><p class=m>An iPhone can only register itself. Open this link in Safari on the other iPhone and follow the setup there.</p>
-<div style="display:flex;flex-direction:column;gap:10px"><input id=site readonly value="{{ public_url }}" aria-label="Link to open on the other iPhone" onfocus="this.select()">
-<button type=button class=grey onclick="navigator.clipboard.writeText(site.value).then(()=>this.textContent='Copied ✓',()=>site.select())">Copy Link</button></div></details>{% endif %}</div>
+{% if enrolled %}<details><summary>Turn off Stolen Device Protection</summary>{{ sdp_steps }}</details>{% endif %}</div>
 <h3 class=hdr id=sign>Sign your own IPA</h3>
 <form class=c method=post action=/sign enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Signing…'">
 <input type=file name=ipa id=ipaf accept=.ipa class=vh onchange="ipal.textContent=this.files[0]?this.files[0].name:'Choose .ipa File'"><label class="b grey" for=ipaf id=ipal>Choose .ipa File</label>
@@ -660,7 +678,7 @@ try{if(localStorage.sdp)sdpDone()}catch(e){}
 function nudge(){location.hash="apps";let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();darkSw.checked=document.documentElement.classList.contains("dark")});
-</script>""", error=error, enrolled=enrolled, public_url=PUBLIC_URL, updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
+</script>""", error=error, enrolled=enrolled, admin_on=bool(ADMIN_PASSWORD), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
         sources=read_urls("feather-sources.txt"),
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
@@ -694,10 +712,81 @@ def mark_installed():
     with installed_lock:
         data = installed()
         data.setdefault(udid, {})[p.stem] = f"{i['short']}/{i['version']}"
-        tmp = INSTALLED.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data))
-        tmp.replace(INSTALLED)
+        save_json(INSTALLED, data)
     return "", 204
+
+
+# --- admin: list the developer account's iPhones, disable the ones that shouldn't have apps any more ---
+
+ADMIN_TTL, admin_fails = 15 * 60, []  # admin unlock lasts 15 min; times of recent wrong admin passwords
+
+
+def is_admin():
+    return bool(ADMIN_PASSWORD) and logged_in() and time.time() - session.get("admin", 0) < ADMIN_TTL and bool(session.get("csrf"))
+
+
+ADMIN_CSS = """<style>.act{flex:none;width:auto;min-width:76px;padding:5px 10px;font-size:12px;border-radius:4px;letter-spacing:.02em}
+.act.red{border-color:#8a1c1c;background:linear-gradient(#f58b8b,#d43a3a 50%,#c22424 51%,#d23333)} .off>div{opacity:.5} .row b{font-weight:700}</style>"""
+
+
+@app.route("/admin", methods=["GET", "POST"])
+def admin():
+    if not ADMIN_PASSWORD:
+        abort(404)
+    if not logged_in():
+        return redirect("/")
+    err = None
+    if request.method == "POST":
+        admin_fails[:] = [t for t in admin_fails if time.time() - t < 900]
+        if len(admin_fails) >= 5:  # ponytail: global lockout, not per IP; friends could lock the admin out for 15 min at worst
+            err = "Too many wrong passwords. Try again in 15 minutes."
+        elif hmac.compare_digest(request.form.get("password", "").encode(), ADMIN_PASSWORD.encode()):
+            session["admin"], session["csrf"] = time.time(), secrets.token_urlsafe(32)
+            return redirect("/admin")
+        else:
+            admin_fails.append(time.time())
+            time.sleep(2)
+            err = "Wrong admin password."
+    if not is_admin():
+        return page(ADMIN_CSS + """<p><a href=/#more>‹ More</a></p><h3 class=hdr>Manage iPhones</h3>
+<form class=c method=post><input type=password name=password placeholder="Admin password" aria-label="Admin password" autofocus required>
+{% if err %}<p class=err>{{ err }}</p>{% endif %}<button>Unlock</button></form>""", err=err)
+    seen, me = load_json(SEEN), token_udid(request.cookies.get("device", ""))
+    now = time.time()
+    def ago(t):
+        days = int((now - t) // 86400)
+        return "today" if days < 1 else "yesterday" if days < 2 else f"{days} days ago" if days < 60 else time.strftime("%b %-d, %Y", time.localtime(t))
+    devices = []
+    for d in asc("GET", "/devices", params={"filter[platform]": "IOS", "limit": 200})["data"]:
+        a = d["attributes"]
+        added = datetime.datetime.strptime(a["addedDate"][:10], "%Y-%m-%d") if a.get("addedDate") else None
+        devices.append(dict(id=d["id"], name=a.get("name", ""), model=a.get("model") or a.get("deviceClass", ""), udid=a.get("udid", ""),
+                            on=a.get("status") == "ENABLED", added=added, me=a.get("udid") == me,
+                            used=f"Last used {ago(seen[a['udid']])}" if a.get("udid") in seen else "Not seen yet"))
+    devices.sort(key=lambda d: (not d["on"], -(d["added"].timestamp() if d["added"] else 0)))
+    return page(ADMIN_CSS + """<p><a href=/#more>‹ More</a></p><h3 class=hdr>Manage iPhones</h3>
+<div class=g>{% for d in devices %}<div class="row{{ '' if d.on else ' off' }}"><div><b>{{ d.name }}</b>{% if d.me %} · this iPhone{% endif %}
+<small>{{ d.model }}{% if d.added %} · added {{ d.added.strftime('%b %-d, %Y') }}{% endif %}</small><small>{{ d.used }}{% if not d.on %} · disabled{% endif %}</small></div>
+<form method=post action=/admin/device data-name="{{ d.name }}" onsubmit="{% if d.on %}if(!confirm('Disable '+this.dataset.name+'? Its apps stop opening.'))return false;{% endif %}this.querySelector('button').textContent='Saving…'">
+<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=id value="{{ d.id }}"><input type=hidden name=status value="{{ 'DISABLED' if d.on else 'ENABLED' }}">
+<button class="act{{ ' red' if d.on }}">{{ 'DISABLE' if d.on else 'ENABLE' }}</button></form></div>{% endfor %}</div>
+<p class=ftr>{{ devices|selectattr('on')|list|length }} enabled, {{ devices|rejectattr('on')|list|length }} disabled. Disabling takes an iPhone out of the profile, so its apps stop opening.
+Apple still counts it toward the 100 until your membership renews, when you can remove it at developer.apple.com.</p>""",
+                devices=devices, csrf=session["csrf"])
+
+
+@app.post("/admin/device")
+def admin_device():
+    if not is_admin() or not hmac.compare_digest(request.form.get("csrf", ""), session["csrf"]):
+        abort(403)
+    did, status = request.form.get("id", ""), request.form.get("status")
+    if not re.fullmatch(r"[A-Za-z0-9]{1,40}", did) or status not in ("ENABLED", "DISABLED"):
+        abort(400)
+    with lock:
+        asc("PATCH", f"/devices/{did}", json={"data": {"type": "devices", "id": did, "attributes": {"status": status}}})
+        regen_profile()
+        resign(force=True)
+    return redirect("/admin")
 
 
 @app.post("/refresh")

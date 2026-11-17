@@ -5,7 +5,7 @@ from urllib.parse import unquote, urlsplit
 
 tmp = Path(tempfile.mkdtemp())
 os.environ.update(DATA=str(tmp), PASSWORD="hunter2-but-longer", PUBLIC_URL="https://x.test", SECRET_KEY="k" * 32,
-                  BUNDLE_ID="com.me.*")
+                  BUNDLE_ID="com.me.*", ADMIN_PASSWORD="admin-pass-also-long")
 import threading
 start, threading.Thread.start = threading.Thread.start, lambda self: None  # no background source sync in tests
 import app as A
@@ -84,7 +84,7 @@ html = c.get("/").data
 assert b"First, set up this iPhone" in html and b"/static/sdp1.jpg" in html and b"itms-services" not in html  # apps locked until registered
 assert b"itms-services" not in c.get("/?enrolled=1").data and b"itms-services" not in c.get("/?enrolled=00008130-AAAA.x").data
 html = c.get(r.location.replace("https://x.test", ""), base_url="https://localhost").data
-assert b"This iPhone is registered" in html and b"Add another iPhone" in html and b"/static/sdp1.jpg" in html
+assert b"This iPhone is registered" in html and b"href=/admin" in html and b"/static/sdp1.jpg" in html
 c.get("/logout", base_url="https://localhost"); c.post("/login", data={"password": "hunter2-but-longer"}, base_url="https://localhost")
 assert b"This iPhone is registered" in c.get("/", base_url="https://localhost").data
 assert A.profile_udids() == {"00008130-AAAA"} and (tmp / "signed" / "Demo.ipa").exists()
@@ -203,6 +203,26 @@ with zipfile.ZipFile(tmp / "apps" / "Demo.ipa", "w") as z:
 os.utime(tmp / "apps" / "Demo.ipa", (time.time() + 5, time.time() + 5))
 html = c.get("/").data.decode()
 assert "Available Upgrades" in html and ">UPDATE</a>" in html and re.search(r"id=badge>1<", html), "upgrade offered"
+# admin: separate password, CSRF, lockout; lists devices and disables one
+plain = A.app.test_client()
+assert plain.get("/admin").status_code == 302 and plain.post("/admin/device").status_code == 403
+assert b"Admin password" in c.get("/admin").data and c.post("/admin/device", data={"id": "D1", "status": "DISABLED"}).status_code == 403
+assert b"Wrong admin password" in c.post("/admin", data={"password": "nope"}).data
+patched, devs = [], [{"id": "D1", "attributes": {"name": "Sam <b>", "udid": "00008130-AAAA", "status": "ENABLED", "addedDate": "2026-11-03T10:00:00.000+0000", "model": "iPhone 15"}}]
+A.asc = lambda m, path, **kw: (patched.append((m, path, kw)), {"data": devs if m == "GET" and path == "/devices" and "filter[udid]" not in kw.get("params", {}) else []})[1]
+assert c.post("/admin", data={"password": "admin-pass-also-long"}).status_code == 302
+html = c.get("/admin").data.decode()
+assert "Sam &lt;b&gt;" in html and "this iPhone" in html and "added Nov 3, 2026" in html and "Last used today" in html
+csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
+assert c.post("/admin/device", data={"id": "D1", "status": "DISABLED", "csrf": "x"}).status_code == 403
+assert c.post("/admin/device", data={"id": "../x", "status": "DISABLED", "csrf": csrf}).status_code == 400
+assert c.post("/admin/device", data={"id": "D1", "status": "DISABLED", "csrf": csrf}).status_code == 302
+assert ("PATCH", "/devices/D1") in [(m, p) for m, p, _ in patched]
+A.asc = fake_asc
+locked = A.app.test_client(); locked.post("/login", data={"password": "hunter2-but-longer"})
+for _ in range(5): locked.post("/admin", data={"password": "nope"})
+assert b"Too many wrong passwords" in locked.post("/admin", data={"password": "admin-pass-also-long"}).data
+A.admin_fails.clear()
 assert c.get("/static/sdp1.jpg").status_code == 200  # setup screenshots served
 assert A.app.test_client().post("/refresh").status_code == 403 and c.post("/refresh").status_code == 204  # Reload button
 assert b"Setup Complete" in c.get("/?enrolled=" + A.device_token("00008130-AAAA")).data and b"Setup Complete" not in c.get("/").data

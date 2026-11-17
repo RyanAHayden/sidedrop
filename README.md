@@ -46,6 +46,8 @@ docker compose up -d --build
 
 **HTTPS with a real certificate is required.** iOS won't install profiles or apps over plain HTTP or with a self-signed cert. Put the site behind a reverse proxy, Cloudflare Tunnel or `tailscale funnel 8080`, and set `PUBLIC_URL` to match.
 
+With `ADMIN_PASSWORD` set, **More → Manage** (on a registered iPhone) lists the account's iPhones with when each was added and last used, and can disable or re-enable them. Apple has no API to delete a device: disabling takes it out of the profile so its apps stop opening, but its slot only frees up at renewal.
+
 ## Limits
 
 - Apple allows 100 iPhones per developer account per membership year. Removing a device only frees its slot at renewal.
