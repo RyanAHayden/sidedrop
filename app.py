@@ -343,8 +343,8 @@ html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6
 .dark label.drop{background:repeating-linear-gradient(90deg,#16181b 0 5px,#1a1c1f 5px 7px);border-color:#0d0e10;color:#8b9099;box-shadow:inset 0 2px 5px #000,0 1px 0 rgba(255,255,255,.06)}
 .dark a.b.grey,.dark button.grey{color:#e6e8eb;border-color:#111;background:linear-gradient(#4a4f58,#2c2f34 50%,#24272c 51%,#2c2f34);box-shadow:inset 0 1px 0 rgba(255,255,255,.15)}
 /* Cydia-style "Reloading Data" HUD while Reload syncs sources and re-signs */
-.hud{width:150px;padding:22px 12px 16px;border-radius:12px;background:rgba(0,0,0,.78);color:#fff;text-align:center;font-weight:700;font-size:16px;text-shadow:0 -1px 0 #000;
- box-shadow:0 4px 18px rgba(0,0,0,.5);display:grid;justify-items:center;gap:12px} .hud small{color:#bbb;font-weight:400}
+.hud{width:min(284px,100%);box-sizing:border-box;padding:20px 14px 18px;border-radius:12px;background:rgba(0,0,0,.78);color:#fff;text-align:center;font-weight:700;font-size:16px;text-shadow:0 -1px 0 #000;
+ box-shadow:0 4px 18px rgba(0,0,0,.5);display:grid;justify-items:center;gap:12px}
 .spin{width:37px;height:37px;animation:spin 1s steps(12) infinite} @keyframes spin{to{transform:rotate(360deg)}}
 .scrim.clear{background:none}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
@@ -355,7 +355,7 @@ html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(90 12 12)" opacity=.76 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(120 12 12)" opacity=.68 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(150 12 12)" opacity=.6 />
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(180 12 12)" opacity=.52 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(210 12 12)" opacity=.44 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(240 12 12)" opacity=.36 />
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(270 12 12)" opacity=.3 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(300 12 12)" opacity=.25 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(330 12 12)" opacity=.2 /></g></svg>
-Reloading Data<small>Checking sources…</small></div></div>
+Reloading Data</div></div>
 <div class=scrim id=about hidden onclick="if(event.target==this)this.hidden=true"><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
 <h3 id=aboutT>About sidedrop</h3><p>Apps shared between friends, signed for each registered iPhone. Register once in Safari, then tap GET.</p>
 {% if stats %}<p>{{ stats[0] }} of 100 iPhones registered.{% if stats[1] %} Apps keep working until {{ stats[1].strftime('%B %-d, %Y') }}.{% endif %}</p>{% endif %}
