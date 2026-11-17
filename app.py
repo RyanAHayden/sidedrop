@@ -502,11 +502,11 @@ addEventListener("DOMContentLoaded",()=>{
  let b=document.body,sb=document.createElement("div"),t,grab=null,g=()=>{let n=document.querySelector(".nav").getBoundingClientRect().bottom,tb=document.querySelector(".tabs"),
   track=(tb?tb.getBoundingClientRect().top:innerHeight)-3-n-6,h=b.scrollHeight-b.clientHeight,th=Math.max(36,track*b.clientHeight/b.scrollHeight);return{n,track,h,th}};
  sb.id="sb";b.append(sb);
- let draw=()=>{let m=g();if(m.h<=1)return;let y=Math.min(Math.max(b.scrollTop/m.h,0),1);sb.style.top=m.n+3+(m.track-m.th)*y+"px";sb.style.height=m.th+"px";
+ let draw=()=>{let m=g(),st=b.scrollTop,ov=st<0?-st:st>m.h?st-m.h:0,th=Math.max(7,(m.h<=1?m.track:m.th)-ov),y=m.h<=1?(st>0?1:0):Math.min(Math.max(st/m.h,0),1);sb.style.top=m.n+3+(m.track-th)*y+"px";sb.style.height=th+"px";  /* like UIScrollView: a page that fits still shows a full-length indicator while it bounces; overscroll squashes it against that end */
   sb.style.opacity=1;sb.classList.add("on");clearTimeout(t);if(!grab)t=setTimeout(()=>{sb.style.opacity=0;sb.classList.remove("on")},grab===null?500:900)};
  b.addEventListener("scroll",draw,{passive:true});
  sb.addEventListener("touchstart",e=>{e.preventDefault();grab=e.touches[0].clientY-sb.getBoundingClientRect().top;sb.classList.add("grab");b.classList.add("grabbing");clearTimeout(t);hap()},{passive:false});  // preventDefault: no long-press text selection
- sb.addEventListener("touchmove",e=>{e.preventDefault();let m=g();b.scrollTop=(e.touches[0].clientY-grab-m.n-3)/(m.track-m.th)*m.h},{passive:false});
+ sb.addEventListener("touchmove",e=>{e.preventDefault();let m=g();if(m.h<=1)return;b.scrollTop=(e.touches[0].clientY-grab-m.n-3)/(m.track-m.th)*m.h},{passive:false});
  sb.addEventListener("touchend",()=>{grab=undefined;sb.classList.remove("grab");b.classList.remove("grabbing");draw();grab=null});
  /* on/off switches drag like UISwitch; a plain tap still toggles */
  document.querySelectorAll(".sw").forEach(w=>{let i=w.querySelector("input"),x0,s0,mv;
