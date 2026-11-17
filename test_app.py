@@ -140,9 +140,12 @@ A.SOURCES = [("https://other/source.json", ["nope"], True)]; (tmp / "apps" / ".i
 assert not (tmp / "apps" / ".io.x.tennis.version").exists()
 A.SOURCES = [("https://src/source.json", [], False)]; A.sync_sources()
 assert not (tmp / "apps" / ".io.x.tennis.third").exists()
-# page loads check the source, throttled to once a minute
+# the page's background check syncs the source, throttled to once a minute; page loads themselves don't wait on it
 n = gets.count("https://src/source.json"); A.last_sync[0] = 0
-c.get("/"); c.get("/")
+c.get("/")
+assert gets.count("https://src/source.json") == n
+assert A.app.test_client().post("/check").status_code == 403
+assert "stamp" in c.post("/check").json; c.post("/check")
 assert gets.count("https://src/source.json") == n + 1
 
 # CI trigger needs the token
@@ -194,15 +197,17 @@ assert "Pick an .ipa" in c.post("/sign", data={"url": "file:///etc/passwd"}).dat
 assert not list((tmp / "signed" / "custom").glob(".*"))  # temp files cleaned up
 # Changes tab: installs are recorded per phone, and a newer version then shows as an upgrade with a badge
 html = c.get("/").data
-assert b"id=t-changes" in html and b"Available Upgrades" not in html and b"from sidedrop" in html
+assert b"id=t-changes" in html and b"Available Updates" not in html and b"from sidedrop" in html
 assert A.app.test_client().post("/installed", data={"name": "Demo"}).status_code == 403
 assert c.post("/installed", data={"name": "../x"}).status_code == 403
-assert c.post("/installed", data={"name": "Demo"}).status_code == 204 and b"Available Upgrades" not in c.get("/").data
+assert c.post("/installed", data={"name": "Demo"}).status_code == 204 and b"Available Updates" not in c.get("/").data
+assert b'class="get done" data-app="Demo" aria-expanded=false onclick="steps(this)">INSTALLED<' in c.get("/").data
 with zipfile.ZipFile(tmp / "apps" / "Demo.ipa", "w") as z:
     z.writestr("Payload/Demo.app/Info.plist", plistlib.dumps({"CFBundleIdentifier": "com.me.demo", "CFBundleVersion": "8", "CFBundleShortVersionString": "1.3", "CFBundleName": "Demo"}))
 os.utime(tmp / "apps" / "Demo.ipa", (time.time() + 5, time.time() + 5))
 html = c.get("/").data.decode()
-assert "Available Upgrades" in html and ">UPDATE</a>" in html and re.search(r"id=badge>1<", html), "upgrade offered"
+assert "Available Updates" in html and ">UPDATE</a>" in html and re.search(r"id=badge>1<", html), "upgrade offered"
+assert 'data-app="Demo" aria-expanded=false onclick="steps(this)">UPDATE<' in html, "Apps list says UPDATE for an older install"
 # admin: separate password, CSRF, lockout; lists devices and disables one
 plain = A.app.test_client()
 assert plain.get("/admin").status_code == 302 and plain.post("/admin/device").status_code == 403
@@ -247,7 +252,7 @@ def release(short, build):
     os.utime(tmp / "apps" / "Demo.ipa", (time.time() + 10, time.time() + 10))
     A.resign(force=True)
 release("1.4", "9"); A.notify_upgrades(); A.notify_upgrades()
-assert sent == [("https://push.example/1", {"title": "Upgrade Available", "body": "Demo 1.4 is available.", "url": "/#changes"})], sent
+assert sent == [("https://push.example/1", {"title": "Update Available", "body": "Demo 1.4 is available.", "url": "/#changes"})], sent
 def gone(*a, **k): raise WebPushException("gone", response=type("R", (), {"status_code": 410})())
 A.webpush = gone
 release("1.5", "10"); A.notify_upgrades()

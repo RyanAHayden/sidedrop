@@ -308,7 +308,7 @@ def notify_upgrades():
             names = [vers[n]["title"] for n in new]
             body = f"{names[0]} {vers[next(iter(new))]['short']} is available." if len(new) == 1 else f"New versions of {', '.join(names)}."
             try:
-                webpush(s["sub"], json.dumps({"title": "Upgrade Available" if len(new) == 1 else f"{len(new)} Upgrades Available", "body": body, "url": "/#changes"}),
+                webpush(s["sub"], json.dumps({"title": "Update Available" if len(new) == 1 else f"{len(new)} Updates Available", "body": body, "url": "/#changes"}),
                         vapid_private_key=str(VAPID), vapid_claims={"sub": PUBLIC_URL}, timeout=10)
             except WebPushException as e:
                 if e.response is not None and e.response.status_code in (404, 410):  # unsubscribed or app removed
@@ -503,7 +503,6 @@ def home():
     if enrolled:
         touch_seen(token_udid(tok))
     error = None
-    sync_if_stale(60)  # ponytail: a new release makes this one page load wait for the download
     try:
         with lock:
             resign()  # ponytail: signs stale IPAs on page load; first visit after an upload waits for it
@@ -540,7 +539,7 @@ def home():
 .get.go{min-width:76px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-color:#2f7a17;background:var(--greenbtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
 .get.blue{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-color:#2b4f8a;background:var(--bluebtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
 .get[aria-expanded=true]{color:#7d8794;background:linear-gradient(#c9ced5,#dfe3e8);box-shadow:inset 0 1px 3px rgba(0,0,0,.3)}
-.locked .get{min-width:44px}
+.locked .get{min-width:44px} .get.done:not(.go){color:#8e959e}  /* iOS 6 App Store: INSTALLED is grey; tapping still reinstalls */
 .steps{background:linear-gradient(#f3f5f8,#fff);display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s cubic-bezier(.25,.1,.25,1)} .steps.open{grid-template-rows:1fr}
 .steps>div{overflow:hidden;min-height:0} .steps .step:first-child{box-shadow:inset 0 1px var(--sep)}  /* real-height animation; max-height snapped */
 .step{display:flex;align-items:center;gap:10px;padding:8px 10px 8px 20px} .step+.step{border-top:1px dashed #d4d9df}
@@ -602,6 +601,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 /* iOS 5 red count badge on the Changes tab */
 .badge{position:absolute;top:-2px;left:calc(50% + 4px);min-width:22px;height:22px;padding:0 6px;box-sizing:border-box;border-radius:11px;border:2px solid #fff;color:#fff;
  font:700 13px/18px "Helvetica Neue",Helvetica,sans-serif;text-align:center;background:linear-gradient(#ff7b7b,#e60000 50%,#cc0000 51%,#d40000);box-shadow:0 1px 3px rgba(0,0,0,.6)}
+/* Cydia: while it checks for updates the badge spins instead of counting */
+.badge.busy{font-size:0;padding:0} .badge.busy:after{content:"";position:absolute;inset:0;margin:auto;width:10px;height:10px;box-sizing:border-box;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
 /* Cydia tab bar */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;display:grid;grid-template-columns:repeat(5,1fr);gap:4px;
  padding:2px max(4px,env(safe-area-inset-right)) calc(2px + env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left));
@@ -628,8 +629,9 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class=warn><span aria-hidden=true>⏳</span><div>Asked to wait an hour? Do this at home, where there's no wait.</div></div>
 {% endset %}
 {% macro install(a) %}{% if not enrolled %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>
-{% elif a.files %}<button type=button class=get aria-expanded=false onclick="steps(this)">GET</button>
-{% else %}<a class=get data-arm=GET data-app="{{ a.name }}" aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">GET</a>{% endif %}{% endmacro %}
+{% else %}{% set lbl = 'GET' if a.name not in mine else 'INSTALLED' if mine[a.name] == a.vkey else 'UPDATE' %}
+{% if a.files %}<button type=button class="get{{ ' done' if lbl == 'INSTALLED' }}" data-app="{{ a.name }}" aria-expanded=false onclick="steps(this)">{{ lbl }}</button>
+{% else %}<a class="get{{ ' done' if lbl == 'INSTALLED' }}" data-arm={{ lbl }} data-app="{{ a.name }}" aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">{{ lbl }}</a>{% endif %}{% endif %}{% endmacro %}
 {% macro install_list(apps) %}<div class="g{{ '' if enrolled else ' locked' }}">{% for a in apps %}
 <div class=row>{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
 <div>{{ a.title }}<small>Version {{ a.short }}{% if a.files %} · needs {{ a.files|length }} file{{ 's' if a.files|length > 1 }}{% endif %}</small></div>{{ install(a) }}</div>
@@ -661,12 +663,12 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class=cyt><b>{{ a.title }}</b><small>from {{ a.source }} · {{ a.short }}</small>{% if a.desc %}<p>{{ a.desc }}</p>{% endif %}</div>
 {% if up %}<a class=get data-arm=UPDATE data-app="{{ a.name }}" aria-label="Update {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">UPDATE</a>{% endif %}</div>{% endmacro %}
 <section class=page id=t-changes data-title=Changes><div class=cy>
-{% if updates %}<div class=cyh id=uph>Available Upgrades</div>{% for a in updates %}{{ cyrow(a, True) }}{% endfor %}{% endif %}
+{% if updates %}<div class=cyh id=uph>Available Updates</div>{% for a in updates %}{{ cyrow(a, True) }}{% endfor %}{% endif %}
 {% for day, group in recent %}<div class=cyh>New at {{ day.strftime('%b %-d, %Y') }}</div>{% for a in group %}{{ cyrow(a, False) }}{% endfor %}{% endfor %}</div>
 {% if not recent %}<p class="c m">No apps yet.</p>{% endif %}
-<p class=ftr>{% if enrolled %}Upgrades show for apps you installed from here on this iPhone.{% else %}Register this iPhone to get upgrades.{% endif %}</p>
+<p class=ftr>{% if enrolled %}Updates show for apps you installed from here on this iPhone.{% else %}Register this iPhone to get updates.{% endif %}</p>
 <div class=scrim id=upq hidden onclick="if(event.target==this)this.hidden=true"><div class=alert role=alertdialog aria-modal=true aria-labelledby=upqT>
-<h3 id=upqT>Upgrade</h3><p id=upqL></p><div class=abtns><button type=button onclick="upq.hidden=true">Cancel</button><button type=button class=ok onclick="upgradeGo()">Confirm</button></div></div></div>
+<h3 id=upqT>Update</h3><p id=upqL></p><div class=abtns><button type=button onclick="upq.hidden=true">Cancel</button><button type=button class=ok onclick="upgradeGo()">Confirm</button></div></div></div>
 </section>
 
 <section class=page id=t-feather data-title=Feather>
@@ -701,7 +703,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:linear-gradient(#8fc6ff,#2a72d6)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
 <h3 class=hdr>Display</h3><div class=g><div class=row><div>Dark Mode</div><label class=sw><input type=checkbox id=darkSw aria-label="Dark Mode"
  onchange="try{localStorage.dark=this.checked?1:0}catch(e){}theme()"><i></i><span class=k></span></label></div></div>
-{% if enrolled %}<h3 class=hdr>Notifications</h3><div class=g><div class=row><div>Upgrade Alerts</div><label class=sw><input type=checkbox id=pushSw aria-label="Upgrade Alerts"
+{% if enrolled %}<h3 class=hdr>Notifications</h3><div class=g><div class=row><div>Update Alerts</div><label class=sw><input type=checkbox id=pushSw aria-label="Update Alerts"
  onchange="pushSet(this.checked)"><i></i><span class=k></span></label></div></div>
 <p class=ftr id=pushNote>Tells you when an app you installed has a new version.</p>{% endif %}
 <h3 class=hdr>Help</h3><div class=g>
@@ -724,7 +726,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 </section>
 
 {% if enrolled %}<div class=scrim id=pushAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=pushT>
-<h3 id=pushT>Get Notified of Upgrades?</h3><p>sidedrop can tell you when an app you installed has a new version.</p>
+<h3 id=pushT>Get Notified of Updates?</h3><p>sidedrop can tell you when an app you installed has a new version.</p>
 <div id=pushWeb hidden><div><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open sidedrop from there</span></p></div></div>
 <div class=abtns><button type=button onclick="pushAsk.hidden=true">Not Now</button><button type=button class=ok id=pushOk>Allow</button></div></div></div>{% endif %}
 <nav class=tabs aria-label=Sections>
@@ -739,16 +741,20 @@ function show(){let t=location.hash.slice(1);if(!document.getElementById("t-"+t)
  document.querySelectorAll(".page").forEach(p=>p.hidden=p.id!="t-"+t);
  document.querySelectorAll(".tabs a").forEach(a=>a.getAttribute("href")=="#"+t?a.setAttribute("aria-current","page"):a.removeAttribute("aria-current"));
  navT.textContent=document.getElementById("t-"+t).dataset.title;document.body.scrollTo(0,0);navR()}
-/* on Changes with upgrades, the nav is Cydia's: Refresh (reloads data) on the left, Upgrade (n) on the right */
+/* on Changes with upgrades, the nav is Cydia's: Refresh (reloads data) on the left, Update (n) on the right */
 function navR(){let n=document.querySelectorAll(".cyr.up").length,r=document.querySelector(".nav .bar.r"),l=document.querySelector(".nav .bar:not(.r)"),ch=location.hash=="#changes",c=ch&&n;
- r.textContent=c?"Upgrade ("+n+")":"Reload";r.onclick=c?upgradeAll:reloadData;
- l.textContent=c?"Refresh":"About";l.onclick=c?reloadData:()=>{about.hidden=false;about.querySelector(".ok").focus()};badge.textContent=n;badge.hidden=!n;let h=document.getElementById("uph");if(h)h.hidden=!n}
-function mark(b){let n=b.dataset.app;if(!n)return;navigator.sendBeacon("/installed",new URLSearchParams({name:n}));setTimeout(pushMaybe,1500);  // after iOS's install prompt
+ r.textContent=c?"Update ("+n+")":"Reload";r.onclick=c?upgradeAll:reloadData;
+ l.textContent=c?"Refresh":"About";l.onclick=c?reloadData:()=>{about.hidden=false;about.querySelector(".ok").focus()};badge.textContent=n;badge.hidden=!n&&!badge.classList.contains("busy");let h=document.getElementById("uph");if(h)h.hidden=!n}
+function mark(b){let n=b.dataset.app;if(!n)return;navigator.sendBeacon("/installed",new URLSearchParams({name:n}));
+ document.querySelectorAll('.row .get[data-app="'+n+'"]').forEach(x=>{x.classList.add("done");if(x.dataset.arm)x.dataset.arm="INSTALLED";if(!x.classList.contains("go"))x.textContent="INSTALLED"});setTimeout(pushMaybe,1500);  // after iOS's install prompt
  setTimeout(()=>{document.querySelectorAll('.cyr.up [data-app="'+n+'"]').forEach(x=>x.closest(".cyr").remove());navR()},500)}  // after the link has followed: a removed link doesn't navigate
-function upgradeAll(){let l=[...document.querySelectorAll(".cyr.up b")].map(b=>b.textContent);upqT.textContent="Upgrade "+l.length+(l.length>1?" Apps":" App");upqL.textContent=l.join(", ");upq.hidden=false}
+function upgradeAll(){let l=[...document.querySelectorAll(".cyr.up b")].map(b=>b.textContent);upqT.textContent="Update "+l.length+(l.length>1?" Apps":" App");upqL.textContent=l.join(", ");upq.hidden=false}
 /* ponytail: one install link every 3 s; iOS shows one install prompt per link, re-tap UPDATE on any it drops */
 function upgradeGo(){upq.hidden=true;[...document.querySelectorAll(".cyr.up a.get")].map(b=>[b,b.href]).forEach(([b,h],i)=>setTimeout(()=>{mark(b);location.href=h},i*3000))}
 addEventListener("hashchange",show);
+/* check sources in the background (the page no longer waits on it); reload only if a new build got signed */
+{% if enrolled %}badge.classList.add("busy");badge.hidden=false;fetch("/check",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.stamp!={{ stamp }})location.reload()})
+ .catch(()=>{}).finally(()=>{badge.classList.remove("busy");navR()});{% endif %}
 /* web push: iOS offers it only to the Home Screen app (separate storage from Safari, so Safari's "asked" doesn't stop the app asking) */
 const PUSHKEY="{{ vapid }}",pushOK="PushManager" in window&&"serviceWorker" in navigator&&{{ 'true' if enrolled else 'false' }};
 function pushSub(){return navigator.serviceWorker.register("/sw.js").then(r=>r.pushManager.getSubscription().then(s=>[r,s]))}
@@ -772,7 +778,7 @@ try{if(localStorage.sdp)sdpDone()}catch(e){}
 function nudge(){location.hash="apps";let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();darkSw.checked=document.documentElement.classList.contains("dark")});
-</script>""", error=error, enrolled=enrolled, vapid=vapid_public() if enrolled else "", admin_on=bool(ADMIN_PASSWORD), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
+</script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=bool(ADMIN_PASSWORD), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
         sources=read_urls("feather-sources.txt"),
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
@@ -917,6 +923,21 @@ def admin_device():
         regen_profile()
         resign(force=True)
     return redirect("/admin")
+
+
+def signed_stamp():
+    """Changes whenever a build is signed or replaced, so the page can tell its list is stale."""
+    return max((int(p.stat().st_mtime) for p in SIGNED.glob("*.ipa")), default=0) if SIGNED.exists() else 0
+
+
+@app.post("/check")
+def check():
+    """Page-load update check: sync sources if the last one is over a minute old, sign what's new, notify phones."""
+    if not logged_in():
+        abort(403)
+    sync_if_stale(60)
+    resign_and_notify()
+    return {"stamp": signed_stamp()}
 
 
 @app.post("/refresh")

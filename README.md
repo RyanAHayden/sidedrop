@@ -10,7 +10,7 @@ Under **Sign your own IPA**, a logged-in friend can drop an IPA or paste a link 
 
 Files in `appfiles/<ipa name>/` (e.g. `appfiles/io.github.fizl0.hst/`) are listed under that app's Install button instead, with the same kind of signed link.
 
-The **Changes** tab lists apps by release date, Cydia style. Tapping INSTALL records that version for the phone (in `installed.json`), so newer versions show there under **Available Upgrades**, with a badge on the tab and an **Upgrade** button that installs them all.
+The **Changes** tab lists apps by release date, Cydia style. Tapping INSTALL records that version for the phone (in `installed.json`), so newer versions show there under **Available Updates**, with a badge on the tab and an **Update** button that installs them all.
 
 Files placed in `files/` show up as download links. The links are signed, last 7 days, work without a login (so `wget`/`curl` can use them) and can be resumed.
 
