@@ -383,7 +383,7 @@ theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",the
 <style>
 /* 2012 iOS look (pinstripes, glossy bars, App Store buttons), with a gunmetal Dark Mode below. */
 :root{color-scheme:light;--mute:#6d7480;--sep:#e0e0e0;--line:#abb2bc;--acc:#385487;--head:#4c566c;
- --pin:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);--gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
+ --pin:repeating-linear-gradient(90deg,#cbd0da 0 2.5px,#ced3dc 2.5px 8px);--gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
  --navbg:linear-gradient(#bdcbdc,#597498);--barbtn:linear-gradient(#99aac2,#41618e);  /* iOS 6 UIKit nav art: smooth, no gloss split */
  --bluebtn:linear-gradient(#7aa5ef,#3b72d4 50%,#2861c9 51%,#3a73da);--greenbtn:linear-gradient(#8fd96b,#4caa2b 50%,#3c9a1d 51%,#4cae2a);
  --greybtn:linear-gradient(#fdfdfd,#e3e6ea);--emboss:0 1px 0 rgba(255,255,255,.75);background:#c8cfd6}
@@ -419,7 +419,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5
 .get.go:active{border-color:#255e12} .get.go:active:before,button.gbtn:active{border-color:#255e12;background:linear-gradient(#72ae56,#3d8822 50%,#307b17 51%,#3d8b22);box-shadow:none}
 .act.red:active{border-color:#8a1c1c;background:linear-gradient(#cf848a,#9d010c 80%,#b33941)}
 .alert .abtns button,.alert .abtns .ok{background-origin:border-box!important}  /* the background shorthands reset it; without it the gradient tiles into the see-through border and its bright top shows as a line at the bottom */
-.alert .abtns button:active{background:linear-gradient(rgba(185,185,185,.82),rgba(62,62,62,.61) 50%,rgba(3,3,3,.61) 50%,rgba(24,24,24,.57))}
+.alert .abtns button:active{background:linear-gradient(#6d7da3,#3c4e7d 49%,#22325e 51%,#2f3f6c)}
 .sw:active .k{background:linear-gradient(#bcbcbc,#e6e6e6)} .dark .sw:active .k{background:linear-gradient(#55595f,#2e3136)}
 .sw{touch-action:none} .sw.drag i:before,.sw.drag i:after,.sw.drag .k{transition:none}  /* while dragging, everything follows --x with the finger */
 #sb.on{pointer-events:auto}
@@ -448,16 +448,16 @@ details{border-top:1px solid var(--sep)} details>summary{list-style:none;cursor:
 details>summary:after{content:"";flex:none;width:8px;height:8px;margin-right:4px;border:solid #7f8a99;border-width:3px 3px 0 0;transform:rotate(45deg);transition:transform .2s}
 details[open]>summary:after{transform:rotate(135deg)} details>:not(summary){margin:0 10px 12px}
 .scrim[hidden]{display:none} .scrim{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:16px;background:radial-gradient(rgba(0,0,0,.2),rgba(0,0,0,.6))}
-.alert{width:min(284px,100%);box-sizing:border-box;border-radius:10px;border:2px solid rgba(255,255,255,.85);padding:16px 14px 14px;text-align:center;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);
+.alert{width:min(284px,100%);box-sizing:border-box;border-radius:10px;border:2px solid #b1b7c1;border-bottom-color:#e1e3e3;padding:16px 14px 14px;text-align:center;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);
  background:linear-gradient(rgba(255,255,255,.25),rgba(255,255,255,.06) 40px,transparent 41px),rgba(4,20,70,.88);box-shadow:0 4px 18px rgba(0,0,0,.6),inset 0 0 0 1px #000;animation:pop .3s ease-out}
 @keyframes pop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.07);opacity:1}100%{transform:scale(1)}}
 .alert h3{margin:0 0 6px;font-size:17px} .alert p{margin:0 0 12px;font-size:15px}
 .abtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 /* UIKit alert buttons: UIPopupAlertSheetDefaultButton (Cancel), UIPopupAlertSheetButton (OK), UIPopupAlertSheetButtonPress */
-.alert .abtns button{height:43px;padding:0;font-size:16px;border:1px solid rgba(0,0,0,.3);border-radius:6px;box-shadow:none;
+.alert .abtns button{height:43px;padding:0;font-size:16px;border:1px solid rgba(19,29,57,.9);border-radius:5px;box-shadow:none;
  
- background:linear-gradient(rgba(255,255,255,.62),rgba(255,255,255,.1) 50%,rgba(255,255,255,0) 50%,rgba(255,255,255,.1))}
-.alert .abtns .ok{background:linear-gradient(rgba(255,255,255,.81),rgba(255,255,255,.3) 50%,rgba(255,255,255,.2) 50%,rgba(255,255,255,.3))}
+ background:linear-gradient(#707a91,#283659 49%,#0b1b43 50%,#182747)}  /* Cancel-style (left), as UIAlertView draws it on the 4S */
+.alert .abtns .ok{background:linear-gradient(#b4b9c8,#5f6882 49%,#596484 51%,#4d597a)}  /* sampled from Cydia's alert on the 4S: opaque greys, no white line */
 /* Dark Mode (follows the phone, or the More tab switch): gunmetal bars, dark pinstripes, inverted emboss */
 html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6fa8ff;--head:#8b9099;--emboss:0 -1px 0 #000;
  --pin:repeating-linear-gradient(90deg,#1b1d21 0 5px,#202227 5px 7px);--navbg:linear-gradient(#5f656f,#3b4048 50%,#30343b 51%,#23262b);
