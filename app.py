@@ -344,14 +344,14 @@ html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6
 .dark label.drop{background:repeating-linear-gradient(90deg,#16181b 0 5px,#1a1c1f 5px 7px);border-color:#0d0e10;color:#8b9099;box-shadow:inset 0 2px 5px #000,0 1px 0 rgba(255,255,255,.06)}
 .dark a.b.grey,.dark button.grey{color:#e6e8eb;border-color:#111;background:linear-gradient(#4a4f58,#2c2f34 50%,#24272c 51%,#2c2f34);box-shadow:inset 0 1px 0 rgba(255,255,255,.15)}
 /* Cydia-style "Reloading Data" HUD while Reload syncs sources and re-signs */
-.hud{width:min(284px,100%);box-sizing:border-box;padding:20px 14px 18px;border-radius:12px;background:rgba(0,0,0,.78);color:#fff;text-align:center;font-weight:700;font-size:16px;text-shadow:0 -1px 0 #000;
- box-shadow:0 4px 18px rgba(0,0,0,.5);display:grid;justify-items:center;gap:12px}
+.hud{width:min(276px,100%);box-sizing:border-box;padding:34px 10px 26px;border-radius:14px;background:rgba(20,20,20,.82);color:#fff;text-align:center;font-weight:700;font-size:30px;line-height:1.1;letter-spacing:-.3px;
+ display:grid;justify-items:center;gap:16px} /* Cydia's HUD: big bold label, grey spinner, no border */
 .spin{width:37px;height:37px;animation:spin 1s steps(12) infinite} @keyframes spin{to{transform:rotate(360deg)}}
 .scrim.clear{background:none}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
 <header class=nav><button type=button class=bar onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button><h1 id=navT>sidedrop</h1>
 <button type=button class="bar r" onclick="reloadData()">Reload</button></header>
-<div class="scrim clear" id=reloading hidden><div class=hud role=status><svg class=spin viewBox="0 0 24 24" aria-hidden=true><g stroke="#fff" stroke-width="2.2" stroke-linecap="round">
+<div class="scrim clear" id=reloading hidden><div class=hud role=status><svg class=spin viewBox="0 0 24 24" aria-hidden=true><g stroke="#d0d0d0" stroke-width="2.2" stroke-linecap="round">
 <line x1=12 y1=2.5 x2=12 y2=7 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(30 12 12)" opacity=.92 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(60 12 12)" opacity=.84 />
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(90 12 12)" opacity=.76 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(120 12 12)" opacity=.68 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(150 12 12)" opacity=.6 />
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(180 12 12)" opacity=.52 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(210 12 12)" opacity=.44 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(240 12 12)" opacity=.36 />
@@ -618,7 +618,12 @@ def refresh():
     """Reload button: pull new releases from the sources and re-sign now, while the "Reloading Data" HUD shows."""
     if not logged_in():
         abort(403)
-    sync_if_stale(10)  # ponytail: page waits on downloads; 10 s floor so repeated taps don't refetch every source
+    with sync_lock:  # waits out a background sync already running, then does a full one, so the HUD stays up until it's done
+        last_sync[0] = time.time()
+        try:
+            sync_sources()
+        except Exception as e:
+            print("source sync failed:", e, flush=True)
     with lock:
         resign()
     return "", 204
