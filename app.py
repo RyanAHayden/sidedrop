@@ -760,7 +760,12 @@ def admin():
         days = int((now - t) // 86400)
         return "today" if days < 1 else "yesterday" if days < 2 else f"{days} days ago" if days < 60 else time.strftime("%b %-d, %Y", time.localtime(t))
     devices = []
-    for d in asc("GET", "/devices", params={"filter[platform]": "IOS", "limit": 200})["data"]:
+    try:
+        listed = asc("GET", "/devices", params={"filter[platform]": "IOS", "limit": 200})["data"]
+    except Exception as e:
+        return page(ADMIN_CSS + """<p><a href=/#more>‹ More</a></p><h3 class=hdr>Manage iPhones</h3>
+<p class="c err">Apple's developer service didn't answer. Try again in a few minutes.<small>{{ e }}</small></p>""", e=str(e)[:200])
+    for d in listed:
         a = d["attributes"]
         added = datetime.datetime.strptime(a["addedDate"][:10], "%Y-%m-%d") if a.get("addedDate") else None
         devices.append(dict(id=d["id"], name=a.get("name", ""), model=a.get("model") or a.get("deviceClass", ""), udid=a.get("udid", ""),

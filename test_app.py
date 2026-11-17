@@ -218,6 +218,8 @@ assert c.post("/admin/device", data={"id": "D1", "status": "DISABLED", "csrf": "
 assert c.post("/admin/device", data={"id": "../x", "status": "DISABLED", "csrf": csrf}).status_code == 400
 assert c.post("/admin/device", data={"id": "D1", "status": "DISABLED", "csrf": csrf}).status_code == 302
 assert ("PATCH", "/devices/D1") in [(m, p) for m, p, _ in patched]
+A.asc = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("App Store Connect GET /devices: 500"))
+assert b"didn't answer" in c.get("/admin").data
 A.asc = fake_asc
 locked = A.app.test_client(); locked.post("/login", data={"password": "hunter2-but-longer"})
 for _ in range(5): locked.post("/admin", data={"password": "nope"})
