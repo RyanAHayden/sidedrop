@@ -716,7 +716,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
  onchange="pushSet(this.checked)"><i></i><span class=k></span></label></div></div>
 <p class=ftr id=pushNote>Tells you when an app you installed has a new version.</p>{% endif %}
 <h3 class=hdr>Help</h3><div class=g>
-<details id=a2hs><summary>Add to Home Screen</summary><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open sidedrop from there</span></p></details>
+{% if enrolled %}<details><summary>Turn off Stolen Device Protection</summary>{{ sdp_steps }}</details>{% endif %}
 <details id=dev><summary>Turn on Developer Mode</summary>
 <figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Privacy &amp; Security</b></span></figcaption>
 <img src=/static/dev1.jpg alt="Settings with Privacy and Security circled" width=640 height=243></figure>
@@ -725,7 +725,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <figure class=shot><figcaption><span class=num>c</span><span>Turn it <b>on</b>, tap <b>Restart</b>, then <b>Turn On</b> after the restart</span></figcaption>
 <img src=/static/dev3.jpg alt="The Developer Mode switch turned on, circled" width=640 height=305></figure>
 <div class=warn><span aria-hidden=true>💡</span><div>Don't see it? Install an app first, then look again.</div></div></details>
-{% if enrolled %}<details><summary>Turn off Stolen Device Protection</summary>{{ sdp_steps }}</details>{% endif %}</div>
+<details id=a2hs><summary>Add to Home Screen</summary><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open sidedrop from there</span></p></details></div>
 <h3 class=hdr id=sign>Sign your own IPA</h3>
 <form class=c method=post action=/sign enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Signing…'">
 <input type=file name=ipa id=ipaf accept=.ipa class=vh onchange="ipal.textContent=this.files[0]?this.files[0].name:'Choose .ipa File'"><label class="b grey" for=ipaf id=ipal>Choose .ipa File</label>
