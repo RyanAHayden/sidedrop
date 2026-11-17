@@ -448,7 +448,7 @@ html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6
 .hud{width:min(276px,100%);box-sizing:border-box;padding:34px 10px 26px;border-radius:14px;background:rgba(20,20,20,.82);color:#fff;text-align:center;font-weight:700;font-size:30px;line-height:1.1;letter-spacing:-.3px;
  display:grid;justify-items:center;gap:16px} /* Cydia's HUD: big bold label, grey spinner, no border */
 .spin{width:37px;height:37px;animation:spin 1s steps(12) infinite} @keyframes spin{to{transform:rotate(360deg)}}
-.scrim.clear{background:none} .a2l{text-align:left;font-size:15px}
+.scrim.clear{background:none}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
 {% if back %}<header class=nav><a class="bar back" href="{{ back[1] }}" onclick="return goBack(this.href)">{{ back[0] }}</a><h1>{{ title }}</h1><span></span></header>
 <script>/* a pushed page: tapping back pops; iOS's own edge swipe (Safari and the home-screen app) does the same. history.back() keeps the previous page's scroll, like a native pop; first visits (no "/" behind us) follow the link */
@@ -705,8 +705,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
  onchange="pushSet(this.checked)"><i></i><span class=k></span></label></div></div>
 <p class=ftr id=pushNote>Tells you when an app you installed has a new version.</p>{% endif %}
 <h3 class=hdr>Help</h3><div class=g>
-<details id=a2hs><summary>Add to Home Screen</summary><ol><li>In Safari, tap <b>Share</b> (on iOS 26 it's under <b>•••</b>).</li><li>Scroll down and tap <b>Add to Home Screen</b> (under <b>View More</b> if it isn't listed).</li>
-<li>Leave <b>Open as Web App</b> on and tap <b>Add</b>.</li><li>Open sidedrop from your Home Screen.</li></ol><div class=warn><span aria-hidden=true>🔔</span><div>Upgrade alerts only work from the Home Screen app.</div></div></details>
+<details id=a2hs><summary>Add to Home Screen</summary><p>Tap <b>Share</b> → <b>Add to Home Screen</b>, then open sidedrop from there.</p></details>
 <details id=dev><summary>Turn on Developer Mode</summary>
 <figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Privacy &amp; Security</b></span></figcaption>
 <img src=/static/dev1.jpg alt="Settings with Privacy and Security circled" width=640 height=243></figure>
@@ -726,8 +725,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 
 {% if enrolled %}<div class=scrim id=pushAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=pushT>
 <h3 id=pushT>Get Notified of Upgrades?</h3><p>sidedrop can tell you when an app you installed has a new version.</p>
-<div id=pushWeb hidden><p>Notifications only work from the Home Screen:</p><div class=a2l><ol><li>In Safari, tap <b>Share</b> (on iOS 26 it's under <b>•••</b>).</li><li>Scroll down and tap <b>Add to Home Screen</b> (under <b>View More</b> if it isn't listed).</li>
-<li>Leave <b>Open as Web App</b> on and tap <b>Add</b>.</li><li>Open sidedrop from your Home Screen.</li></ol></div></div>
+<div id=pushWeb hidden><div><p>Tap <b>Share</b> → <b>Add to Home Screen</b>, then open sidedrop from there.</p></div></div>
 <div class=abtns><button type=button onclick="pushAsk.hidden=true">Not Now</button><button type=button class=ok id=pushOk>Allow</button></div></div></div>{% endif %}
 <nav class=tabs aria-label=Sections>
 <a href=#apps><svg viewBox="0 0 30 30"><path d="M4 4h9v9H4zm13 0h9v9h-9zM4 17h9v9H4zm13 0h9v9h-9z"/></svg>Apps</a>
@@ -760,7 +758,7 @@ function pushSet(on){if(!pushOK){pushSw.checked=false;let d=document.getElementB
   .then(s=>fetch("/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(s)})).catch(()=>{if(window.pushSw)pushSw.checked=false})}
 /* asked once per phone: after the first INSTALL tap or the first visit to Changes */
 function pushMaybe(){let a=null;try{a=localStorage.pushAsked}catch(e){}if(a||!window.pushAsk||(pushOK&&Notification.permission!="default"))return;
- try{localStorage.pushAsked=1}catch(e){}pushWeb.hidden=pushOK;pushOk.textContent=pushOK?"Allow":"OK";let bs=pushOk.parentNode;bs.style.gridTemplateColumns=pushOK?"":"1fr";bs.firstElementChild.hidden=!pushOK;
+ try{localStorage.pushAsked=1}catch(e){}pushWeb.hidden=pushOK;pushOk.textContent=pushOK?"Allow":"OK";let bs=pushOk.parentNode;bs.style.gridTemplateColumns=pushOK?"":"1fr";bs.firstElementChild.style.display=pushOK?"":"none";
  pushOk.onclick=()=>{pushAsk.hidden=true;if(pushOK){pushSet(true);if(window.pushSw)pushSw.checked=true}};pushAsk.hidden=false}
 if(pushOK&&window.pushSw)pushSub().then(([r,s])=>pushSw.checked=!!s&&Notification.permission=="granted").catch(()=>{});
 let pushOnChanges=()=>{if(location.hash=="#changes")setTimeout(pushMaybe,600)};addEventListener("hashchange",pushOnChanges);pushOnChanges();
