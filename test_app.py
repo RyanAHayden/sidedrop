@@ -233,7 +233,9 @@ A.admin_fails.clear()
 assert b'og:image content="https://x.test/static/og.png"' in A.app.test_client().get("/").data  # link preview on the login page too
 assert c.get("/static/sdp1.jpg").status_code == 200  # setup screenshots served
 assert A.app.test_client().post("/refresh").status_code == 403 and c.post("/refresh").status_code == 204  # Reload button
-assert b"Setup Complete" in c.get("/?enrolled=" + A.device_token("00008130-AAAA")).data and b"Setup Complete" not in c.get("/").data
+fresh = A.app.test_client(); fresh.post("/login", data={"password": "hunter2-but-longer"}); e = "/?enrolled=" + A.device_token("00008130-AAAA")
+assert b"Setup Complete" in fresh.get(e).data and b"Setup Complete" not in fresh.get("/").data
+assert b"Setup Complete" not in fresh.get(e).data, "a Home Screen icon saved on /?enrolled= shows it only the first time"
 # web push: subscribe per phone; upgrades already waiting count as told; one push per new version; 410 drops the subscription
 import json
 from pywebpush import WebPushException
