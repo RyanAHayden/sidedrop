@@ -331,7 +331,7 @@ theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",the
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
 /* body scrolls, not the page: iOS 26 blurs the top edge of a scrolling page in the home-screen app, washing out the nav, and has no switch to turn that off */
 html{height:100%;overflow:hidden}
-body{height:100%;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;overflow-x:hidden;margin:0;font:17px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;-webkit-font-smoothing:antialiased;
+body{height:100%;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;margin:0;font:17px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;-webkit-font-smoothing:antialiased;
  padding:calc(56px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right),(100% - 30rem)/2) calc(72px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left),(100% - 30rem)/2)}
 a{color:var(--acc);text-decoration:none} small,.m{color:var(--mute)} small{font-size:13px} .err{color:#d70015} h2{font-size:19px;margin:0}
 html{touch-action:manipulation} /* no double-tap zoom; pinch is blocked by the viewport and gesturestart */
@@ -391,16 +391,9 @@ html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6
 .scrim.clear{background:none}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
 {% if back %}<header class=nav><a class="bar back" href="{{ back[1] }}" onclick="return goBack(this.href)">{{ back[0] }}</a><h1>{{ title }}</h1><span></span></header>
-<script>/* a pushed page: tap or edge-swipe pops back. history.back() keeps the previous page's scroll, like a native pop; first visits (no "/" behind us) follow the link */
+<script>/* a pushed page: tapping back pops; iOS's own edge swipe (Safari and the home-screen app) does the same. history.back() keeps the previous page's scroll, like a native pop; first visits (no "/" behind us) follow the link */
 function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.length>1){history.back();return false}}catch(e){}location.href=h;return false}
-/* Safari has its own edge swipe; the home-screen app has none, so draw one there */
-if(navigator.standalone||matchMedia("(display-mode: standalone)").matches)addEventListener("DOMContentLoaded",()=>{
- let pg=document.getElementById("pg"),x0=null,y0,t0,dx=0,on=0,set=(x,a)=>{pg.style.transition=a?"transform .3s cubic-bezier(.2,.8,.3,1)":"none";pg.style.transform=x?`translateX(${x}px)`:"";pg.style.boxShadow=x?"-4px 0 10px rgba(0,0,0,.3)":""};
- addEventListener("touchstart",e=>{let t=e.touches[0];x0=e.touches.length==1&&t.clientX<24?t.clientX:null;y0=t.clientY;t0=e.timeStamp;dx=on=0},{passive:true});
- addEventListener("touchmove",e=>{if(x0==null)return;let t=e.touches[0];dx=Math.max(0,t.clientX-x0);
-  if(!on){if(Math.abs(t.clientY-y0)>Math.max(10,dx)){x0=null;return}on=dx>8}if(on){e.preventDefault();set(dx)}},{passive:false});
- let end=e=>{if(x0==null)return;x0=null;let go=on&&e.type=="touchend"&&(dx>innerWidth/3||dx/(e.timeStamp-t0)>.5);set(go?innerWidth:0,1);if(go)setTimeout(()=>goBack("{{ back[1] }}"),300)};
- addEventListener("touchend",end);addEventListener("touchcancel",end);addEventListener("pageshow",()=>set(0))})</script>
+</script>
 {% else %}<header class=nav><button type=button class=bar onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button><h1 id=navT>sidedrop</h1>
 <button type=button class="bar r" onclick="reloadData()">Reload</button></header>{% endif %}
 <div class="scrim clear" id=reloading hidden><div class=hud role=status><svg class=spin viewBox="0 0 24 24" aria-hidden=true><g stroke="#d0d0d0" stroke-width="2.2" stroke-linecap="round">
@@ -419,7 +412,7 @@ Reloading Data</div></div>
 function goTo(el){let b=document.body;b.scrollTo({top:Math.min(b.scrollTop+el.getBoundingClientRect().top-56,b.scrollHeight-b.clientHeight),behavior:"smooth"})}
 addEventListener("gesturestart",e=>e.preventDefault())  // Safari ignores user-scalable=no for pinch
 function reloadData(){reloading.hidden=false;fetch("/refresh",{method:"POST"}).catch(()=>{}).finally(()=>{history.replaceState(null,"","/"+location.hash);location.reload()})}  // replace() to the same /#tab only jumps to the hash, it never reloads</script>
-<main id=pg>{{ body|safe }}</main>""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
+{{ body|safe }}""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
 
 
 def file_labels(folder):
