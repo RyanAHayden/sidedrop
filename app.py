@@ -390,7 +390,7 @@ theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",the
 /* fixed backdrop: stays put while iOS rubber-bands the page, so the bounce shows pinstripes instead of a flat color */
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
 /* always 1px taller than the screen, so short pages still rubber-band like native */
-body{position:relative;scrollbar-width:none} body::-webkit-scrollbar{display:none} body::after{content:"";position:absolute;top:0;left:0;width:1px;height:calc(100% + 1px);pointer-events:none}
+body{scrollbar-width:none} body::-webkit-scrollbar{display:none} .page{min-height:calc(100% + 1px)}
 /* scroll indicator, drawn by us between the nav and tab bar (iOS doesn't show one for a scrolling body) */
 /* UIKit's UIScrollerIndicatorDefault: 5pt black at 50% with a 1pt 15% white ring, fully rounded (7pt overall) */
 #sb{position:fixed;right:2px;z-index:6;width:5px;border-radius:3px;background:rgba(0,0,0,.5);box-shadow:0 0 0 1px rgba(255,255,255,.15);opacity:0;transition:opacity .3s;pointer-events:none}
@@ -409,6 +409,13 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5
 /* iOS 6 back button: arrow art drawn after UIKit's UINavigationBarDefaultBack, stretched through the middle */
 .nav .back{display:inline-flex;align-items:center;height:30px;box-sizing:border-box;max-width:40vw;overflow:hidden;white-space:nowrap;padding:0 5px 0 1px;background:none;box-shadow:none;border-radius:0;
  border:solid transparent;border-width:0 5px 0 13px;border-image:url(/static/back.svg) 0 10 0 26 fill/0 5px 0 13px} .nav .back:active{filter:brightness(.8)}
+/* pressed states (UIKit's *Pressed art); iOS only shows :active once the page has a touch listener, added below */
+.nav .bar:not(.back):active{background:linear-gradient(#8693ac,#283e6b);box-shadow:inset 0 1px 3px rgba(0,0,0,.4),0 1px 0 rgba(255,255,255,.25)}
+.dark .nav .bar:not(.back):active{background:linear-gradient(#1c1e22,#3a3e45)}
+.alert .abtns button:active{background:linear-gradient(rgba(0,0,0,.15),rgba(0,0,0,.35));box-shadow:inset 0 1px 4px rgba(0,0,0,.6)}
+.sw:active .k{background:linear-gradient(#bcbcbc,#e6e6e6)} .dark .sw:active .k{background:linear-gradient(#55595f,#2e3136)}
+.sw.drag i:before{transform:translateX(calc((var(--x) - 52px) * 1.519));transition:none} .sw.drag .k{transform:translateX(var(--x));transition:none} .sw.drag i:after{opacity:0}
+#sb.on{pointer-events:auto} #sb::before{content:"";position:absolute;inset:-12px -2px -12px -26px} #sb.grab{width:7px;right:1px;border-radius:4px}
 h3.hdr{font-size:17px;font-weight:700;color:var(--head);margin:20px 10px 7px;text-shadow:var(--emboss)}
 .ftr{font-size:14px;color:var(--head);text-align:center;text-shadow:var(--emboss);margin:7px 12px 0}
 .c,.g{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8);overflow:hidden}
@@ -476,12 +483,25 @@ Reloading Data</div></div>
 /* clamp to the real bottom: iOS lets a smooth scroll on a non-root scroller overshoot past the end, then snaps back on the next touch */
 function goTo(el){let b=document.body;b.scrollTo({top:Math.min(b.scrollTop+el.getBoundingClientRect().top-56,b.scrollHeight-b.clientHeight),behavior:"smooth"})}
 addEventListener("gesturestart",e=>e.preventDefault())
-addEventListener("DOMContentLoaded",()=>{let b=document.body,sb=document.createElement("div"),t;sb.id="sb";b.append(sb);
- b.addEventListener("scroll",()=>{let n=document.querySelector(".nav").getBoundingClientRect().bottom,tb=document.querySelector(".tabs"),e=(tb?tb.getBoundingClientRect().top:innerHeight)-3,
-  track=e-n-6,h=b.scrollHeight-b.clientHeight;if(h<=1)return;let th=Math.max(36,track*b.clientHeight/b.scrollHeight),y=Math.min(Math.max(b.scrollTop/h,0),1);
-  sb.style.top=n+3+(track-th)*y+"px";sb.style.height=th+"px";sb.style.opacity=1;clearTimeout(t);t=setTimeout(()=>sb.style.opacity=0,500)},{passive:true})})  // Safari ignores user-scalable=no for pinch
+addEventListener("touchstart",()=>{},{passive:true})  // without a touch listener iOS never shows :active
+addEventListener("DOMContentLoaded",()=>{
+ /* scroll indicator: shows while scrolling; while it's showing, grab it to scrub like native */
+ let b=document.body,sb=document.createElement("div"),t,grab=null,g=()=>{let n=document.querySelector(".nav").getBoundingClientRect().bottom,tb=document.querySelector(".tabs"),
+  track=(tb?tb.getBoundingClientRect().top:innerHeight)-3-n-6,h=b.scrollHeight-b.clientHeight,th=Math.max(36,track*b.clientHeight/b.scrollHeight);return{n,track,h,th}};
+ sb.id="sb";b.append(sb);
+ let draw=()=>{let m=g();if(m.h<=1)return;let y=Math.min(Math.max(b.scrollTop/m.h,0),1);sb.style.top=m.n+3+(m.track-m.th)*y+"px";sb.style.height=m.th+"px";
+  sb.style.opacity=1;sb.classList.add("on");clearTimeout(t);if(!grab)t=setTimeout(()=>{sb.style.opacity=0;sb.classList.remove("on")},grab===null?500:900)};
+ b.addEventListener("scroll",draw,{passive:true});
+ sb.addEventListener("touchstart",e=>{grab=e.touches[0].clientY-sb.getBoundingClientRect().top;sb.classList.add("grab");clearTimeout(t)},{passive:true});
+ sb.addEventListener("touchmove",e=>{e.preventDefault();let m=g();b.scrollTop=(e.touches[0].clientY-grab-m.n-3)/(m.track-m.th)*m.h},{passive:false});
+ sb.addEventListener("touchend",()=>{grab=undefined;sb.classList.remove("grab");draw();grab=null});
+ /* on/off switches drag like UISwitch; a plain tap still toggles */
+ document.querySelectorAll(".sw").forEach(w=>{let i=w.querySelector("input"),x0,s0,mv;
+  w.addEventListener("touchstart",e=>{x0=e.touches[0].clientX;s0=i.checked?52:0;mv=false},{passive:true});
+  w.addEventListener("touchmove",e=>{let d=e.touches[0].clientX-x0;if(!mv&&Math.abs(d)<4)return;mv=true;e.preventDefault();w.classList.add("drag");w.style.setProperty("--x",Math.min(52,Math.max(0,s0+d))+"px")},{passive:false});
+  w.addEventListener("touchend",e=>{if(!mv)return;e.preventDefault();let on=parseFloat(w.style.getPropertyValue("--x"))>26;w.classList.remove("drag");if(on!=i.checked){i.checked=on;i.dispatchEvent(new Event("change"))}})})})  // Safari ignores user-scalable=no for pinch
 function reloadData(){reloading.hidden=false;fetch("/refresh",{method:"POST"}).catch(()=>{}).finally(()=>{history.replaceState(null,"","/"+location.hash);location.reload()})}  // replace() to the same /#tab only jumps to the hash, it never reloads</script>
-{{ body|safe }}""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
+{% if back %}<section class=page>{{ body|safe }}</section>{% else %}{{ body|safe }}{% endif %}""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
 
 
 def file_labels(folder):
@@ -649,7 +669,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
  href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">INSTALL</a></div>
 {% for f in a.files %}<div class=step><span class=num>{{ loop.index + 1 }}</span><div><b>Download {{ labels.get(f.name, f.name) }}</b>
 <small>{% if f.name in labels %}{{ f.name }} · {% endif %}{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · save to Files</small></div>
-<a class="get blue" href="{{ adl(f) }}" onclick="this.closest('.step').classList.add('ok')">DOWNLOAD</a></div>{% endfor %}</div></div>{% endif %}
+<a class="get blue" href="{{ adl(f) }}" target=_blank download onclick="this.closest('.step').classList.add('ok')">DOWNLOAD</a></div>{% endfor %}</div></div>{% endif %}
 {% endfor %}</div>{% endmacro %}
 
 <section class=page id=t-apps data-title=sidedrop>
@@ -692,7 +712,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 
 <section class=page id=t-files data-title=Files>
 <h3 class=hdr>Files</h3>{% if files %}<div class=g>{% for f in files %}
-<div class=row><div>{{ f.relative_to(FILES) }}<small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></div><a class="get blue" href="{{ dl(f) }}">DOWNLOAD</a></div>
+<div class=row><div>{{ f.relative_to(FILES) }}<small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></div><a class="get blue" href="{{ dl(f) }}" target=_blank download>DOWNLOAD</a></div>
 {% endfor %}</div>{% else %}<p class="c m">No files right now.</p>{% endif %}
 <p class=ftr>Game discs are under each app's GET.</p>
 </section>
