@@ -629,9 +629,10 @@ function show(){let t=location.hash.slice(1);if(!document.getElementById("t-"+t)
  document.querySelectorAll(".page").forEach(p=>p.hidden=p.id!="t-"+t);
  document.querySelectorAll(".tabs a").forEach(a=>a.getAttribute("href")=="#"+t?a.setAttribute("aria-current","page"):a.removeAttribute("aria-current"));
  navT.textContent=document.getElementById("t-"+t).dataset.title;document.body.scrollTo(0,0);navR()}
-/* on Changes the right nav button is Cydia's "Upgrade (n)" */
-function navR(){let n=document.querySelectorAll(".cyr.up").length,r=document.querySelector(".nav .bar.r"),c=location.hash=="#changes"&&n;
- r.textContent=c?"Upgrade ("+n+")":"Reload";r.onclick=c?upgradeAll:reloadData;badge.textContent=n;badge.hidden=!n;let h=document.getElementById("uph");if(h)h.hidden=!n}
+/* on Changes with upgrades, the nav is Cydia's: Refresh (reloads data) on the left, Upgrade (n) on the right */
+function navR(){let n=document.querySelectorAll(".cyr.up").length,r=document.querySelector(".nav .bar.r"),l=document.querySelector(".nav .bar:not(.r)"),ch=location.hash=="#changes",c=ch&&n;
+ r.textContent=c?"Upgrade ("+n+")":"Reload";r.onclick=c?upgradeAll:reloadData;
+ l.textContent=c?"Refresh":"About";l.onclick=c?reloadData:()=>{about.hidden=false;about.querySelector(".ok").focus()};badge.textContent=n;badge.hidden=!n;let h=document.getElementById("uph");if(h)h.hidden=!n}
 function mark(b){let n=b.dataset.app;if(!n)return;navigator.sendBeacon("/installed",new URLSearchParams({name:n}));
  setTimeout(()=>{document.querySelectorAll('.cyr.up [data-app="'+n+'"]').forEach(x=>x.closest(".cyr").remove());navR()},500)}  // after the link has followed: a removed link doesn't navigate
 function upgradeAll(){let l=[...document.querySelectorAll(".cyr.up b")].map(b=>b.textContent);upqT.textContent="Upgrade "+l.length+(l.length>1?" Apps":" App");upqL.textContent=l.join(", ");upq.hidden=false}
