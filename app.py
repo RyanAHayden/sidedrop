@@ -40,7 +40,7 @@ app = Flask(__name__)
 app.jinja_env.filters["hue"] = lambda s: zlib.crc32(s.encode()) % 360  # stable icon color per app
 app.secret_key = SECRET
 app.config.update(SESSION_COOKIE_SECURE=PUBLIC_URL.startswith("https"), SESSION_COOKIE_HTTPONLY=True,
-                  SESSION_COOKIE_SAMESITE="Lax", PERMANENT_SESSION_LIFETIME=30 * 86400)
+                  SESSION_COOKIE_SAMESITE="Lax", PERMANENT_SESSION_LIFETIME=10 * 365 * 86400)
 lock = threading.Lock()  # ponytail: one global lock for ASC + signing, fine for a handful of friends
 INSTALLED, installed_lock = DATA / "installed.json", threading.Lock()  # {udid: {app: "short/build"}} from INSTALL taps, for Changes
 SEEN = DATA / "seen.json"  # {udid: unix time} last page load per registered iPhone, for the admin page
@@ -723,11 +723,11 @@ def mark_installed():
 
 # --- admin: list the developer account's iPhones, disable the ones that shouldn't have apps any more ---
 
-ADMIN_TTL, admin_fails = 30 * 86400, []  # admin unlock lasts as long as the login cookie (30 days) on that device; times of recent wrong admin passwords
+admin_fails = []  # times of recent wrong admin passwords; a right one unlocks admin on that device for as long as its login lasts
 
 
 def is_admin():
-    return bool(ADMIN_PASSWORD) and logged_in() and time.time() - session.get("admin", 0) < ADMIN_TTL and bool(session.get("csrf"))
+    return bool(ADMIN_PASSWORD) and logged_in() and bool(session.get("admin")) and bool(session.get("csrf"))
 
 
 ADMIN_CSS = """<style>.act{flex:none;width:auto;min-width:76px;padding:5px 10px;font-size:12px;border-radius:4px;letter-spacing:.02em}
