@@ -413,13 +413,13 @@ def home():
 details.c>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;font-weight:700} details.c>summary::-webkit-details-marker{display:none}
 details.c>summary small{display:block;font-weight:400} details.c>summary>div{flex:1}
 details.c>summary:after{content:"";flex:none;width:8px;height:8px;margin-right:4px;border:solid #7f8a99;border-width:3px 3px 0 0;transform:rotate(135deg);transition:transform .2s}
-details.c[open]>summary:after{transform:rotate(-45deg)} details.c:not([open]){padding-block:10px}
+details.c[open]>summary:after{transform:rotate(-45deg)} details.c>summary,.dark details.c>summary{min-height:0;padding:0;background:none;box-shadow:none} details.c>:not(summary){margin:0} details.c:not([open]){padding-block:10px}
 .sh{display:flex;align-items:center;gap:10px;font-weight:700} .sh small{display:block;font-weight:400}
-.done,.ok .todo{display:none} .ok .done{display:block;color:#3c9a1d} .ok>summary .num{background:var(--gloss),var(--greenbtn);border-color:#2f7a17;font-size:0} .ok>summary .num:after{content:"✓";font-size:14px}
+details.c>summary .done,details.c.ok>summary .todo{display:none} details.c.ok>summary .done{display:block;color:#3c9a1d} .ok>summary .num{background:var(--gloss),var(--greenbtn);border-color:#2f7a17;font-size:0} .ok>summary .num:after{content:"✓";font-size:14px}
 .shot{margin:0;display:flex;flex-direction:column;gap:6px} .shot figcaption{display:flex;gap:8px;align-items:center;font-size:15px} .shot .num{width:20px;height:20px;font-size:11px}
 .shot img{display:block;width:100%;height:auto;border-radius:8px;border:1px solid var(--line);box-shadow:0 1px 3px rgba(0,0,0,.3)}
-.warn{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;background:#fff8e1;border:1px solid #e6cf7a;font-size:14px} .warn b{display:block}
-button.green{border-color:#2f7a17;background:var(--greenbtn)}
+.warn{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;background:#fff8e1;border:1px solid #e6cf7a;font-size:14px} .warn b:first-child{display:block}
+button.gbtn{border-color:#2f7a17;background:var(--greenbtn)} /* not .green: that's the More tab's status panel */
 fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;filter:grayscale(.6)}
 .dark .warn{background:#3a3220;border-color:#6b5a26}
 .nudge{animation:nudge .45s} @keyframes nudge{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
@@ -495,7 +495,7 @@ Tap <b>Start Security Delay</b>, come back after an hour, and turn it off then. 
 <details class=c id=sdp open><summary><span class=num>1</span><div>Turn off Stolen Device Protection<small class=todo>Otherwise iOS can block the profile. About a minute.</small>
 <small class=done>Done. Tap to see the steps again.</small></div></summary>
 {{ sdp_steps }}
-<button type=button class=green onclick="sdpDone(true)">I turned it off</button><small>You can turn it back on once your apps are installed.</small></details>
+<button type=button class=gbtn onclick="sdpDone(true)">I turned it off</button><small>You can turn it back on once your apps are installed.</small></details>
 <div class=c id=reg><div class=sh><span class=num>2</span><div>Register this iPhone<small>Do this in Safari on the iPhone. Once per phone.</small></div></div>
 <fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
