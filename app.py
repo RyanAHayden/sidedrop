@@ -277,7 +277,8 @@ def sign_profile(data):
 PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>sidedrop</title><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=theme-color content="#b0bccd"><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=sidedrop>
 <script>/* Dark Mode follows the phone's theme until the More switch picks one (localStorage.dark = "1"/"0") */
-function theme(){let d=null;try{d=localStorage.dark}catch(e){}document.documentElement.classList.toggle("dark",d?d=="1":matchMedia("(prefers-color-scheme: dark)").matches)}
+function theme(){let d=null;try{d=localStorage.dark}catch(e){}let on=document.documentElement.classList.toggle("dark",d?d=="1":matchMedia("(prefers-color-scheme: dark)").matches);
+ document.querySelector("meta[name=theme-color]").content=on?"#5f656f":"#b0bccd"}  /* Safari's top bar matches the nav */
 theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",theme)</script>
 <style>
 /* 2012 iOS look (pinstripes, glossy bars, App Store buttons), with a gunmetal Dark Mode below. */
