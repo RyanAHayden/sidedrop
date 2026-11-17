@@ -276,9 +276,11 @@ def sign_profile(data):
 
 PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>sidedrop</title><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=theme-color content="#b0bccd"><meta name=apple-mobile-web-app-status-bar-style content=black-translucent><meta name=apple-mobile-web-app-title content=sidedrop>
-<script>try{localStorage.dark&&document.documentElement.classList.add("dark")}catch(e){}</script>
+<script>/* Dark Mode follows the phone's theme until the More switch picks one (localStorage.dark = "1"/"0") */
+function theme(){let d=null;try{d=localStorage.dark}catch(e){}document.documentElement.classList.toggle("dark",d?d=="1":matchMedia("(prefers-color-scheme: dark)").matches)}
+theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",theme)</script>
 <style>
-/* 2012 iOS look (pinstripes, glossy bars, App Store buttons). Single light look by design. */
+/* 2012 iOS look (pinstripes, glossy bars, App Store buttons), with a gunmetal Dark Mode below. */
 :root{color-scheme:light;--mute:#6d7480;--sep:#e0e0e0;--line:#abb2bc;--acc:#385487;--head:#4c566c;
  --pin:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);--gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
  --navbg:linear-gradient(#b0bccd,#889bb3 50%,#7d92ae 51%,#6d84a2);--barbtn:linear-gradient(#8fa1b9,#6a83a6 50%,#5877a2 51%,#4e6d99);
@@ -328,7 +330,7 @@ details[open]>summary:after{transform:rotate(135deg)} details>:not(summary){marg
 .alert .abtns button{height:43px;padding:0;font-size:16px;border:1px solid #0b1a3e;border-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3);
  background:linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.1) 50%,rgba(255,255,255,.05) 51%,rgba(255,255,255,.15))}
 .alert .abtns .ok{background:linear-gradient(rgba(255,255,255,.5),rgba(255,255,255,.2) 50%,rgba(255,255,255,.12) 51%,rgba(255,255,255,.25))}
-/* Dark Mode (More tab switch, off by default, kept in localStorage): gunmetal bars, dark pinstripes, inverted emboss */
+/* Dark Mode (follows the phone, or the More tab switch): gunmetal bars, dark pinstripes, inverted emboss */
 html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6fa8ff;--head:#8b9099;--emboss:0 -1px 0 #000;
  --pin:repeating-linear-gradient(90deg,#1b1d21 0 5px,#202227 5px 7px);--navbg:linear-gradient(#5f656f,#3b4048 50%,#30343b 51%,#23262b);
  --barbtn:linear-gradient(#4a4f58,#24272c);--greybtn:linear-gradient(#4a4f58,#2c2f34);background:#1d1f23}
@@ -407,6 +409,19 @@ def home():
 .num{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
  background:var(--gloss),linear-gradient(#7f8a99,#5b6573);border:1px solid #4a525d}
 .step.ok .num{background:var(--gloss),var(--greenbtn);border-color:#2f7a17;font-size:0} .step.ok .num:after{content:"✓";font-size:14px}
+/* setup step 1: Stolen Device Protection, folds away once ticked (localStorage.sdp) */
+details.c>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;font-weight:700} details.c>summary::-webkit-details-marker{display:none}
+details.c>summary small{display:block;font-weight:400} details.c>summary>div{flex:1}
+details.c>summary:after{content:"";flex:none;width:8px;height:8px;margin-right:4px;border:solid #7f8a99;border-width:3px 3px 0 0;transform:rotate(135deg);transition:transform .2s}
+details.c[open]>summary:after{transform:rotate(-45deg)} details.c:not([open]){padding-block:10px}
+.sh{display:flex;align-items:center;gap:10px;font-weight:700} .sh small{display:block;font-weight:400}
+.done,.ok .todo{display:none} .ok .done{display:block;color:#3c9a1d} .ok>summary .num{background:var(--gloss),var(--greenbtn);border-color:#2f7a17;font-size:0} .ok>summary .num:after{content:"✓";font-size:14px}
+.shot{margin:0;display:flex;flex-direction:column;gap:6px} .shot figcaption{display:flex;gap:8px;align-items:center;font-size:15px} .shot .num{width:20px;height:20px;font-size:11px}
+.shot img{display:block;width:100%;height:auto;border-radius:8px;border:1px solid var(--line);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.warn{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;background:#fff8e1;border:1px solid #e6cf7a;font-size:14px} .warn b{display:block}
+button.green{border-color:#2f7a17;background:var(--greenbtn)}
+fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;filter:grayscale(.6)}
+.dark .warn{background:#3a3220;border-color:#6b5a26}
 .nudge{animation:nudge .45s} @keyframes nudge{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
 /* More tab: Cydia-style rows */
 .green{background:#e9f8e4} .kv{display:flex;justify-content:space-between;gap:10px;padding:11px 12px;border-top:1px solid #d6e6cf} .kv span{color:var(--acc);text-align:right}
@@ -451,6 +466,15 @@ def home():
 <ol id=next hidden><li>Tap <b>Allow</b>, then <b>Close</b>.</li><li>Open the <b>Settings</b> app.</li>
 <li>Tap <b>Profile Downloaded</b> near the top.</li><li>Tap <b>Install</b>, enter your passcode, tap <b>Install</b> again.</li>
 <li>You'll land back here automatically, registered.</li></ol>{% endset %}
+{% set sdp_steps %}<figure class=shot><figcaption><span class=num>a</span><span>Open <b>Settings</b>, tap <b>Face ID &amp; Passcode</b>, enter your passcode.</span></figcaption>
+<img src=/static/sdp1.jpg alt="Settings with Face ID and Passcode circled" width=640 height=277></figure>
+<figure class=shot><figcaption><span class=num>b</span><span>Scroll down, tap <b>Stolen Device Protection</b>. Yours says On.</span></figcaption>
+<img src=/static/sdp2.jpg alt="The Stolen Device Protection row circled" width=640 height=167></figure>
+<figure class=shot><figcaption><span class=num>c</span><span>Turn the switch <b>off</b> so it's grey, like this. Look at the phone for Face ID.</span></figcaption>
+<img src=/static/sdp3.jpg alt="The Stolen Device Protection switch turned off, circled" width=640 height=291></figure>
+<div class=warn><span aria-hidden=true>⏳</span><div><b>Says “Security Delay in Progress”?</b>You're away from home or work, so iOS makes you wait an hour.
+Tap <b>Start Security Delay</b>, come back after an hour, and turn it off then. Or do this at home, where there's no wait.</div></div>
+{% endset %}
 {% macro install(a) %}{% if not enrolled %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>
 {% elif a.files %}<button type=button class=get aria-expanded=false onclick="steps(this)">GET</button>
 {% else %}<a class=get data-arm aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">GET</a>{% endif %}{% endmacro %}
@@ -467,9 +491,13 @@ def home():
 
 <section class=page id=t-apps data-title=sidedrop>
 <div class=splash><img src=/apple-touch-icon.png alt=""><div><h2>Welcome to sidedrop</h2><p>by <a href="https://github.com/RyanAHayden">Ryan Hayden</a></p></div></div>
-{% if not enrolled %}<h3 class=hdr>First, register this iPhone</h3><div class=c id=reg>
-<p class=m>Apps only install on registered phones. Do this in Safari on the iPhone. It takes about a minute, once per phone.</p>
-{{ enroll_form }}<small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
+{% if not enrolled %}<h3 class=hdr>First, set up this iPhone</h3>
+<details class=c id=sdp open><summary><span class=num>1</span><div>Turn off Stolen Device Protection<small class=todo>Otherwise iOS can block the profile. About a minute.</small>
+<small class=done>Done. Tap to see the steps again.</small></div></summary>
+{{ sdp_steps }}
+<button type=button class=green onclick="sdpDone(true)">I turned it off</button><small>You can turn it back on once your apps are installed.</small></details>
+<div class=c id=reg><div class=sh><span class=num>2</span><div>Register this iPhone<small>Do this in Safari on the iPhone. Once per phone.</small></div></div>
+<fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
 </section>
@@ -510,7 +538,7 @@ def home():
 <button type=button class=tile onclick="let d=document.getElementById('dev');d.open=true;d.scrollIntoView({behavior:'smooth'})"><span class=tic style="background:linear-gradient(#bfc4c9,#5f666e)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-dasharray="2.4 2"><circle cx="12" cy="12" r="7"/></svg></span>Help</button>
 <button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:linear-gradient(#8fc6ff,#2a72d6)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
 <h3 class=hdr>Display</h3><div class=g><div class=row><div>Dark Mode</div><label class=sw><input type=checkbox id=darkSw aria-label="Dark Mode"
- onchange="document.documentElement.classList.toggle('dark',this.checked);try{this.checked?localStorage.dark=1:localStorage.removeItem('dark')}catch(e){}"><i></i><span class=k></span></label></div></div>
+ onchange="try{localStorage.dark=this.checked?1:0}catch(e){}theme()"><i></i><span class=k></span></label></div></div>
 <h3 class=hdr>Help</h3><div class=g>
 <details id=dev><summary>Turn on Developer Mode</summary>
 <p class=m>Needed once per iPhone for apps not from the App Store.</p>
@@ -518,7 +546,8 @@ def home():
 <li>Open Settings → Privacy &amp; Security → <b>Developer Mode</b> (near the bottom) → turn it on → <b>Restart</b>.</li>
 <li>After the restart, tap <b>Turn On</b> and enter your passcode. The apps open normally from then on.</li></ol>
 <div class=mini><div class=row><div>Developer Mode</div><label class=sw><input type=checkbox checked aria-label="Developer Mode (example of the switch)"><i></i><span class=k></span></label></div></div></details>
-{% if enrolled %}<details id=other><summary>Register a different iPhone</summary>{{ enroll_form }}</details>{% endif %}</div>
+{% if enrolled %}<details><summary>Turn off Stolen Device Protection</summary>{{ sdp_steps }}</details>
+<details id=other><summary>Register a different iPhone</summary><p class=m>Turn off Stolen Device Protection on that iPhone first.</p>{{ enroll_form }}</details>{% endif %}</div>
 <a class="b grey out" href=/logout>Sign out</a>
 </section>
 
@@ -538,8 +567,11 @@ function disarm(keep){document.querySelectorAll(".get.go[data-arm]").forEach(b=>
 function arm(b){if(b.classList.contains("go")){setTimeout(()=>disarm(),1500);return true}disarm(b);b.classList.add("go");b.textContent="INSTALL";return false}
 addEventListener("click",e=>{if(!e.target.closest("[data-arm]"))disarm()});
 function steps(b){let open=b.getAttribute("aria-expanded")!="true";b.setAttribute("aria-expanded",open);b.closest(".row").nextElementSibling.classList.toggle("open",open)}
-function nudge(){location.hash="apps";let r=document.getElementById("reg");r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");r.querySelector("input").focus();return false}
-addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());darkSw.checked=document.documentElement.classList.contains("dark")});
+function sdpDone(save){let d=document.getElementById("sdp");if(!d)return;d.classList.add("ok");d.open=false;regf.disabled=false;
+ if(save){try{localStorage.sdp=1}catch(e){}regf.querySelector("input").focus()}}
+try{if(localStorage.sdp)sdpDone()}catch(e){}
+function nudge(){location.hash="apps";let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
+addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();darkSw.checked=document.documentElement.classList.contains("dark")});
 </script>""", error=error, enrolled=enrolled, apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
         sources=read_urls("feather-sources.txt"),
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),

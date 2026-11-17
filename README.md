@@ -2,7 +2,7 @@
 
 A password-protected site for sharing ad hoc iOS apps and large files with friends.
 
-1. A friend opens the site in Safari, types the password and taps **Register iPhone**. They install the profile it downloads.
+1. A friend opens the site in Safari, types the password, turns off Stolen Device Protection (the page walks through it with screenshots from `static/`) and taps **Register iPhone**. They install the profile it downloads.
 2. iOS sends the server the phone's UDID. The server registers the device with Apple, regenerates the ad hoc profile and re-signs every app.
 3. Safari comes back to the site, where they tap **Install**.
 
