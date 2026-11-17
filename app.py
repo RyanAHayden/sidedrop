@@ -431,7 +431,7 @@ details.c>summary:after{content:"";flex:none;width:8px;height:8px;margin-right:4
 details.c[open]>summary:after{transform:rotate(-45deg)} details.c>summary,.dark details.c>summary{min-height:0;padding:0;background:none;box-shadow:none} details.c>:not(summary){margin:12px 0 0} details.c>.shot+.shot{margin-top:22px} details.c>.warn{margin-top:20px} details.c>small{display:block} /* margins, not gap: Safari ignores gap inside <details> */ details.c:not([open]){padding-block:10px}
 .sh{display:flex;align-items:center;gap:10px;font-weight:700} .sh small{display:block;font-weight:400}
 .ok>summary .num{background:var(--gloss),var(--greenbtn);border-color:#2f7a17;font-size:0} .ok>summary .num:after{content:"✓";font-size:14px}
-.shot{margin:0;display:flex;flex-direction:column;gap:6px} .shot figcaption{display:flex;gap:8px;align-items:center;font-size:15px} .shot .num{width:20px;height:20px;font-size:11px}
+.shot{display:flex;flex-direction:column;gap:6px} .shot figcaption{display:flex;gap:8px;align-items:center;font-size:15px} .shot .num{width:20px;height:20px;font-size:11px}
 .shot img{display:block;width:100%;height:auto;border-radius:8px;border:1px solid var(--line);box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .warn{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;background:#fff8e1;border:1px solid #e6cf7a;font-size:14px}
 button.gbtn{border-color:#2f7a17;background:var(--greenbtn)} /* not .green: that's the More tab's status panel */
@@ -527,11 +527,6 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% if sources %}<h3 class=hdr>Sources</h3><div class=c>
 <textarea id=src readonly rows={{ sources|length }} wrap=off aria-label="Sources to add in Feather">{{ sources|join('\n') }}</textarea>
 <button type=button class=grey onclick="navigator.clipboard.writeText(src.value).then(()=>this.textContent='Copied ✓',()=>src.select())">Copy sources</button></div>{% endif %}
-<h3 class=hdr>Sign your own IPA</h3>
-<form class=c method=post action=/sign enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Signing…'">
-<label class=drop>Drop an .ipa here or tap to browse<input type=file name=ipa accept=.ipa></label>
-<input type=url name=url placeholder="…or paste a link to an .ipa" aria-label="Link to an .ipa">
-<button>Sign</button><small>Signed for registered iPhones. The install link lasts 7 days.</small></form>
 </section>
 
 <section class=page id=t-files data-title=Files>
@@ -550,7 +545,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class="g split">
 {% if enrolled %}<button type=button class=tile onclick="let d=document.getElementById('other');d.open=true;d.scrollIntoView({behavior:'smooth'})">{% else %}<a class=tile href=#apps>{% endif %}
 <span class=tic style="background:linear-gradient(#8fd96b,#3c9a1d)"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#3c9a1d"/></svg></span>Register{% if enrolled %}</button>{% else %}</a>{% endif %}
-<a class=tile href=#feather><span class=tic style="background:linear-gradient(#b7c0cc,#5d6878)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</a></div>
+<button type=button class=tile onclick="document.getElementById('sign').scrollIntoView({behavior:'smooth'})"><span class=tic style="background:linear-gradient(#b7c0cc,#5d6878)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</button></div>
 <div class=pair>
 <button type=button class=tile onclick="let d=document.getElementById('dev');d.open=true;d.scrollIntoView({behavior:'smooth'})"><span class=tic style="background:linear-gradient(#bfc4c9,#5f666e)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-dasharray="2.4 2"><circle cx="12" cy="12" r="7"/></svg></span>Help</button>
 <button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:linear-gradient(#8fc6ff,#2a72d6)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
@@ -565,6 +560,11 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class=mini><div class=row><div>Developer Mode</div><label class=sw><input type=checkbox checked aria-label="Developer Mode (example of the switch)"><i></i><span class=k></span></label></div></div></details>
 {% if enrolled %}<details><summary>Turn off Stolen Device Protection</summary>{{ sdp_steps }}</details>
 <details id=other><summary>Register a different iPhone</summary><p class=m>Turn off Stolen Device Protection on that iPhone first.</p>{{ enroll_form }}</details>{% endif %}</div>
+<h3 class=hdr id=sign>Sign your own IPA</h3>
+<form class=c method=post action=/sign enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Signing…'">
+<label class=drop>Drop an .ipa here or tap to browse<input type=file name=ipa accept=.ipa></label>
+<input type=url name=url placeholder="…or paste a link to an .ipa" aria-label="Link to an .ipa">
+<button>Sign</button><small>Signed for registered iPhones. The install link lasts 7 days.</small></form>
 <a class="b grey out" href=/logout>Sign out</a>
 </section>
 
