@@ -1,5 +1,6 @@
 """sidedrop: password-gated UDID enrollment, ad hoc OTA installs and private file downloads."""
 import base64, datetime, hashlib, hmac, itertools, json, os, plistlib, re, subprocess, threading, time, uuid, zipfile, zlib
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import quote
 
@@ -216,33 +217,38 @@ def resign(force=False):
 
 
 def sync_sources():
-    """Download the newest IPA of each app in SOURCES when its version changes."""
-    for url, ids, third in SOURCES:
-        seen = set()  # a source can list variants under one bundle ID (iOS 15 builds, …): the first is the main one
-        src = requests.get(url, timeout=30).json()
-        for a in src.get("apps", []):
-            if (ids and a["bundleIdentifier"] not in ids) or a["bundleIdentifier"] in seen:
-                continue
-            seen.add(a["bundleIdentifier"])
-            v = (a.get("versions") or [a])[0]  # newer sources nest versions, older ones are flat
-            slug = re.sub(r"[^\w.-]", "", a["bundleIdentifier"])
-            # the source's name for it (YouMod, not the IPA's own "YouTube"), shown on its Install button
-            (APPS / f".{slug}.third").write_text(a.get("name", "")) if third else (APPS / f".{slug}.third").unlink(missing_ok=True)
-            (APPS / f".{slug}.icon").write_text(a.get("iconURL", ""))  # ponytail: hotlinked, cache locally if a host goes flaky
-            desc = (v.get("localizedDescription") or a.get("subtitle") or a.get("localizedDescription") or "").strip()
-            for k, val in {"source": src.get("name", ""), "date": v.get("date", ""), "desc": desc.splitlines()[0] if desc else ""}.items():
-                (APPS / f".{slug}.{k}").write_text(val)  # shown on the Changes tab
-            marker = APPS / f".{slug}.version"
-            if not v.get("downloadURL") or (marker.exists() and marker.read_text() == v["version"]):
-                continue
-            tmp = APPS / f".{slug}.part"
-            with requests.get(v["downloadURL"], stream=True, timeout=60) as r:
-                r.raise_for_status()
-                with tmp.open("wb") as f:
-                    for chunk in r.iter_content(1 << 20):
-                        f.write(chunk)
-            tmp.replace(APPS / f"{slug}.ipa")
-            marker.write_text(v["version"])
+    """Download the newest IPA of each app in SOURCES when its version changes. Sources are fetched in parallel,
+    so Reload waits about as long as the slowest one."""
+    with ThreadPoolExecutor(8) as ex:
+        list(ex.map(lambda s: sync_source(*s), SOURCES))  # list() re-raises the first failure
+
+
+def sync_source(url, ids, third):
+    seen = set()  # a source can list variants under one bundle ID (iOS 15 builds, …): the first is the main one
+    src = requests.get(url, timeout=30).json()
+    for a in src.get("apps", []):
+        if (ids and a["bundleIdentifier"] not in ids) or a["bundleIdentifier"] in seen:
+            continue
+        seen.add(a["bundleIdentifier"])
+        v = (a.get("versions") or [a])[0]  # newer sources nest versions, older ones are flat
+        slug = re.sub(r"[^\w.-]", "", a["bundleIdentifier"])
+        # the source's name for it (YouMod, not the IPA's own "YouTube"), shown on its Install button
+        (APPS / f".{slug}.third").write_text(a.get("name", "")) if third else (APPS / f".{slug}.third").unlink(missing_ok=True)
+        (APPS / f".{slug}.icon").write_text(a.get("iconURL", ""))  # ponytail: hotlinked, cache locally if a host goes flaky
+        desc = (v.get("localizedDescription") or a.get("subtitle") or a.get("localizedDescription") or "").strip()
+        for k, val in {"source": src.get("name", ""), "date": v.get("date", ""), "desc": desc.splitlines()[0] if desc else ""}.items():
+            (APPS / f".{slug}.{k}").write_text(val)  # shown on the Changes tab
+        marker = APPS / f".{slug}.version"
+        if not v.get("downloadURL") or (marker.exists() and marker.read_text() == v["version"]):
+            continue
+        tmp = APPS / f".{slug}.part"
+        with requests.get(v["downloadURL"], stream=True, timeout=60) as r:
+            r.raise_for_status()
+            with tmp.open("wb") as f:
+                for chunk in r.iter_content(1 << 20):
+                    f.write(chunk)
+        tmp.replace(APPS / f"{slug}.ipa")
+        marker.write_text(v["version"])
 
 
 sync_lock, last_sync = threading.Lock(), [0.0]
@@ -286,7 +292,7 @@ def sign_profile(data):
 
 # --- pages ---
 
-PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
+PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>sidedrop</title><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=theme-color content="#b0bccd"><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=sidedrop>
 <script>/* Dark Mode follows the phone's theme until the More switch picks one (localStorage.dark = "1"/"0") */
 function theme(){let d=null;try{d=localStorage.dark}catch(e){}let on=document.documentElement.classList.toggle("dark",d?d=="1":matchMedia("(prefers-color-scheme: dark)").matches);
@@ -306,6 +312,7 @@ html{height:100%;overflow:hidden}
 body{height:100%;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;margin:0;font:17px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;-webkit-font-smoothing:antialiased;
  padding:calc(56px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right),(100% - 30rem)/2) calc(72px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left),(100% - 30rem)/2)}
 a{color:var(--acc);text-decoration:none} small,.m{color:var(--mute)} small{font-size:13px} .err{color:#d70015} h2{font-size:19px;margin:0}
+html{touch-action:manipulation} /* no double-tap zoom; pinch is blocked by the viewport and gesturestart */
 button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5c542;outline-offset:2px}
 .nav{position:fixed;top:0;left:0;right:0;z-index:5;height:44px;padding:env(safe-area-inset-top) max(7px,env(safe-area-inset-right)) 0 max(7px,env(safe-area-inset-left));
  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:var(--navbg);box-shadow:inset 0 1px 0 #cdd5df,0 1px 0 #2d3642,0 2px 4px rgba(0,0,0,.25)}
@@ -374,6 +381,7 @@ Reloading Data</div></div>
 {% if stats %}<p>{{ stats[0] }} of 100 iPhones registered.{% if stats[1] %} Apps keep working until {{ stats[1].strftime('%B %-d, %Y') }}.{% endif %}</p>{% endif %}
 <div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){location.hash='more';d.open=true;setTimeout(()=>d.scrollIntoView(),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
 <script>addEventListener("keydown",e=>{if(e.key=="Escape")about.hidden=true})
+addEventListener("gesturestart",e=>e.preventDefault())  // Safari ignores user-scalable=no for pinch
 function reloadData(){reloading.hidden=false;fetch("/refresh",{method:"POST"}).catch(()=>{}).finally(()=>{history.replaceState(null,"","/"+location.hash);location.reload()})}  // replace() to the same /#tab only jumps to the hash, it never reloads</script>
 {{ body|safe }}"""
 
