@@ -468,7 +468,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <li>You'll land back here automatically, registered.</li></ol>{% endset %}
 {% set sdp_steps %}<figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Face ID &amp; Passcode</b></span></figcaption>
 <img src=/static/sdp1.jpg alt="Settings with Face ID and Passcode circled" width=640 height=277></figure>
-<figure class=shot><figcaption><span class=num>b</span><span>Scroll down to <b>Stolen Device Protection</b></span></figcaption>
+<figure class=shot><figcaption><span class=num>b</span><span>Tap <b>Stolen Device Protection</b></span></figcaption>
 <img src=/static/sdp2.jpg alt="The Stolen Device Protection row circled" width=640 height=167></figure>
 <figure class=shot><figcaption><span class=num>c</span><span>Turn it <b>off</b></span></figcaption>
 <img src=/static/sdp3.jpg alt="The Stolen Device Protection switch turned off, circled" width=640 height=291></figure>
