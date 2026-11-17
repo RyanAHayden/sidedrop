@@ -389,6 +389,11 @@ theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",the
  --greybtn:linear-gradient(#fdfdfd,#e3e6ea);--emboss:0 1px 0 rgba(255,255,255,.75);background:#c8cfd6}
 /* fixed backdrop: stays put while iOS rubber-bands the page, so the bounce shows pinstripes instead of a flat color */
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
+/* always 1px taller than the screen, so short pages still rubber-band like native */
+body{position:relative;scrollbar-width:none} body::-webkit-scrollbar{display:none} body::after{content:"";position:absolute;top:0;left:0;width:1px;height:calc(100% + 1px);pointer-events:none}
+/* scroll indicator, drawn by us between the nav and tab bar (iOS doesn't show one for a scrolling body) */
+/* UIKit's UIScrollerIndicatorDefault: 5pt black at 50% with a 1pt 15% white ring, fully rounded (7pt overall) */
+#sb{position:fixed;right:2px;z-index:6;width:5px;border-radius:3px;background:rgba(0,0,0,.5);box-shadow:0 0 0 1px rgba(255,255,255,.15);opacity:0;transition:opacity .3s;pointer-events:none}
 /* body scrolls, not the page: iOS 26 blurs the top edge of a scrolling page in the home-screen app, washing out the nav, and has no switch to turn that off */
 html{height:100%;overflow:hidden}
 body{height:100%;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;margin:0;font:17px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;-webkit-font-smoothing:antialiased;
@@ -470,7 +475,11 @@ Reloading Data</div></div>
 /* body is the scroller; scrollIntoView would also scroll the locked <html> and drag the fixed nav down */
 /* clamp to the real bottom: iOS lets a smooth scroll on a non-root scroller overshoot past the end, then snaps back on the next touch */
 function goTo(el){let b=document.body;b.scrollTo({top:Math.min(b.scrollTop+el.getBoundingClientRect().top-56,b.scrollHeight-b.clientHeight),behavior:"smooth"})}
-addEventListener("gesturestart",e=>e.preventDefault())  // Safari ignores user-scalable=no for pinch
+addEventListener("gesturestart",e=>e.preventDefault())
+addEventListener("DOMContentLoaded",()=>{let b=document.body,sb=document.createElement("div"),t;sb.id="sb";b.append(sb);
+ b.addEventListener("scroll",()=>{let n=document.querySelector(".nav").getBoundingClientRect().bottom,tb=document.querySelector(".tabs"),e=(tb?tb.getBoundingClientRect().top:innerHeight)-3,
+  track=e-n-6,h=b.scrollHeight-b.clientHeight;if(h<=1)return;let th=Math.max(36,track*b.clientHeight/b.scrollHeight),y=Math.min(Math.max(b.scrollTop/h,0),1);
+  sb.style.top=n+3+(track-th)*y+"px";sb.style.height=th+"px";sb.style.opacity=1;clearTimeout(t);t=setTimeout(()=>sb.style.opacity=0,500)},{passive:true})})  // Safari ignores user-scalable=no for pinch
 function reloadData(){reloading.hidden=false;fetch("/refresh",{method:"POST"}).catch(()=>{}).finally(()=>{history.replaceState(null,"","/"+location.hash);location.reload()})}  // replace() to the same /#tab only jumps to the hash, it never reloads</script>
 {{ body|safe }}""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
 
