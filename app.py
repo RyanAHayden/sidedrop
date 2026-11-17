@@ -421,7 +421,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5
 .alert .abtns button,.alert .abtns .ok{background-origin:border-box!important}  /* the background shorthands reset it; without it the gradient tiles into the see-through border and its bright top shows as a line at the bottom */
 .alert .abtns button:active{background:linear-gradient(rgba(185,185,185,.82),rgba(62,62,62,.61) 50%,rgba(3,3,3,.61) 50%,rgba(24,24,24,.57))}
 .sw:active .k{background:linear-gradient(#bcbcbc,#e6e6e6)} .dark .sw:active .k{background:linear-gradient(#55595f,#2e3136)}
-.sw{touch-action:none} .sw.drag i:before{transform:translateX(calc(var(--x) - 65px));transition:none}  /* blue ends at the knob's center */ .sw.drag .k{transform:translateX(var(--x));transition:none} .sw.drag i:after{opacity:1;transform:translateX(var(--x))}
+.sw{touch-action:none} .sw.drag i:before,.sw.drag i:after,.sw.drag .k{transition:none}  /* while dragging, everything follows --x with the finger */
 #sb.on{pointer-events:auto}
 *{-webkit-tap-highlight-color:transparent}  /* no grey tap flash; controls have their own pressed looks */
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none} input,textarea,#src{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}  /* app, not a document: holding never selects, except fields and Feather's sources */ #sb::before{content:"";position:absolute;inset:-12px -2px -12px -26px} #sb.grab{width:7px;right:1px;border-radius:4px}
@@ -508,11 +508,11 @@ addEventListener("DOMContentLoaded",()=>{
  sb.addEventListener("touchend",()=>{grab=undefined;sb.classList.remove("grab");b.classList.remove("grabbing");draw();grab=null});
  /* on/off switches drag like UISwitch; a plain tap still toggles */
  document.querySelectorAll(".sw").forEach(w=>{let i=w.querySelector("input"),x0,s0,mv;
-  w.addEventListener("touchstart",e=>{x0=e.touches[0].clientX;s0=i.checked?52:0;mv=false},{passive:true});
-  w.addEventListener("touchmove",e=>{let d=e.touches[0].clientX-x0;if(!mv&&Math.abs(d)<4)return;mv=true;e.preventDefault();w.classList.add("drag");w.style.setProperty("--x",Math.min(52,Math.max(0,s0+d))+"px")},{passive:false});
+  w.addEventListener("touchstart",e=>{x0=e.touches[0].clientX;s0=i.checked?50:0;mv=false},{passive:true});
+  w.addEventListener("touchmove",e=>{let d=e.touches[0].clientX-x0;if(!mv&&Math.abs(d)<4)return;mv=true;e.preventDefault();w.classList.add("drag");w.style.setProperty("--x",Math.min(50,Math.max(0,s0+d))+"px")},{passive:false});
   /* iOS still sends a click after the drag, which would toggle it back: swallow that one */
   w.addEventListener("click",e=>{if(w.skip){e.preventDefault();w.skip=0}},true);
-  let end=e=>{if(!mv)return;mv=false;if(e.cancelable)e.preventDefault();let on=parseFloat(w.style.getPropertyValue("--x"))>26;w.classList.remove("drag");
+  let end=e=>{if(!mv)return;mv=false;if(e.cancelable)e.preventDefault();let on=parseFloat(w.style.getPropertyValue("--x"))>25;w.classList.remove("drag");w.style.removeProperty("--x");
    w.skip=1;setTimeout(()=>w.skip=0,400);if(on!=i.checked){i.checked=on;i.dispatchEvent(new Event("change"))}};
   w.addEventListener("touchend",end);w.addEventListener("touchcancel",end)})})  // iOS ends a gesture it took over with touchcancel  // Safari ignores user-scalable=no for pinch
 function reloadData(){reloading.hidden=false;fetch("/refresh",{method:"POST"}).catch(()=>{}).finally(()=>{history.replaceState(null,"","/"+location.hash);location.reload()})}  // replace() to the same /#tab only jumps to the hash, it never reloads</script>
@@ -618,15 +618,16 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .tic{position:relative;flex:none;width:30px;height:30px;border-radius:7px;display:grid;place-items:center;box-shadow:0 1px 2px rgba(0,0,0,.4)}
 .tic:after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--gloss)} .tic svg{width:19px;height:19px}
 .out{margin-top:20px}
-.sw{position:relative;flex:none;width:79px;height:27px}
+/* switch: the Teehan+Lax kit's size (77x27 track, 25pt knob 1pt inside it, 50pt travel); the knob, the blue fill (ends at the knob's centre) and both labels all ride on --x, so ON moves like OFF when tapped or dragged */
+.sw{position:relative;flex:none;width:77px;height:27px;--x:0px} .sw:has(input:checked){--x:50px}
 .sw input{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;opacity:0;cursor:pointer;z-index:2}
-.sw i{position:absolute;inset:0;border:1px solid #a7a7a7;border-radius:14px;overflow:hidden;background:linear-gradient(#e6e6e6,#fefefe);box-shadow:inset 0 2px 3px rgba(0,0,0,.3);font-size:16px;font-weight:700;line-height:25px;font-style:normal}
-.sw i:before{content:"ON";position:absolute;inset:0 auto 0 0;width:79px;padding-left:12px;box-sizing:border-box;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
- background:linear-gradient(#1b68d8,#3f8cf3 55%,#5da1f6);transform:translateX(-79px);transition:transform .2s}
-.sw i:after{content:"OFF";position:absolute;right:12px;color:#808080}
-.sw .k{position:absolute;top:-1px;left:-1px;width:29px;height:29px;border-radius:50%;background:linear-gradient(#cfcfcf,#fcfcfc);border:1px solid #a3a3a3;box-sizing:border-box;
- box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .2s;pointer-events:none}
-.sw input:checked~i:before{transform:none} .sw input:checked~i:after{opacity:0} .sw input:checked~.k{transform:translateX(52px)}
+.sw i{position:absolute;inset:0;border:1px solid #a7a7a7;border-radius:13.5px;overflow:hidden;background:linear-gradient(#e6e6e6,#fefefe);box-shadow:inset 0 2px 3px rgba(0,0,0,.3);font-size:16px;font-weight:700;line-height:25px;font-style:normal}
+.sw i:before{content:"ON";position:absolute;inset:0 auto 0 0;width:77px;padding-left:25.5px;box-sizing:border-box;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
+ background:linear-gradient(#1b68d8,#3f8cf3 55%,#5da1f6);transform:translateX(calc(var(--x) - 63.5px));transition:transform .2s}
+.sw i:after{content:"OFF";position:absolute;right:12px;color:#808080;transform:translateX(var(--x));transition:transform .2s}
+.sw .k{position:absolute;top:1px;left:1px;width:25px;height:25px;border-radius:50%;background:linear-gradient(#cfcfcf,#fcfcfc);border:1px solid rgba(0,0,0,.42);box-sizing:border-box;
+ box-shadow:0 1px 2px rgba(0,0,0,.3);transform:translateX(var(--x));transition:transform .2s;pointer-events:none}
+
 .mini{border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .dark .get{color:#c9ced5;border-color:#111;box-shadow:inset 0 1px 0 rgba(255,255,255,.15)} .dark .get[aria-expanded=true]{color:#8b9099;background:linear-gradient(#1f2125,#2a2d32);box-shadow:inset 0 1px 3px #000}
 .dark .steps{background:linear-gradient(#26292d,#2c2f34)} .dark .step+.step{border-top-color:#3a3d42}
