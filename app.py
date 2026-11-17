@@ -734,6 +734,10 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <a class="b grey out" href=/logout>Sign out</a>
 </section>
 
+{% if enrolled %}<div class=scrim id=devAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=devT>
+<h3 id=devT>Developer Mode Required</h3><p>When the app finishes installing, opening it will ask you to turn on Developer Mode.</p>
+<p>Turn it on in Settings, restart, and the app will open.</p>
+<div class=abtns><button type=button onclick="devDone(1)">Show Me</button><button type=button class=ok onclick="devDone()">OK</button></div></div></div>{% endif %}
 {% if enrolled %}<div class=scrim id=pushAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=pushT>
 <h3 id=pushT>Get Notified of Updates?</h3><p>sidedrop can tell you when an app you installed has a new version.</p>
 <div id=pushWeb hidden><div><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open sidedrop from there</span></p></div></div>
@@ -755,7 +759,7 @@ function navR(){let n=document.querySelectorAll(".cyr.up").length,r=document.que
  r.textContent=c?"Update ("+n+")":"Reload";r.onclick=c?upgradeAll:reloadData;
  l.textContent=c?"Refresh":"About";l.onclick=c?reloadData:()=>{about.hidden=false;about.querySelector(".ok").focus()};badge.textContent=n;badge.hidden=!n&&!badge.classList.contains("busy");let h=document.getElementById("uph");if(h)h.hidden=!n}
 function mark(b){let n=b.dataset.app;if(!n)return;navigator.sendBeacon("/installed",new URLSearchParams({name:n}));
- document.querySelectorAll('.row .get[data-app="'+n+'"]').forEach(x=>{x.classList.add("done");if(x.dataset.arm)x.dataset.arm="INSTALLED";if(!x.classList.contains("go"))x.textContent="INSTALLED"});setTimeout(pushMaybe,1500);  // after iOS's install prompt
+ document.querySelectorAll('.row .get[data-app="'+n+'"]').forEach(x=>{x.classList.add("done");if(x.dataset.arm)x.dataset.arm="INSTALLED";if(!x.classList.contains("go"))x.textContent="INSTALLED"});setTimeout(devMaybe,1500);  // after iOS's install prompt
  setTimeout(()=>{document.querySelectorAll('.cyr.up [data-app="'+n+'"]').forEach(x=>x.closest(".cyr").remove());navR()},500)}  // after the link has followed: a removed link doesn't navigate
 function upgradeAll(){let l=[...document.querySelectorAll(".cyr.up b")].map(b=>b.textContent);upqT.textContent="Update "+l.length+(l.length>1?" Apps":" App");upqL.textContent=l.join(", ");upq.hidden=false}
 /* ponytail: one install link every 3 s; iOS shows one install prompt per link, re-tap UPDATE on any it drops */
@@ -772,6 +776,9 @@ function pushSet(on){if(!pushOK){pushSw.checked=false;let d=document.getElementB
  Notification.requestPermission().then(p=>{if(p!="granted")throw 0;return pushSub()}).then(([r,s])=>s||r.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:Uint8Array.from(atob(PUSHKEY.replace(/-/g,"+").replace(/_/g,"/")),c=>c.charCodeAt(0))}))
   .then(s=>fetch("/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(s)})).catch(()=>{if(window.pushSw)pushSw.checked=false})}
 /* asked once per phone: after the first INSTALL tap or the first visit to Changes */
+/* first INSTALL on this phone: warn that opening the app will ask for Developer Mode; then the notifications ask */
+function devMaybe(){let a=null;try{a=localStorage.devTold}catch(e){}if(a||!window.devAsk)return pushMaybe();try{localStorage.devTold=1}catch(e){}devAsk.hidden=false}
+function devDone(show){devAsk.hidden=true;if(show){location.hash="more";let d=document.getElementById("dev");d.open=true;setTimeout(()=>goTo(d),50)}else setTimeout(pushMaybe,400)}
 function pushMaybe(){let a=null;try{a=localStorage.pushAsked}catch(e){}if(a||!window.pushAsk||(pushOK&&Notification.permission!="default"))return;
  try{localStorage.pushAsked=1}catch(e){}pushWeb.hidden=pushOK;pushOk.textContent=pushOK?"Allow":"OK";let bs=pushOk.parentNode;bs.style.gridTemplateColumns=pushOK?"":"1fr";bs.firstElementChild.style.display=pushOK?"":"none";
  pushOk.onclick=()=>{pushAsk.hidden=true;if(pushOK){pushSet(true);if(window.pushSw)pushSw.checked=true}};pushAsk.hidden=false}
