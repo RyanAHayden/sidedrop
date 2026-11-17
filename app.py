@@ -752,8 +752,9 @@ def admin():
             err = "Wrong admin password."
     if not is_admin():
         return page(ADMIN_CSS + """<p><a href=/#more>‹ More</a></p><h3 class=hdr>Manage iPhones</h3>
-<form class=c method=post><input type=password name=password placeholder="Admin password" aria-label="Admin password" autofocus required>
-{% if err %}<p class=err>{{ err }}</p>{% endif %}<button>Unlock</button></form>""", err=err)
+<form class=c method=post><input type=password name=password placeholder="Admin password" aria-label="Admin password" autofocus required
+ oninput="this.form.querySelector('button').disabled=!this.value"><script>addEventListener("pageshow",()=>{let i=document.querySelector("input[name=password]");i.oninput()})</script>
+{% if err %}<p class=err>{{ err }}</p>{% endif %}<button disabled>Unlock</button></form>""", err=err)
     seen, me = load_json(SEEN), token_udid(request.cookies.get("device", ""))
     now = time.time()
     def ago(t):
