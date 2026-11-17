@@ -415,10 +415,10 @@ details.c>summary small{display:block;font-weight:400} details.c>summary>div{fle
 details.c>summary:after{content:"";flex:none;width:8px;height:8px;margin-right:4px;border:solid #7f8a99;border-width:3px 3px 0 0;transform:rotate(135deg);transition:transform .2s}
 details.c[open]>summary:after{transform:rotate(-45deg)} details.c>summary,.dark details.c>summary{min-height:0;padding:0;background:none;box-shadow:none} details.c>:not(summary){margin:12px 0 0} details.c>.shot+.shot{margin-top:22px} details.c>.warn{margin-top:20px} details.c>small{display:block} /* margins, not gap: Safari ignores gap inside <details> */ details.c:not([open]){padding-block:10px}
 .sh{display:flex;align-items:center;gap:10px;font-weight:700} .sh small{display:block;font-weight:400}
-details.c>summary .done,details.c.ok>summary .todo{display:none} details.c.ok>summary .done{display:block;color:#3c9a1d} .ok>summary .num{background:var(--gloss),var(--greenbtn);border-color:#2f7a17;font-size:0} .ok>summary .num:after{content:"✓";font-size:14px}
+.ok>summary .num{background:var(--gloss),var(--greenbtn);border-color:#2f7a17;font-size:0} .ok>summary .num:after{content:"✓";font-size:14px}
 .shot{margin:0;display:flex;flex-direction:column;gap:6px} .shot figcaption{display:flex;gap:8px;align-items:center;font-size:15px} .shot .num{width:20px;height:20px;font-size:11px}
 .shot img{display:block;width:100%;height:auto;border-radius:8px;border:1px solid var(--line);box-shadow:0 1px 3px rgba(0,0,0,.3)}
-.warn{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;background:#fff8e1;border:1px solid #e6cf7a;font-size:14px} .warn b:first-child{display:block}
+.warn{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;background:#fff8e1;border:1px solid #e6cf7a;font-size:14px}
 button.gbtn{border-color:#2f7a17;background:var(--greenbtn)} /* not .green: that's the More tab's status panel */
 fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;filter:grayscale(.6)}
 .dark .warn{background:#3a3220;border-color:#6b5a26}
@@ -466,14 +466,13 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <ol id=next hidden><li>Tap <b>Allow</b>, then <b>Close</b>.</li><li>Open the <b>Settings</b> app.</li>
 <li>Tap <b>Profile Downloaded</b> near the top.</li><li>Tap <b>Install</b>, enter your passcode, tap <b>Install</b> again.</li>
 <li>You'll land back here automatically, registered.</li></ol>{% endset %}
-{% set sdp_steps %}<figure class=shot><figcaption><span class=num>a</span><span>Open <b>Settings</b>, tap <b>Face ID &amp; Passcode</b>, enter your passcode.</span></figcaption>
+{% set sdp_steps %}<figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Face ID &amp; Passcode</b></span></figcaption>
 <img src=/static/sdp1.jpg alt="Settings with Face ID and Passcode circled" width=640 height=277></figure>
-<figure class=shot><figcaption><span class=num>b</span><span>Scroll down, tap <b>Stolen Device Protection</b>. Yours says On.</span></figcaption>
+<figure class=shot><figcaption><span class=num>b</span><span>Scroll down to <b>Stolen Device Protection</b></span></figcaption>
 <img src=/static/sdp2.jpg alt="The Stolen Device Protection row circled" width=640 height=167></figure>
-<figure class=shot><figcaption><span class=num>c</span><span>Turn the switch <b>off</b> so it's grey, like this. Look at the phone for Face ID.</span></figcaption>
+<figure class=shot><figcaption><span class=num>c</span><span>Turn it <b>off</b></span></figcaption>
 <img src=/static/sdp3.jpg alt="The Stolen Device Protection switch turned off, circled" width=640 height=291></figure>
-<div class=warn><span aria-hidden=true>⏳</span><div><b>Says “Security Delay in Progress”?</b>You're away from home or work, so iOS makes you wait an hour.
-Tap <b>Start Security Delay</b>, come back after an hour, and turn it off then. Or do this at home, where there's no wait.</div></div>
+<div class=warn><span aria-hidden=true>⏳</span><div>Asked to wait an hour? Do this at home, where there's no wait.</div></div>
 {% endset %}
 {% macro install(a) %}{% if not enrolled %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>
 {% elif a.files %}<button type=button class=get aria-expanded=false onclick="steps(this)">GET</button>
@@ -492,11 +491,10 @@ Tap <b>Start Security Delay</b>, come back after an hour, and turn it off then. 
 <section class=page id=t-apps data-title=sidedrop>
 <div class=splash><img src=/apple-touch-icon.png alt=""><div><h2>Welcome to sidedrop</h2><p>by <a href="https://github.com/RyanAHayden">Ryan Hayden</a></p></div></div>
 {% if not enrolled %}<h3 class=hdr>First, set up this iPhone</h3>
-<details class=c id=sdp open><summary><span class=num>1</span><div>Turn off Stolen Device Protection<small class=todo>Otherwise iOS can block the profile. About a minute.</small>
-<small class=done>Done. Tap to see the steps again.</small></div></summary>
+<details class=c id=sdp open><summary><span class=num>1</span><div>Turn off Stolen Device Protection</div></summary>
 {{ sdp_steps }}
-<button type=button class=gbtn onclick="sdpDone(true)">I turned it off</button><small>You can turn it back on once your apps are installed.</small></details>
-<div class=c id=reg><div class=sh><span class=num>2</span><div>Register this iPhone<small>Do this in Safari on the iPhone. Once per phone.</small></div></div>
+<button type=button class=gbtn onclick="sdpDone(true)">I turned it off</button></details>
+<div class=c id=reg><div class=sh><span class=num>2</span><div>Register this iPhone<small>In Safari on this iPhone</small></div></div>
 <fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
