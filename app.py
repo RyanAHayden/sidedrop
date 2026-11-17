@@ -275,7 +275,7 @@ def sign_profile(data):
 # --- pages ---
 
 PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>sidedrop</title><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=theme-color content="#b0bccd"><meta name=apple-mobile-web-app-status-bar-style content=black-translucent><meta name=apple-mobile-web-app-title content=sidedrop>
+<title>sidedrop</title><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=theme-color content="#b0bccd"><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=sidedrop>
 <script>/* Dark Mode follows the phone's theme until the More switch picks one (localStorage.dark = "1"/"0") */
 function theme(){let d=null;try{d=localStorage.dark}catch(e){}document.documentElement.classList.toggle("dark",d?d=="1":matchMedia("(prefers-color-scheme: dark)").matches)}
 theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",theme)</script>
@@ -446,7 +446,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .dark .get{color:#c9ced5;border-color:#111;box-shadow:inset 0 1px 0 rgba(255,255,255,.15)} .dark .get[aria-expanded=true]{color:#8b9099;background:linear-gradient(#1f2125,#2a2d32);box-shadow:inset 0 1px 3px #000}
 .dark .steps{background:linear-gradient(#26292d,#2c2f34)} .dark .step+.step{border-top-color:#3a3d42}
 .dark .green{background:#24302a} .dark .kv{border-top-color:#1a221d}
-.dark .tile{background:linear-gradient(#34373d,#2a2d32);color:#e6e8eb} .dark .pair .tile{border-color:#0d0e10} .dark .split .tile+.tile{border-left-color:#17191c} .dark .tile:after{border-color:#777}
+.dark .tile{background:linear-gradient(#34373d,#2a2d32);color:#e6e8eb} .dark .pair .tile{border-color:#0d0e10;box-shadow:0 1px 0 rgba(255,255,255,.06)} .dark .split .tile+.tile{border-left-color:#17191c} .dark .tile:after{border-color:#777}
 .dark .sw i{border-color:#111;background:linear-gradient(#2b2e33,#3c4047);box-shadow:inset 0 1px 3px rgba(0,0,0,.8)} .dark .sw i:after{color:#9aa0a8}
 .dark .sw i:before{background:linear-gradient(#0b4fb0,#3d8cf0)} .dark .sw .k{background:linear-gradient(#6a6f78,#3c4047);border-color:#111}
 /* Cydia tab bar */
