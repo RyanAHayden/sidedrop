@@ -723,7 +723,7 @@ def mark_installed():
 
 # --- admin: list the developer account's iPhones, disable the ones that shouldn't have apps any more ---
 
-ADMIN_TTL, admin_fails = 15 * 60, []  # admin unlock lasts 15 min; times of recent wrong admin passwords
+ADMIN_TTL, admin_fails = 30 * 86400, []  # admin unlock lasts as long as the login cookie (30 days) on that device; times of recent wrong admin passwords
 
 
 def is_admin():
