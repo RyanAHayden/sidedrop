@@ -412,13 +412,18 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5
 /* pressed states (UIKit's *Pressed art); iOS only shows :active once the page has a touch listener, added below */
 .nav .bar:not(.back):active{background:linear-gradient(#8b97af,#283e6b);border-color:#1c2c4f;border-top-color:#30343c}
 .dark .nav .bar:not(.back):active{background:linear-gradient(#2a2d32,#121316)}
+/* held buttons, from the 4S art: white/grey round buttons go blue (iTunesStoreUI GradientButtonBackgroundPressed, same as the tiles);
+   blue and green darken the way PurchaseButtonBluePressed (x.75) and PurchaseConfirmButtonPressed (x.8) do; red from UIAlertSheetDefaultDestroyButtonPressed */
+.get:not(.go):not(.blue):active,a.b.grey:active,label.b.grey:active,button.grey:active,.act:not(.red):active{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.3);border-color:#005ee8;background:linear-gradient(#058af5,#0160e6);box-shadow:none}
+.get.blue:active,a.b:not(.grey):active,form button:not(.grey):not(.act):active{border-color:#1f3b67;background:linear-gradient(#5c7cb3,#2c569f 50%,#1e4997 51%,#2c56a4);box-shadow:none}
+.get.go:active,button.gbtn:active{border-color:#255e12;background:linear-gradient(#72ae56,#3d8822 50%,#307b17 51%,#3d8b22);box-shadow:none}
+.act.red:active{border-color:#8a1c1c;background:linear-gradient(#cf848a,#9d010c 80%,#b33941)}
 .alert .abtns button,.alert .abtns .ok{background-origin:border-box!important}  /* the background shorthands reset it; without it the gradient tiles into the see-through border and its bright top shows as a line at the bottom */
 .alert .abtns button:active{background:linear-gradient(rgba(185,185,185,.82),rgba(62,62,62,.61) 50%,rgba(3,3,3,.61) 50%,rgba(24,24,24,.57))}
 .sw:active .k{background:linear-gradient(#bcbcbc,#e6e6e6)} .dark .sw:active .k{background:linear-gradient(#55595f,#2e3136)}
 .sw{touch-action:none} .sw.drag i:before{transform:translateX(calc(var(--x) - 65px));transition:none}  /* blue ends at the knob's center */ .sw.drag .k{transform:translateX(var(--x));transition:none} .sw.drag i:after{opacity:1;transform:translateX(var(--x))}
 #sb.on{pointer-events:auto}
-/* chrome isn't text: no selection or callout on a long press (holding the scroll indicator selected the tab labels) */
-.nav,.tabs,#sb,.sw,button,.get,.abtns,.grabbing{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none} #sb::before{content:"";position:absolute;inset:-12px -2px -12px -26px} #sb.grab{width:7px;right:1px;border-radius:4px}
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none} input,textarea,#src{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}  /* app, not a document: holding never selects, except fields and Feather's sources */ #sb::before{content:"";position:absolute;inset:-12px -2px -12px -26px} #sb.grab{width:7px;right:1px;border-radius:4px}
 h3.hdr{font-size:17px;font-weight:700;color:var(--head);margin:20px 10px 7px;text-shadow:var(--emboss)}
 .ftr{font-size:14px;color:var(--head);text-align:center;text-shadow:var(--emboss);margin:7px 12px 0}
 .c,.g{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8);overflow:hidden}
