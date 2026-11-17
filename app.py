@@ -416,7 +416,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5
    blue and green darken the way PurchaseButtonBluePressed (x.75) and PurchaseConfirmButtonPressed (x.8) do; red from UIAlertSheetDefaultDestroyButtonPressed */
 .get:not(.go):not(.blue):active,a.b.grey:active,label.b.grey:active,button.grey:active,.act:not(.red):active{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.3);border-color:#005ee8;background:linear-gradient(#058af5,#0160e6);box-shadow:none}
 .get.blue:active,a.b:not(.grey):active,form button:not(.grey):not(.act):active{border-color:#1f3b67;background:linear-gradient(#5c7cb3,#2c569f 50%,#1e4997 51%,#2c56a4);box-shadow:none}
-.get.go:active,button.gbtn:active{border-color:#255e12;background:linear-gradient(#72ae56,#3d8822 50%,#307b17 51%,#3d8b22);box-shadow:none}
+.get.go:active{border-color:#255e12} .get.go:active:before,button.gbtn:active{border-color:#255e12;background:linear-gradient(#72ae56,#3d8822 50%,#307b17 51%,#3d8b22);box-shadow:none}
 .act.red:active{border-color:#8a1c1c;background:linear-gradient(#cf848a,#9d010c 80%,#b33941)}
 .alert .abtns button,.alert .abtns .ok{background-origin:border-box!important}  /* the background shorthands reset it; without it the gradient tiles into the see-through border and its bright top shows as a line at the bottom */
 .alert .abtns button:active{background:linear-gradient(rgba(185,185,185,.82),rgba(62,62,62,.61) 50%,rgba(3,3,3,.61) 50%,rgba(24,24,24,.57))}
@@ -580,7 +580,10 @@ def home():
 /* iOS 5 App Store price button: grey GET, a tap turns it into a green INSTALL, a second tap installs */
 .get{flex:none;display:inline-block;width:auto;min-width:62px;box-sizing:border-box;text-align:center;font-size:12px;font-weight:700;letter-spacing:.02em;line-height:1.2;font-family:inherit;padding:5px 10px;
  border-radius:4px;cursor:pointer;white-space:nowrap;color:#4e5866;text-shadow:var(--emboss);border:1px solid #9aa3ae;background:var(--greybtn);box-shadow:inset 0 1px 0 #fff,0 1px 1px rgba(0,0,0,.12)}
-.get.go{min-width:76px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-color:#2f7a17;background:var(--greenbtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+/* App Store GET -> INSTALL: the button widens while the green fades in over the grey (a gradient can't transition, so the green is a layer) */
+.get{position:relative;isolation:isolate;overflow:hidden;transition:width .25s ease,min-width .25s ease,color .25s,text-shadow .25s,border-color .25s}
+.get:before{content:"";position:absolute;inset:0;z-index:-1;background:var(--greenbtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4);opacity:0;transition:opacity .25s}
+.get.go{min-width:76px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-color:#2f7a17} .get.go:before{opacity:1}
 .get.blue{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-color:#2b4f8a;background:var(--bluebtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
 .get[aria-expanded=true]{color:#7d8794;background:linear-gradient(#c9ced5,#dfe3e8);box-shadow:inset 0 1px 3px rgba(0,0,0,.3)}
 .locked .get{min-width:44px} .get.done:not(.go){color:#8e959e}  /* iOS 6 App Store: INSTALLED is grey; tapping still reinstalls */
@@ -820,8 +823,10 @@ function pushShow(){pushWeb.hidden=pushOK;pushOk.textContent=pushOK?"Allow":"OK"
  pushOk.onclick=()=>{pushAsk.hidden=true;if(pushOK){pushSet(true);if(window.pushSw)pushSw.checked=true}};pushAsk.hidden=false}
 if(pushOK&&window.pushSw)pushSub().then(([r,s])=>pushSw.checked=!!s&&Notification.permission=="granted").catch(()=>{});
 let pushOnChanges=()=>{if(location.hash=="#changes")setTimeout(pushMaybe,600)};addEventListener("hashchange",pushOnChanges);pushOnChanges();
-function disarm(keep){document.querySelectorAll(".get.go[data-arm]").forEach(b=>{if(b!=keep){b.classList.remove("go");b.textContent=b.dataset.arm}})}
-function arm(b){if(b.classList.contains("go")){mark(b);setTimeout(()=>disarm(),1500);return true}disarm(b);b.classList.add("go");b.textContent="INSTALL";return false}
+/* change a GET button's label and colour with its width animating, like the App Store (a label swap alone jumps the width) */
+function morph(b,f){let w0=b.offsetWidth;f();let w1=b.offsetWidth;if(w0==w1)return;b.style.width=w0+"px";b.offsetWidth;b.style.width=w1+"px";clearTimeout(b.mt);b.mt=setTimeout(()=>b.style.width="",300)}
+function disarm(keep){document.querySelectorAll(".get.go[data-arm]").forEach(b=>{if(b!=keep)morph(b,()=>{b.classList.remove("go");b.textContent=b.dataset.arm})})}
+function arm(b){if(b.classList.contains("go")){mark(b);setTimeout(()=>disarm(),1500);return true}disarm(b);morph(b,()=>{b.classList.add("go");b.textContent="INSTALL"});return false}
 addEventListener("click",e=>{if(!e.target.closest("[data-arm]"))disarm()});
 function steps(b){let open=b.getAttribute("aria-expanded")!="true";b.setAttribute("aria-expanded",open);b.closest(".row").nextElementSibling.classList.toggle("open",open)}
 function sdpDone(save){let d=document.getElementById("sdp");if(!d)return;d.classList.add("ok");d.open=false;regf.disabled=false;
