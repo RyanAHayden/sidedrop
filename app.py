@@ -315,32 +315,36 @@ PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=
 <title>sidedrop</title><meta name=description content="Apps shared between friends, signed for your iPhone.">
 <meta property=og:title content=sidedrop><meta property=og:description content="Apps shared between friends, signed for your iPhone."><meta property=og:site_name content=sidedrop>
 <meta property=og:type content=website><meta property=og:url content="%PUBLIC_URL%/"><meta property=og:image content="%PUBLIC_URL%/static/og.png"><meta property=og:image:width content=1200><meta property=og:image:height content=630>
-<meta name=twitter:card content=summary_large_image><meta name=twitter:image content="%PUBLIC_URL%/static/og.png"><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=theme-color content="#b0bccd"><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=sidedrop>
+<meta name=twitter:card content=summary_large_image><meta name=twitter:image content="%PUBLIC_URL%/static/og.png"><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=theme-color content="#bdcbdc"><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=sidedrop>
 <script>/* Dark Mode follows the phone's theme until the More switch picks one (localStorage.dark = "1"/"0") */
 function theme(){let d=null;try{d=localStorage.dark}catch(e){}let on=document.documentElement.classList.toggle("dark",d?d=="1":matchMedia("(prefers-color-scheme: dark)").matches);
- document.querySelector("meta[name=theme-color]").content=on?"#5f656f":"#b0bccd"}  /* Safari's top bar matches the nav */
+ document.querySelector("meta[name=theme-color]").content=on?"#5f656f":"#bdcbdc"}  /* Safari's top bar matches the nav */
 theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",theme)</script>
 <style>
 /* 2012 iOS look (pinstripes, glossy bars, App Store buttons), with a gunmetal Dark Mode below. */
 :root{color-scheme:light;--mute:#6d7480;--sep:#e0e0e0;--line:#abb2bc;--acc:#385487;--head:#4c566c;
  --pin:repeating-linear-gradient(90deg,#c5ccd4 0 5px,#cbd2d8 5px 7px);--gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
- --navbg:linear-gradient(#b0bccd,#889bb3 50%,#7d92ae 51%,#6d84a2);--barbtn:linear-gradient(#8fa1b9,#6a83a6 50%,#5877a2 51%,#4e6d99);
+ --navbg:linear-gradient(#bdcbdc,#597498);--barbtn:linear-gradient(#99aac2,#41618e);  /* iOS 6 UIKit nav art: smooth, no gloss split */
  --bluebtn:linear-gradient(#7aa5ef,#3b72d4 50%,#2861c9 51%,#3a73da);--greenbtn:linear-gradient(#8fd96b,#4caa2b 50%,#3c9a1d 51%,#4cae2a);
  --greybtn:linear-gradient(#fdfdfd,#e3e6ea);--emboss:0 1px 0 rgba(255,255,255,.75);background:#c8cfd6}
 /* fixed backdrop: stays put while iOS rubber-bands the page, so the bounce shows pinstripes instead of a flat color */
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
 /* body scrolls, not the page: iOS 26 blurs the top edge of a scrolling page in the home-screen app, washing out the nav, and has no switch to turn that off */
 html{height:100%;overflow:hidden}
-body{height:100%;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;margin:0;font:17px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;-webkit-font-smoothing:antialiased;
+body{height:100%;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;overflow-x:hidden;margin:0;font:17px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;-webkit-font-smoothing:antialiased;
  padding:calc(56px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right),(100% - 30rem)/2) calc(72px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left),(100% - 30rem)/2)}
 a{color:var(--acc);text-decoration:none} small,.m{color:var(--mute)} small{font-size:13px} .err{color:#d70015} h2{font-size:19px;margin:0}
 html{touch-action:manipulation} /* no double-tap zoom; pinch is blocked by the viewport and gesturestart */
 button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5c542;outline-offset:2px}
 .nav{position:fixed;top:0;left:0;right:0;z-index:5;height:44px;padding:env(safe-area-inset-top) max(7px,env(safe-area-inset-right)) 0 max(7px,env(safe-area-inset-left));
- display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:var(--navbg);box-shadow:inset 0 1px 0 #cdd5df,0 1px 0 #2d3642,0 2px 4px rgba(0,0,0,.25)}
+ display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:var(--navbg);box-shadow:inset 0 1px 0 #eff2f7,0 1px 0 #2d3642,0 2px 4px rgba(0,0,0,.25)}
 .nav h1{margin:0;font-size:20px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45)}
-.nav .bar{justify-self:start;width:auto;font-size:12px;font-weight:700;line-height:1.2;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45);background:var(--barbtn);border:1px solid #375073;
+.nav .bar{justify-self:start;width:auto;font-size:12px;font-weight:700;line-height:1.2;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45);background:var(--barbtn);border:1px solid #2f4769;border-top-color:#343a42;
  border-radius:5px;padding:6px 10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 0 rgba(255,255,255,.25)} .nav .bar.r{justify-self:end}
+/* iOS 6 back button: arrow art drawn after UIKit's UINavigationBarDefaultBack, stretched through the middle */
+.nav .back{display:inline-flex;align-items:center;height:30px;box-sizing:border-box;max-width:40vw;overflow:hidden;white-space:nowrap;padding:0 5px 0 1px;background:none;box-shadow:none;border-radius:0;
+ border:solid transparent;border-width:0 5px 0 13px;border-image:url(/static/back.svg) 0 10 0 26 fill/0 5px 0 13px} .nav .back:active{filter:brightness(.8)}
+#pg{will-change:transform}
 h3.hdr{font-size:17px;font-weight:700;color:var(--head);margin:20px 10px 7px;text-shadow:var(--emboss)}
 .ftr{font-size:14px;color:var(--head);text-align:center;text-shadow:var(--emboss);margin:7px 12px 0}
 .c,.g{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8);overflow:hidden}
@@ -376,7 +380,7 @@ details[open]>summary:after{transform:rotate(135deg)} details>:not(summary){marg
 html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6fa8ff;--head:#8b9099;--emboss:0 -1px 0 #000;
  --pin:repeating-linear-gradient(90deg,#1b1d21 0 5px,#202227 5px 7px);--navbg:linear-gradient(#5f656f,#3b4048 50%,#30343b 51%,#23262b);
  --barbtn:linear-gradient(#4a4f58,#24272c);--greybtn:linear-gradient(#4a4f58,#2c2f34);background:#1d1f23}
-.dark body{color:#e6e8eb} .dark .nav{box-shadow:inset 0 1px 0 #7a808a,0 1px 0 #0b0c0e,0 2px 4px rgba(0,0,0,.5)} .dark .nav .bar{border-color:#111}
+.dark body{color:#e6e8eb} .dark .nav{box-shadow:inset 0 1px 0 #7a808a,0 1px 0 #0b0c0e,0 2px 4px rgba(0,0,0,.5)} .dark .nav .bar{border-color:#111} .dark .nav .back{border-image-source:url(/static/back-dark.svg)}
 .dark .c,.dark .g{background:#2c2f34;border-color:#0d0e10;box-shadow:0 1px 0 rgba(255,255,255,.06)}
 .dark .row,.dark details>summary{background:linear-gradient(#34373d,#2a2d32);box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
 .dark input{background:#1f2125;border-color:#0d0e10;color:#e6e8eb;box-shadow:inset 0 1px 3px #000} .dark textarea{background:#1f2125;border-color:#0d0e10;color:#ccc}
@@ -387,8 +391,19 @@ html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6
 .spin{width:37px;height:37px;animation:spin 1s steps(12) infinite} @keyframes spin{to{transform:rotate(360deg)}}
 .scrim.clear{background:none}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
-<header class=nav><button type=button class=bar onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button><h1 id=navT>sidedrop</h1>
-<button type=button class="bar r" onclick="reloadData()">Reload</button></header>
+{% if back %}<header class=nav><a class="bar back" href="{{ back[1] }}" onclick="return goBack(this.href)">{{ back[0] }}</a><h1>{{ title }}</h1><span></span></header>
+<script>/* a pushed page: tap or edge-swipe pops back. history.back() keeps the previous page's scroll, like a native pop; first visits (no "/" behind us) follow the link */
+function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.length>1){history.back();return false}}catch(e){}location.href=h;return false}
+/* Safari has its own edge swipe; the home-screen app has none, so draw one there */
+if(navigator.standalone||matchMedia("(display-mode: standalone)").matches)addEventListener("DOMContentLoaded",()=>{
+ let pg=document.getElementById("pg"),x0=null,y0,t0,dx=0,on=0,set=(x,a)=>{pg.style.transition=a?"transform .3s cubic-bezier(.2,.8,.3,1)":"none";pg.style.transform=x?`translateX(${x}px)`:"";pg.style.boxShadow=x?"-4px 0 10px rgba(0,0,0,.3)":""};
+ addEventListener("touchstart",e=>{let t=e.touches[0];x0=e.touches.length==1&&t.clientX<24?t.clientX:null;y0=t.clientY;t0=e.timeStamp;dx=on=0},{passive:true});
+ addEventListener("touchmove",e=>{if(x0==null)return;let t=e.touches[0];dx=Math.max(0,t.clientX-x0);
+  if(!on){if(Math.abs(t.clientY-y0)>Math.max(10,dx)){x0=null;return}on=dx>8}if(on){e.preventDefault();set(dx)}},{passive:false});
+ let end=e=>{if(x0==null)return;x0=null;let go=on&&e.type=="touchend"&&(dx>innerWidth/3||dx/(e.timeStamp-t0)>.5);set(go?innerWidth:0,1);if(go)setTimeout(()=>goBack("{{ back[1] }}"),300)};
+ addEventListener("touchend",end);addEventListener("touchcancel",end);addEventListener("pageshow",()=>set(0))})</script>
+{% else %}<header class=nav><button type=button class=bar onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button><h1 id=navT>sidedrop</h1>
+<button type=button class="bar r" onclick="reloadData()">Reload</button></header>{% endif %}
 <div class="scrim clear" id=reloading hidden><div class=hud role=status><svg class=spin viewBox="0 0 24 24" aria-hidden=true><g stroke="#d0d0d0" stroke-width="2.2" stroke-linecap="round">
 <line x1=12 y1=2.5 x2=12 y2=7 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(30 12 12)" opacity=.92 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(60 12 12)" opacity=.84 />
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(90 12 12)" opacity=.76 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(120 12 12)" opacity=.68 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(150 12 12)" opacity=.6 />
@@ -405,7 +420,7 @@ Reloading Data</div></div>
 function goTo(el){let b=document.body;b.scrollTo({top:Math.min(b.scrollTop+el.getBoundingClientRect().top-56,b.scrollHeight-b.clientHeight),behavior:"smooth"})}
 addEventListener("gesturestart",e=>e.preventDefault())  // Safari ignores user-scalable=no for pinch
 function reloadData(){reloading.hidden=false;fetch("/refresh",{method:"POST"}).catch(()=>{}).finally(()=>{history.replaceState(null,"","/"+location.hash);location.reload()})}  // replace() to the same /#tab only jumps to the hash, it never reloads</script>
-{{ body|safe }}""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
+<main id=pg>{{ body|safe }}</main>""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
 
 
 def file_labels(folder):
@@ -414,12 +429,13 @@ def file_labels(folder):
     return {k.strip(): v.strip() for k, _, v in (l.partition("=") for l in f.read_text().splitlines() if "=" in l)} if f.exists() else {}
 
 
-def page(body, **ctx):
+def page(body, back=None, title="sidedrop", **ctx):
+    """back=("More", "/#more") makes it a pushed screen: title in the nav, iOS back button and edge swipe."""
     stats = None
     if logged_in() and PROFILE.exists():  # for the About alert: devices used, and when the profile (so every app) expires
         prof = embedded_plist(PROFILE.read_bytes())
         stats = (len(prof.get("ProvisionedDevices", [])), prof.get("ExpirationDate"))
-    return render_template_string(PAGE, body=render_template_string(body, stats=stats, **ctx), stats=stats)
+    return render_template_string(PAGE, body=render_template_string(body, stats=stats, **ctx), stats=stats, back=back, title=title)
 
 
 @app.get("/")
@@ -730,6 +746,7 @@ def is_admin():
     return bool(ADMIN_PASSWORD) and logged_in() and bool(session.get("admin")) and bool(session.get("csrf"))
 
 
+MORE = ("More", "/#more")  # back button for screens pushed from the More tab
 ADMIN_CSS = """<style>.act{flex:none;width:auto;min-width:76px;padding:5px 10px;font-size:12px;border-radius:4px;letter-spacing:.02em}
 .act.red{border-color:#8a1c1c;background:linear-gradient(#f58b8b,#d43a3a 50%,#c22424 51%,#d23333)} .off>div{opacity:.5} .row b{font-weight:700}</style>"""
 
@@ -753,10 +770,10 @@ def admin():
             time.sleep(2)
             err = "Wrong admin password."
     if not is_admin():
-        return page(ADMIN_CSS + """<p><a href=/#more>‹ More</a></p><h3 class=hdr>Manage iPhones</h3>
+        return page(ADMIN_CSS + """
 <form class=c method=post><input type=password name=password placeholder="Admin password" aria-label="Admin password" autofocus required
  oninput="this.form.querySelector('button').disabled=!this.value"><script>addEventListener("pageshow",()=>{let i=document.querySelector("input[name=password]");i.oninput()})</script>
-{% if err %}<p class=err>{{ err }}</p>{% endif %}<button disabled>Unlock</button></form>""", err=err)
+{% if err %}<p class=err>{{ err }}</p>{% endif %}<button disabled>Unlock</button></form>""", back=MORE, title="Manage iPhones", err=err)
     seen, me = load_json(SEEN), token_udid(request.cookies.get("device", ""))
     now = time.time()
     def ago(t):
@@ -766,8 +783,8 @@ def admin():
     try:
         listed = asc("GET", "/devices", params={"filter[platform]": "IOS", "limit": 200})["data"]
     except Exception as e:
-        return page(ADMIN_CSS + """<p><a href=/#more>‹ More</a></p><h3 class=hdr>Manage iPhones</h3>
-<p class="c err">Apple's developer service didn't answer. Try again in a few minutes.<small>{{ e }}</small></p>""", e=str(e)[:200])
+        return page(ADMIN_CSS + """
+<p class="c err">Apple's developer service didn't answer. Try again in a few minutes.<small>{{ e }}</small></p>""", back=MORE, title="Manage iPhones", e=str(e)[:200])
     for d in listed:
         a = d["attributes"]
         added = datetime.datetime.strptime(a["addedDate"][:10], "%Y-%m-%d") if a.get("addedDate") else None
@@ -775,14 +792,14 @@ def admin():
                             on=a.get("status") == "ENABLED", added=added, me=a.get("udid") == me,
                             used=f"Last used {ago(seen[a['udid']])}" if a.get("udid") in seen else "Not seen yet"))
     devices.sort(key=lambda d: (not d["on"], -(d["added"].timestamp() if d["added"] else 0)))
-    return page(ADMIN_CSS + """<p><a href=/#more>‹ More</a></p><h3 class=hdr>Manage iPhones</h3>
+    return page(ADMIN_CSS + """
 <div class=g>{% for d in devices %}<div class="row{{ '' if d.on else ' off' }}"><div><b>{{ d.name }}</b>{% if d.me %} · this iPhone{% endif %}
 <small>{{ d.model }}{% if d.added %} · added {{ d.added.strftime('%b %-d, %Y') }}{% endif %}</small><small>{{ d.used }}{% if not d.on %} · disabled{% endif %}</small></div>
 <form method=post action=/admin/device data-name="{{ d.name }}" onsubmit="{% if d.on %}if(!confirm('Disable '+this.dataset.name+'? Its apps stop opening.'))return false;{% endif %}this.querySelector('button').textContent='Saving…'">
 <input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=id value="{{ d.id }}"><input type=hidden name=status value="{{ 'DISABLED' if d.on else 'ENABLED' }}">
 <button class="act{{ ' red' if d.on }}">{{ 'DISABLE' if d.on else 'ENABLE' }}</button></form></div>{% endfor %}</div>
 <p class=ftr>{{ devices|selectattr('on')|list|length }} enabled, {{ devices|rejectattr('on')|list|length }} disabled. Disabling takes an iPhone out of the profile, so its apps stop opening.
-Apple still counts it toward the 100 until your membership renews, when you can remove it at developer.apple.com.</p>""",
+Apple still counts it toward the 100 until your membership renews, when you can remove it at developer.apple.com.</p>""", back=MORE, title="Manage iPhones",
                 devices=devices, csrf=session["csrf"])
 
 
@@ -852,7 +869,7 @@ def sign_custom():
     if not logged_in():
         abort(403)
     if not PROFILE.exists():
-        return page("<p class='c err'>No iPhones are registered yet.</p><p><a href=/>Back</a></p>")
+        return page("<p class='c err'>No iPhones are registered yet.</p>", back=MORE, title="Sign")
     CUSTOM.mkdir(parents=True, exist_ok=True)
     for old in CUSTOM.glob("*.ipa"):  # ponytail: cleanup piggybacks on new signs; links die with LINK_TTL anyway
         if old.stat().st_mtime < time.time() - LINK_TTL:
@@ -871,19 +888,19 @@ def sign_custom():
                     for chunk in r.iter_content(1 << 20):
                         f.write(chunk)
         else:
-            return page("<p class='c err'>Pick an .ipa or paste an http(s) link.</p><p><a href=/>Back</a></p>")
+            return page("<p class='c err'>Pick an .ipa or paste an http(s) link.</p>", back=MORE, title="Sign")
         with lock:
             sign_ipa(src, out)
         info = ipa_info(out)
     except Exception as e:
         out.unlink(missing_ok=True)
-        return page("<p class='c err'>Couldn't sign that: {{ e }}</p><p><a href=/>Back</a></p>", e=e)
+        return page("<p class='c err'>Couldn't sign that: {{ e }}</p>", e=e, back=MORE, title="Sign")
     finally:
         src.unlink(missing_ok=True)
     return page("""<div class=c><h3>{{ i.title }} <small>v{{ i.short }}</small></h3>
 <p><a class=b href="itms-services://?action=download-manifest&url={{ m }}">Install {{ i.title }}</a></p>
-<small>Link works for 7 days. Developer Mode must be on.</small></div><p><a href=/>Back</a></p>""",
-                i=info, m=quote(signed_url(f"/m/custom/{name}.plist"), safe=""))
+<small>Link works for 7 days. Developer Mode must be on.</small></div>""",
+                i=info, m=quote(signed_url(f"/m/custom/{name}.plist"), safe=""), back=MORE, title="Sign")
 
 
 @app.post("/sync")
