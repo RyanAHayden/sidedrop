@@ -401,7 +401,8 @@ Reloading Data</div></div>
 <div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){location.hash='more';d.open=true;setTimeout(()=>goTo(d),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
 <script>addEventListener("keydown",e=>{if(e.key=="Escape")about.hidden=true})
 /* body is the scroller; scrollIntoView would also scroll the locked <html> and drag the fixed nav down */
-function goTo(el){document.body.scrollBy({top:el.getBoundingClientRect().top-56,behavior:"smooth"})}
+/* clamp to the real bottom: iOS lets a smooth scroll on a non-root scroller overshoot past the end, then snaps back on the next touch */
+function goTo(el){let b=document.body;b.scrollTo({top:Math.min(b.scrollTop+el.getBoundingClientRect().top-56,b.scrollHeight-b.clientHeight),behavior:"smooth"})}
 addEventListener("gesturestart",e=>e.preventDefault())  // Safari ignores user-scalable=no for pinch
 function reloadData(){reloading.hidden=false;fetch("/refresh",{method:"POST"}).catch(()=>{}).finally(()=>{history.replaceState(null,"","/"+location.hash);location.reload()})}  // replace() to the same /#tab only jumps to the hash, it never reloads</script>
 {{ body|safe }}""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
@@ -472,7 +473,8 @@ def home():
 .get.blue{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-color:#2b4f8a;background:var(--bluebtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
 .get[aria-expanded=true]{color:#7d8794;background:linear-gradient(#c9ced5,#dfe3e8);box-shadow:inset 0 1px 3px rgba(0,0,0,.3)}
 .locked .get{min-width:44px}
-.steps{background:linear-gradient(#f3f5f8,#fff);max-height:0;overflow:hidden;transition:max-height .28s ease} .steps.open{max-height:40rem;border-top:1px solid var(--sep)}
+.steps{background:linear-gradient(#f3f5f8,#fff);display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s cubic-bezier(.25,.1,.25,1)} .steps.open{grid-template-rows:1fr}
+.steps>div{overflow:hidden;min-height:0} .steps .step:first-child{box-shadow:inset 0 1px var(--sep)}  /* real-height animation; max-height snapped */
 .step{display:flex;align-items:center;gap:10px;padding:8px 10px 8px 20px} .step+.step{border-top:1px dashed #d4d9df}
 .step>div{flex:1;min-width:0} .step b{display:block;font-size:15px} .step small{display:block}
 .num{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
@@ -563,12 +565,12 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% macro install_list(apps) %}<div class="g{{ '' if enrolled else ' locked' }}">{% for a in apps %}
 <div class=row>{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
 <div>{{ a.title }}<small>Version {{ a.short }}{% if a.files %} · needs {{ a.files|length }} file{{ 's' if a.files|length > 1 }}{% endif %}</small></div>{{ install(a) }}</div>
-{% if enrolled and a.files %}{% set labels = file_labels(a.files[0].parent) %}<div class=steps>
+{% if enrolled and a.files %}{% set labels = file_labels(a.files[0].parent) %}<div class=steps><div>
 <div class=step><span class=num>1</span><div><b>Install the app</b></div><a class="get go" data-app="{{ a.name }}" aria-label="Install {{ a.title }}" onclick="mark(this);this.closest('.step').classList.add('ok')"
  href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">INSTALL</a></div>
 {% for f in a.files %}<div class=step><span class=num>{{ loop.index + 1 }}</span><div><b>Download {{ labels.get(f.name, f.name) }}</b>
 <small>{% if f.name in labels %}{{ f.name }} · {% endif %}{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · save to Files</small></div>
-<a class="get blue" href="{{ adl(f) }}" onclick="this.closest('.step').classList.add('ok')">DOWNLOAD</a></div>{% endfor %}</div>{% endif %}
+<a class="get blue" href="{{ adl(f) }}" onclick="this.closest('.step').classList.add('ok')">DOWNLOAD</a></div>{% endfor %}</div></div>{% endif %}
 {% endfor %}</div>{% endmacro %}
 
 <section class=page id=t-apps data-title=sidedrop>
