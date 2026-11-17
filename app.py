@@ -447,7 +447,7 @@ details[open]>summary:after{transform:rotate(135deg)} details>:not(summary){marg
 .alert h3{margin:0 0 6px;font-size:17px} .alert p{margin:0 0 12px;font-size:15px}
 .abtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 /* UIKit alert buttons: UIPopupAlertSheetDefaultButton (Cancel), UIPopupAlertSheetButton (OK), UIPopupAlertSheetButtonPress */
-.alert .abtns button{height:43px;padding:0;font-size:16px;border:1px solid rgba(0,0,0,.3);border-radius:6px;box-shadow:0 1px 0 rgba(255,255,255,.18);
+.alert .abtns button{height:43px;padding:0;font-size:16px;border:1px solid rgba(0,0,0,.3);border-radius:6px;box-shadow:none;
  background:linear-gradient(rgba(255,255,255,.62),rgba(255,255,255,.1) 50%,rgba(255,255,255,0) 50%,rgba(255,255,255,.1))}
 .alert .abtns .ok{background:linear-gradient(rgba(255,255,255,.81),rgba(255,255,255,.3) 50%,rgba(255,255,255,.2) 50%,rgba(255,255,255,.3))}
 /* Dark Mode (follows the phone, or the More tab switch): gunmetal bars, dark pinstripes, inverted emboss */
