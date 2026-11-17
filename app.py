@@ -408,14 +408,16 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5
  border-radius:5px;padding:6px 10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 0 rgba(255,255,255,.25)} .nav .bar.r{justify-self:end}
 /* iOS 6 back button: arrow art drawn after UIKit's UINavigationBarDefaultBack, stretched through the middle */
 .nav .back{display:inline-flex;align-items:center;height:30px;box-sizing:border-box;max-width:40vw;overflow:hidden;white-space:nowrap;padding:0 5px 0 1px;background:none;box-shadow:none;border-radius:0;
- border:solid transparent;border-width:0 5px 0 13px;border-image:url(/static/back.svg) 0 10 0 26 fill/0 5px 0 13px} .nav .back:active{filter:brightness(.8)}
+ border:solid transparent;border-width:0 5px 0 13px;border-image:url(/static/back.svg) 0 10 0 26 fill/0 5px 0 13px} .nav .back:active{border-image-source:url(/static/back-pressed.svg)} .dark .nav .back:active{filter:brightness(.75)}
 /* pressed states (UIKit's *Pressed art); iOS only shows :active once the page has a touch listener, added below */
-.nav .bar:not(.back):active{background:linear-gradient(#8693ac,#283e6b);box-shadow:inset 0 1px 3px rgba(0,0,0,.4),0 1px 0 rgba(255,255,255,.25)}
-.dark .nav .bar:not(.back):active{background:linear-gradient(#1c1e22,#3a3e45)}
-.alert .abtns button:active{background:linear-gradient(rgba(0,0,0,.15),rgba(0,0,0,.35));box-shadow:inset 0 1px 4px rgba(0,0,0,.6)}
+.nav .bar:not(.back):active{background:linear-gradient(#8b97af,#283e6b);border-color:#1c2c4f;border-top-color:#30343c}
+.dark .nav .bar:not(.back):active{background:linear-gradient(#2a2d32,#121316)}
+.alert .abtns button:active{background:linear-gradient(rgba(185,185,185,.82),rgba(62,62,62,.61) 50%,rgba(3,3,3,.61) 50%,rgba(24,24,24,.57))}
 .sw:active .k{background:linear-gradient(#bcbcbc,#e6e6e6)} .dark .sw:active .k{background:linear-gradient(#55595f,#2e3136)}
-.sw.drag i:before{transform:translateX(calc((var(--x) - 52px) * 1.519));transition:none} .sw.drag .k{transform:translateX(var(--x));transition:none} .sw.drag i:after{opacity:0}
-#sb.on{pointer-events:auto} #sb::before{content:"";position:absolute;inset:-12px -2px -12px -26px} #sb.grab{width:7px;right:1px;border-radius:4px}
+.sw.drag i:before{transform:translateX(calc(var(--x) - 52px));transition:none} .sw.drag .k{transform:translateX(var(--x));transition:none} .sw.drag i:after{opacity:1;transform:translateX(var(--x))}
+#sb.on{pointer-events:auto}
+/* chrome isn't text: no selection or callout on a long press (holding the scroll indicator selected the tab labels) */
+.nav,.tabs,#sb,.sw,button,.get,.abtns,.grabbing{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none} #sb::before{content:"";position:absolute;inset:-12px -2px -12px -26px} #sb.grab{width:7px;right:1px;border-radius:4px}
 h3.hdr{font-size:17px;font-weight:700;color:var(--head);margin:20px 10px 7px;text-shadow:var(--emboss)}
 .ftr{font-size:14px;color:var(--head);text-align:center;text-shadow:var(--emboss);margin:7px 12px 0}
 .c,.g{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8);overflow:hidden}
@@ -444,9 +446,10 @@ details[open]>summary:after{transform:rotate(135deg)} details>:not(summary){marg
 @keyframes pop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.07);opacity:1}100%{transform:scale(1)}}
 .alert h3{margin:0 0 6px;font-size:17px} .alert p{margin:0 0 12px;font-size:15px}
 .abtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.alert .abtns button{height:43px;padding:0;font-size:16px;border:1px solid #0b1a3e;border-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3);
- background:linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.1) 50%,rgba(255,255,255,.05) 51%,rgba(255,255,255,.15))}
-.alert .abtns .ok{background:linear-gradient(rgba(255,255,255,.5),rgba(255,255,255,.2) 50%,rgba(255,255,255,.12) 51%,rgba(255,255,255,.25))}
+/* UIKit alert buttons: UIPopupAlertSheetDefaultButton (Cancel), UIPopupAlertSheetButton (OK), UIPopupAlertSheetButtonPress */
+.alert .abtns button{height:43px;padding:0;font-size:16px;border:1px solid rgba(0,0,0,.3);border-radius:6px;box-shadow:0 1px 0 rgba(255,255,255,.18);
+ background:linear-gradient(rgba(255,255,255,.62),rgba(255,255,255,.1) 50%,rgba(255,255,255,0) 50%,rgba(255,255,255,.1))}
+.alert .abtns .ok{background:linear-gradient(rgba(255,255,255,.81),rgba(255,255,255,.3) 50%,rgba(255,255,255,.2) 50%,rgba(255,255,255,.3))}
 /* Dark Mode (follows the phone, or the More tab switch): gunmetal bars, dark pinstripes, inverted emboss */
 html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6fa8ff;--head:#8b9099;--emboss:0 -1px 0 #000;
  --pin:repeating-linear-gradient(90deg,#1b1d21 0 5px,#202227 5px 7px);--navbg:linear-gradient(#5f656f,#3b4048 50%,#30343b 51%,#23262b);
@@ -492,14 +495,17 @@ addEventListener("DOMContentLoaded",()=>{
  let draw=()=>{let m=g();if(m.h<=1)return;let y=Math.min(Math.max(b.scrollTop/m.h,0),1);sb.style.top=m.n+3+(m.track-m.th)*y+"px";sb.style.height=m.th+"px";
   sb.style.opacity=1;sb.classList.add("on");clearTimeout(t);if(!grab)t=setTimeout(()=>{sb.style.opacity=0;sb.classList.remove("on")},grab===null?500:900)};
  b.addEventListener("scroll",draw,{passive:true});
- sb.addEventListener("touchstart",e=>{grab=e.touches[0].clientY-sb.getBoundingClientRect().top;sb.classList.add("grab");clearTimeout(t)},{passive:true});
+ sb.addEventListener("touchstart",e=>{e.preventDefault();grab=e.touches[0].clientY-sb.getBoundingClientRect().top;sb.classList.add("grab");b.classList.add("grabbing");clearTimeout(t)},{passive:false});  // preventDefault: no long-press text selection
  sb.addEventListener("touchmove",e=>{e.preventDefault();let m=g();b.scrollTop=(e.touches[0].clientY-grab-m.n-3)/(m.track-m.th)*m.h},{passive:false});
- sb.addEventListener("touchend",()=>{grab=undefined;sb.classList.remove("grab");draw();grab=null});
+ sb.addEventListener("touchend",()=>{grab=undefined;sb.classList.remove("grab");b.classList.remove("grabbing");draw();grab=null});
  /* on/off switches drag like UISwitch; a plain tap still toggles */
  document.querySelectorAll(".sw").forEach(w=>{let i=w.querySelector("input"),x0,s0,mv;
   w.addEventListener("touchstart",e=>{x0=e.touches[0].clientX;s0=i.checked?52:0;mv=false},{passive:true});
   w.addEventListener("touchmove",e=>{let d=e.touches[0].clientX-x0;if(!mv&&Math.abs(d)<4)return;mv=true;e.preventDefault();w.classList.add("drag");w.style.setProperty("--x",Math.min(52,Math.max(0,s0+d))+"px")},{passive:false});
-  w.addEventListener("touchend",e=>{if(!mv)return;e.preventDefault();let on=parseFloat(w.style.getPropertyValue("--x"))>26;w.classList.remove("drag");if(on!=i.checked){i.checked=on;i.dispatchEvent(new Event("change"))}})})})  // Safari ignores user-scalable=no for pinch
+  /* iOS still sends a click after the drag, which would toggle it back: swallow that one */
+  w.addEventListener("click",e=>{if(w.skip){e.preventDefault();w.skip=0}},true);
+  w.addEventListener("touchend",e=>{if(!mv)return;e.preventDefault();let on=parseFloat(w.style.getPropertyValue("--x"))>26;w.classList.remove("drag");
+   w.skip=1;setTimeout(()=>w.skip=0,400);if(on!=i.checked){i.checked=on;i.dispatchEvent(new Event("change"))}})})})  // Safari ignores user-scalable=no for pinch
 function reloadData(){reloading.hidden=false;fetch("/refresh",{method:"POST"}).catch(()=>{}).finally(()=>{history.replaceState(null,"","/"+location.hash);location.reload()})}  // replace() to the same /#tab only jumps to the hash, it never reloads</script>
 {% if back %}<section class=page>{{ body|safe }}</section>{% else %}{{ body|safe }}{% endif %}""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
 
