@@ -223,6 +223,7 @@ locked = A.app.test_client(); locked.post("/login", data={"password": "hunter2-b
 for _ in range(5): locked.post("/admin", data={"password": "nope"})
 assert b"Too many wrong passwords" in locked.post("/admin", data={"password": "admin-pass-also-long"}).data
 A.admin_fails.clear()
+assert b'og:image content="https://x.test/static/og.png"' in A.app.test_client().get("/").data  # link preview on the login page too
 assert c.get("/static/sdp1.jpg").status_code == 200  # setup screenshots served
 assert A.app.test_client().post("/refresh").status_code == 403 and c.post("/refresh").status_code == 204  # Reload button
 assert b"Setup Complete" in c.get("/?enrolled=" + A.device_token("00008130-AAAA")).data and b"Setup Complete" not in c.get("/").data
