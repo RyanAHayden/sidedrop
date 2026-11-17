@@ -1,5 +1,5 @@
 """sidedrop: password-gated UDID enrollment, ad hoc OTA installs and private file downloads."""
-import base64, hashlib, hmac, os, plistlib, re, subprocess, threading, time, uuid, zipfile, zlib
+import base64, datetime, hashlib, hmac, itertools, json, os, plistlib, re, subprocess, threading, time, uuid, zipfile, zlib
 from pathlib import Path
 from urllib.parse import quote
 
@@ -40,6 +40,14 @@ app.secret_key = SECRET
 app.config.update(SESSION_COOKIE_SECURE=PUBLIC_URL.startswith("https"), SESSION_COOKIE_HTTPONLY=True,
                   SESSION_COOKIE_SAMESITE="Lax", PERMANENT_SESSION_LIFETIME=30 * 86400)
 lock = threading.Lock()  # ponytail: one global lock for ASC + signing, fine for a handful of friends
+INSTALLED, installed_lock = DATA / "installed.json", threading.Lock()  # {udid: {app: "short/build"}} from INSTALL taps, for Changes
+
+
+def installed():
+    try:
+        return json.loads(INSTALLED.read_text())
+    except (OSError, ValueError):
+        return {}
 
 
 # --- signed links: iOS installd and wget fetch without cookies, so links carry their own auth ---
@@ -211,7 +219,8 @@ def sync_sources():
     """Download the newest IPA of each app in SOURCES when its version changes."""
     for url, ids, third in SOURCES:
         seen = set()  # a source can list variants under one bundle ID (iOS 15 builds, …): the first is the main one
-        for a in requests.get(url, timeout=30).json().get("apps", []):
+        src = requests.get(url, timeout=30).json()
+        for a in src.get("apps", []):
             if (ids and a["bundleIdentifier"] not in ids) or a["bundleIdentifier"] in seen:
                 continue
             seen.add(a["bundleIdentifier"])
@@ -220,6 +229,9 @@ def sync_sources():
             # the source's name for it (YouMod, not the IPA's own "YouTube"), shown on its Install button
             (APPS / f".{slug}.third").write_text(a.get("name", "")) if third else (APPS / f".{slug}.third").unlink(missing_ok=True)
             (APPS / f".{slug}.icon").write_text(a.get("iconURL", ""))  # ponytail: hotlinked, cache locally if a host goes flaky
+            desc = (v.get("localizedDescription") or a.get("subtitle") or a.get("localizedDescription") or "").strip()
+            for k, val in {"source": src.get("name", ""), "date": v.get("date", ""), "desc": desc.splitlines()[0] if desc else ""}.items():
+                (APPS / f".{slug}.{k}").write_text(val)  # shown on the Changes tab
             marker = APPS / f".{slug}.version"
             if not v.get("downloadURL") or (marker.exists() and marker.read_text() == v["version"]):
                 continue
@@ -405,6 +417,17 @@ def home():
         a["title"] = (APPS / f".{a['name']}.third").read_text().strip() or a["title"]
     for a in apps:
         a["icon"] = (APPS / f".{a['name']}.icon").read_text().strip() if (APPS / f".{a['name']}.icon").exists() else ""
+    meta = lambda a, k: (APPS / f".{a['name']}.{k}").read_text().strip() if (APPS / f".{a['name']}.{k}").exists() else ""
+    for a in apps:
+        a["vkey"], a["source"], a["desc"] = f"{a['short']}/{a['version']}", meta(a, "source") or "sidedrop", meta(a, "desc")
+        try:
+            a["when"] = datetime.date.fromisoformat(meta(a, "date")[:10])
+        except ValueError:  # no release date from a source: when the IPA arrived
+            src = APPS / f"{a['name']}.ipa"
+            a["when"] = datetime.date.fromtimestamp((src if src.exists() else SIGNED / f"{a['name']}.ipa").stat().st_mtime)
+    mine = installed().get(token_udid(tok), {}) if enrolled else {}
+    updates = [a for a in apps if a["name"] in mine and mine[a["name"]] != a["vkey"]]
+    recent = [(d, list(g)) for d, g in itertools.groupby(sorted(apps, key=lambda a: a["when"], reverse=True)[:30], key=lambda a: a["when"])]
     apps = [a for a in apps if a not in feather and a not in third]
     files = sorted(p for p in FILES.rglob("*") if p.is_file()) if FILES.exists() else []
     resp = make_response(page("""<style>
@@ -464,11 +487,25 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .dark .tile{background:linear-gradient(#34373d,#2a2d32);color:#e6e8eb} .dark .pair .tile{border-color:#0d0e10;box-shadow:0 1px 0 rgba(255,255,255,.06)} .dark .split .tile+.tile{border-left-color:#17191c} .dark .tile:after{border-color:#777}
 .dark .sw i{border-color:#111;background:linear-gradient(#2b2e33,#3c4047);box-shadow:inset 0 1px 3px rgba(0,0,0,.8)} .dark .sw i:after{color:#9aa0a8}
 .dark .sw i:before{background:linear-gradient(#0b4fb0,#3d8cf0)} .dark .sw .k{background:linear-gradient(#6a6f78,#3c4047);border-color:#111}
+/* Changes tab: Cydia's plain list with sticky section strips (top is inside body's 56px padding, so -12px lands under the 44px nav) */
+.cy{margin:-12px -10px 0;background:#fff;border-bottom:1px solid #d0d4d9}
+.cyh{position:sticky;top:-12px;z-index:2;padding:1px 10px;font-size:19px;font-weight:700;color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.5);
+ background:linear-gradient(rgba(152,165,177,.92),rgba(184,193,201,.92));border-top:1px solid #8f9aa5;border-bottom:1px solid #a6afb8}
+.cyr{display:flex;align-items:flex-start;gap:9px;padding:8px 10px;border-top:1px solid #e0e0e0} .cyh+.cyr{border-top:0}
+.cyi{flex:none;width:30px;height:30px;margin-top:3px;border-radius:7px;object-fit:cover;display:grid;place-items:center;color:#fff;font-weight:700;font-size:15px;box-shadow:0 1px 2px rgba(0,0,0,.35)}
+.cyt{flex:1;min-width:0} .cyt b{display:block;font-size:19px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cyt small{display:block;padding-left:12px;color:#000;font-size:13px} .cyt p{margin:2px 0 0;color:#6d7480;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cyr .get{align-self:center}
+.dark .cy{background:#2c2f34;border-color:#0d0e10} .dark .cyr{border-color:#3a3d42} .dark .cyt small{color:#c9ced5}
+.dark .cyh{background:linear-gradient(rgba(86,92,102,.94),rgba(58,62,70,.94));border-color:#111}
+/* iOS 5 red count badge on the Changes tab */
+.badge{position:absolute;top:-2px;left:calc(50% + 4px);min-width:22px;height:22px;padding:0 6px;box-sizing:border-box;border-radius:11px;border:2px solid #fff;color:#fff;
+ font:700 13px/18px "Helvetica Neue",Helvetica,sans-serif;text-align:center;background:linear-gradient(#ff7b7b,#e60000 50%,#cc0000 51%,#d40000);box-shadow:0 1px 3px rgba(0,0,0,.6)}
 /* Cydia tab bar */
-.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;display:grid;grid-template-columns:repeat(5,1fr);gap:4px;
  padding:2px max(4px,env(safe-area-inset-right)) calc(2px + env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left));
  background:linear-gradient(#3a3a3a,#1a1a1a 50%,#000 51%,#0a0a0a);border-top:1px solid #000;box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
-.tabs a{display:grid;justify-items:center;gap:1px;padding:4px 0 3px;border-radius:3px;color:#999;font-size:10px;font-weight:700}
+.tabs a{position:relative;display:grid;justify-items:center;gap:1px;padding:4px 0 3px;border-radius:3px;color:#999;font-size:10px;font-weight:700}
 .tabs svg{width:30px;height:30px;fill:#8d8d8d}
 .tabs a[aria-current]{background:rgba(255,255,255,.14);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
 .tabs a[aria-current] svg{fill:url(#tabglow);filter:drop-shadow(0 0 3px rgba(88,170,255,.7))}
@@ -491,12 +528,12 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% endset %}
 {% macro install(a) %}{% if not enrolled %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>
 {% elif a.files %}<button type=button class=get aria-expanded=false onclick="steps(this)">GET</button>
-{% else %}<a class=get data-arm aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">GET</a>{% endif %}{% endmacro %}
+{% else %}<a class=get data-arm=GET data-app="{{ a.name }}" aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">GET</a>{% endif %}{% endmacro %}
 {% macro install_list(apps) %}<div class="g{{ '' if enrolled else ' locked' }}">{% for a in apps %}
 <div class=row>{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
 <div>{{ a.title }}<small>Version {{ a.short }}{% if a.files %} · needs {{ a.files|length }} file{{ 's' if a.files|length > 1 }}{% endif %}</small></div>{{ install(a) }}</div>
 {% if enrolled and a.files %}{% set labels = file_labels(a.files[0].parent) %}<div class=steps>
-<div class=step><span class=num>1</span><div><b>Install the app</b></div><a class="get go" aria-label="Install {{ a.title }}" onclick="this.closest('.step').classList.add('ok')"
+<div class=step><span class=num>1</span><div><b>Install the app</b></div><a class="get go" data-app="{{ a.name }}" aria-label="Install {{ a.title }}" onclick="mark(this);this.closest('.step').classList.add('ok')"
  href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">INSTALL</a></div>
 {% for f in a.files %}<div class=step><span class=num>{{ loop.index + 1 }}</span><div><b>Download {{ labels.get(f.name, f.name) }}</b>
 <small>{% if f.name in labels %}{{ f.name }} · {% endif %}{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · save to Files</small></div>
@@ -517,6 +554,18 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
+</section>
+
+{% macro cyrow(a, up) %}<div class="cyr{{ ' up' if up }}">{% if a.icon %}<img class=cyi src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=cyi style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
+<div class=cyt><b>{{ a.title }}</b><small>from {{ a.source }} · {{ a.short }}</small>{% if a.desc %}<p>{{ a.desc }}</p>{% endif %}</div>
+{% if up %}<a class=get data-arm=UPDATE data-app="{{ a.name }}" aria-label="Update {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">UPDATE</a>{% endif %}</div>{% endmacro %}
+<section class=page id=t-changes data-title=Changes><div class=cy>
+{% if updates %}<div class=cyh id=uph>Available Upgrades</div>{% for a in updates %}{{ cyrow(a, True) }}{% endfor %}{% endif %}
+{% for day, group in recent %}<div class=cyh>New at {{ day.strftime('%b %-d, %Y') }}</div>{% for a in group %}{{ cyrow(a, False) }}{% endfor %}{% endfor %}</div>
+{% if not recent %}<p class="c m">No apps yet.</p>{% endif %}
+<p class=ftr>{% if enrolled %}Upgrades show for apps you installed from here on this iPhone.{% else %}Register this iPhone to get upgrades.{% endif %}</p>
+<div class=scrim id=upq hidden onclick="if(event.target==this)this.hidden=true"><div class=alert role=alertdialog aria-modal=true aria-labelledby=upqT>
+<h3 id=upqT>Upgrade</h3><p id=upqL></p><div class=abtns><button type=button onclick="upq.hidden=true">Cancel</button><button type=button class=ok onclick="upgradeGo()">Confirm</button></div></div></div>
 </section>
 
 <section class=page id=t-feather data-title=Feather>
@@ -570,6 +619,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 
 <nav class=tabs aria-label=Sections>
 <a href=#apps><svg viewBox="0 0 30 30"><path d="M4 4h9v9H4zm13 0h9v9h-9zM4 17h9v9H4zm13 0h9v9h-9z"/></svg>Apps</a>
+<a href=#changes><svg viewBox="0 0 30 30"><path fill-rule=evenodd d="M15 3a12 12 0 1 0 0 24a12 12 0 1 0 0-24zm0 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18z"/><path d="M14 8h2.4v6.8l4.8 3.1-1.3 2-5.9-3.8z"/></svg>Changes<span class=badge id=badge{% if not updates %} hidden{% endif %}>{{ updates|length }}</span></a>
 <a href=#feather><svg viewBox="0 0 30 30"><path d="M25 4c-10 1-16 8-17 17l-3 5 1 1 5-3c10-1 15-7 16-17-3 2-6 4-10 4 3-1 6-4 8-7z"/></svg>Feather</a>
 <a href=#files><svg viewBox="0 0 30 30"><path d="M3 7h10l3 3h11v15H3z"/></svg>Files</a>
 <a href=#more><svg viewBox="0 0 30 30"><circle cx="7" cy="15" r="3"/><circle cx="15" cy="15" r="3"/><circle cx="23" cy="15" r="3"/></svg>More</a></nav>
@@ -578,18 +628,27 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 function show(){let t=location.hash.slice(1);if(!document.getElementById("t-"+t))t="apps";
  document.querySelectorAll(".page").forEach(p=>p.hidden=p.id!="t-"+t);
  document.querySelectorAll(".tabs a").forEach(a=>a.getAttribute("href")=="#"+t?a.setAttribute("aria-current","page"):a.removeAttribute("aria-current"));
- navT.textContent=document.getElementById("t-"+t).dataset.title;document.body.scrollTo(0,0)}
-addEventListener("hashchange",show);show();
-function disarm(keep){document.querySelectorAll(".get.go[data-arm]").forEach(b=>{if(b!=keep){b.classList.remove("go");b.textContent="GET"}})}
-function arm(b){if(b.classList.contains("go")){setTimeout(()=>disarm(),1500);return true}disarm(b);b.classList.add("go");b.textContent="INSTALL";return false}
+ navT.textContent=document.getElementById("t-"+t).dataset.title;document.body.scrollTo(0,0);navR()}
+/* on Changes the right nav button is Cydia's "Upgrade (n)" */
+function navR(){let n=document.querySelectorAll(".cyr.up").length,r=document.querySelector(".nav .bar.r"),c=location.hash=="#changes"&&n;
+ r.textContent=c?"Upgrade ("+n+")":"Reload";r.onclick=c?upgradeAll:reloadData;badge.textContent=n;badge.hidden=!n;let h=document.getElementById("uph");if(h)h.hidden=!n}
+function mark(b){let n=b.dataset.app;if(!n)return;navigator.sendBeacon("/installed",new URLSearchParams({name:n}));
+ setTimeout(()=>{document.querySelectorAll('.cyr.up [data-app="'+n+'"]').forEach(x=>x.closest(".cyr").remove());navR()},500)}  // after the link has followed: a removed link doesn't navigate
+function upgradeAll(){let l=[...document.querySelectorAll(".cyr.up b")].map(b=>b.textContent);upqT.textContent="Upgrade "+l.length+(l.length>1?" Apps":" App");upqL.textContent=l.join(", ");upq.hidden=false}
+/* ponytail: one install link every 3 s; iOS shows one install prompt per link, re-tap UPDATE on any it drops */
+function upgradeGo(){upq.hidden=true;[...document.querySelectorAll(".cyr.up a.get")].map(b=>[b,b.href]).forEach(([b,h],i)=>setTimeout(()=>{mark(b);location.href=h},i*3000))}
+addEventListener("hashchange",show);
+function disarm(keep){document.querySelectorAll(".get.go[data-arm]").forEach(b=>{if(b!=keep){b.classList.remove("go");b.textContent=b.dataset.arm}})}
+function arm(b){if(b.classList.contains("go")){mark(b);setTimeout(()=>disarm(),1500);return true}disarm(b);b.classList.add("go");b.textContent="INSTALL";return false}
 addEventListener("click",e=>{if(!e.target.closest("[data-arm]"))disarm()});
 function steps(b){let open=b.getAttribute("aria-expanded")!="true";b.setAttribute("aria-expanded",open);b.closest(".row").nextElementSibling.classList.toggle("open",open)}
 function sdpDone(save){let d=document.getElementById("sdp");if(!d)return;d.classList.add("ok");d.open=false;regf.disabled=false;
  if(save){try{localStorage.sdp=1}catch(e){}regf.querySelector("input").focus()}}
 try{if(localStorage.sdp)sdpDone()}catch(e){}
 function nudge(){location.hash="apps";let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
+show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();darkSw.checked=document.documentElement.classList.contains("dark")});
-</script>""", error=error, enrolled=enrolled, just_enrolled=enrolled and bool(request.args.get("enrolled")), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
+</script>""", error=error, enrolled=enrolled, updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
         sources=read_urls("feather-sources.txt"),
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
@@ -611,6 +670,22 @@ def login():
         return redirect("/?err=1")
     session.permanent, session["ok"] = True, True
     return redirect("/")
+
+
+@app.post("/installed")
+def mark_installed():
+    """INSTALL tapped: remember this phone has the current version, so the Changes tab can offer later ones."""
+    udid, p = token_udid(request.cookies.get("device", "")), SIGNED / f"{request.form.get('name', '')}.ipa"
+    if not logged_in() or not udid or p.parent != SIGNED or not p.is_file():
+        abort(403)
+    i = ipa_info(p)
+    with installed_lock:
+        data = installed()
+        data.setdefault(udid, {})[p.stem] = f"{i['short']}/{i['version']}"
+        tmp = INSTALLED.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data))
+        tmp.replace(INSTALLED)
+    return "", 204
 
 
 @app.post("/refresh")

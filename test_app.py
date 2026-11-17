@@ -1,5 +1,5 @@
 """Run: python test_app.py  (no network; App Store Connect and zsign are stubbed)."""
-import os, plistlib, re, tempfile, zipfile
+import os, plistlib, re, tempfile, time, zipfile
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -192,6 +192,17 @@ for data in ({"ipa": (io.BytesIO(demo), "x.ipa")}, {"url": "https://gh/t.ipa"}):
     assert "/i/custom/" in mf["assets"][0]["url"] and anon.get(path_qs(mf["assets"][0]["url"])).status_code == 200
 assert "Pick an .ipa" in c.post("/sign", data={"url": "file:///etc/passwd"}).data.decode()
 assert not list((tmp / "signed" / "custom").glob(".*"))  # temp files cleaned up
+# Changes tab: installs are recorded per phone, and a newer version then shows as an upgrade with a badge
+html = c.get("/").data
+assert b"id=t-changes" in html and b"Available Upgrades" not in html and b"from sidedrop" in html
+assert A.app.test_client().post("/installed", data={"name": "Demo"}).status_code == 403
+assert c.post("/installed", data={"name": "../x"}).status_code == 403
+assert c.post("/installed", data={"name": "Demo"}).status_code == 204 and b"Available Upgrades" not in c.get("/").data
+with zipfile.ZipFile(tmp / "apps" / "Demo.ipa", "w") as z:
+    z.writestr("Payload/Demo.app/Info.plist", plistlib.dumps({"CFBundleIdentifier": "com.me.demo", "CFBundleVersion": "8", "CFBundleShortVersionString": "1.3", "CFBundleName": "Demo"}))
+os.utime(tmp / "apps" / "Demo.ipa", (time.time() + 5, time.time() + 5))
+html = c.get("/").data.decode()
+assert "Available Upgrades" in html and ">UPDATE</a>" in html and re.search(r"id=badge>1<", html), "upgrade offered"
 assert c.get("/static/sdp1.jpg").status_code == 200  # setup screenshots served
 assert A.app.test_client().post("/refresh").status_code == 403 and c.post("/refresh").status_code == 204  # Reload button
 assert b"Setup Complete" in c.get("/?enrolled=" + A.device_token("00008130-AAAA")).data and b"Setup Complete" not in c.get("/").data
