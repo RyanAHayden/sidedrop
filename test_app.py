@@ -229,4 +229,27 @@ assert b'og:image content="https://x.test/static/og.png"' in A.app.test_client()
 assert c.get("/static/sdp1.jpg").status_code == 200  # setup screenshots served
 assert A.app.test_client().post("/refresh").status_code == 403 and c.post("/refresh").status_code == 204  # Reload button
 assert b"Setup Complete" in c.get("/?enrolled=" + A.device_token("00008130-AAAA")).data and b"Setup Complete" not in c.get("/").data
+# web push: subscribe per phone; upgrades already waiting count as told; one push per new version; 410 drops the subscription
+import json
+from pywebpush import WebPushException
+sent = []
+A.webpush = lambda sub, data, **kw: sent.append((sub["endpoint"], json.loads(data)))
+assert len(A.vapid_public()) == 87 and A.vapid_public() in c.get("/").data.decode()
+assert c.get("/sw.js").status_code == 200 and c.get("/manifest.webmanifest").json["display"] == "standalone"
+sub = {"endpoint": "https://push.example/1", "keys": {"p256dh": "x", "auth": "y"}}
+assert A.app.test_client().post("/push", json=sub).status_code == 403
+assert c.post("/push", json={"endpoint": "http://x", "keys": {}}).status_code == 400
+assert c.post("/push", json=sub).status_code == 204
+A.notify_upgrades(); assert sent == []
+def release(short, build):
+    with zipfile.ZipFile(tmp / "apps" / "Demo.ipa", "w") as z:
+        z.writestr("Payload/Demo.app/Info.plist", plistlib.dumps({"CFBundleIdentifier": "com.me.demo", "CFBundleVersion": build, "CFBundleShortVersionString": short, "CFBundleName": "Demo"}))
+    os.utime(tmp / "apps" / "Demo.ipa", (time.time() + 10, time.time() + 10))
+    A.resign(force=True)
+release("1.4", "9"); A.notify_upgrades(); A.notify_upgrades()
+assert sent == [("https://push.example/1", {"title": "Upgrade Available", "body": "Demo 1.4 is available.", "url": "/#changes"})], sent
+def gone(*a, **k): raise WebPushException("gone", response=type("R", (), {"status_code": 410})())
+A.webpush = gone
+release("1.5", "10"); A.notify_upgrades()
+assert A.load_json(A.PUSH) == {}
 print("ok")

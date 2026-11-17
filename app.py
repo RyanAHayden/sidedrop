@@ -7,7 +7,9 @@ from urllib.parse import quote
 import jwt, requests
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import pkcs7, pkcs12
+from pywebpush import WebPushException, webpush
 from flask import Flask, abort, make_response, redirect, render_template_string, request, send_from_directory, session, url_for
 
 DATA = Path(os.environ.get("DATA", "/data"))
@@ -43,6 +45,8 @@ app.config.update(SESSION_COOKIE_SECURE=PUBLIC_URL.startswith("https"), SESSION_
                   SESSION_COOKIE_SAMESITE="Lax", PERMANENT_SESSION_LIFETIME=10 * 365 * 86400)
 lock = threading.Lock()  # ponytail: one global lock for ASC + signing, fine for a handful of friends
 INSTALLED, installed_lock = DATA / "installed.json", threading.Lock()  # {udid: {app: "short/build"}} from INSTALL taps, for Changes
+PUSH, push_lock = DATA / "push.json", threading.Lock()  # {endpoint: {sub, udid, sent: {app: "short/build"}}} web push subscriptions
+VAPID = DATA / "vapid.pem"  # web push signing key, made on first use
 SEEN = DATA / "seen.json"  # {udid: unix time} last page load per registered iPhone, for the admin page
 
 
@@ -270,6 +274,61 @@ def sync_source(url, ids, third):
         marker.write_text(v["version"])
 
 
+def vapid_public():
+    """Base64url public key the browser subscribes with; the private half signs each push."""
+    if not VAPID.exists():
+        VAPID.write_bytes(ec.generate_private_key(ec.SECP256R1()).private_bytes(
+            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+    pub = serialization.load_pem_private_key(VAPID.read_bytes(), None).public_key()
+    return base64.urlsafe_b64encode(pub.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)).rstrip(b"=").decode()
+
+
+def pending(udid, vers):
+    """Apps this phone installed that now have a newer signed version: {name: vkey}."""
+    mine = installed().get(udid, {})
+    return {n: vers[n]["vkey"] for n in mine if n in vers and mine[n] != vers[n]["vkey"]}
+
+
+def signed_versions():
+    vers = {p.stem: ipa_info(p) for p in SIGNED.glob("*.ipa")} if SIGNED.exists() else {}
+    for n, i in vers.items():
+        third = APPS / f".{n}.third"
+        i["vkey"], i["title"] = f"{i['short']}/{i['version']}", (third.read_text().strip() if third.exists() else "") or i["title"]
+    return vers
+
+
+def notify_upgrades():
+    """One notification per phone for upgrades it hasn't been told about yet; dead subscriptions are dropped."""
+    with push_lock:
+        subs, vers = load_json(PUSH), signed_versions()
+        for ep, s in list(subs.items()):
+            new = {n: v for n, v in pending(s["udid"], vers).items() if s["sent"].get(n) != v}
+            if not new:
+                continue
+            names = [vers[n]["title"] for n in new]
+            body = f"{names[0]} {vers[next(iter(new))]['short']} is available." if len(new) == 1 else f"New versions of {', '.join(names)}."
+            try:
+                webpush(s["sub"], json.dumps({"title": "Upgrade Available" if len(new) == 1 else f"{len(new)} Upgrades Available", "body": body, "url": "/#changes"}),
+                        vapid_private_key=str(VAPID), vapid_claims={"sub": PUBLIC_URL}, timeout=10)
+            except WebPushException as e:
+                if e.response is not None and e.response.status_code in (404, 410):  # unsubscribed or app removed
+                    del subs[ep]
+                else:
+                    print("push failed:", e, flush=True)
+                continue
+            s["sent"].update(new)
+        save_json(PUSH, subs)
+
+
+def resign_and_notify():
+    try:
+        with lock:
+            resign()
+        notify_upgrades()
+    except Exception as e:
+        print("resign/notify failed:", e, flush=True)
+
+
 sync_lock, last_sync = threading.Lock(), [0.0]
 
 
@@ -289,6 +348,7 @@ def sync_if_stale(max_age):
 def sync_loop():
     while True:
         sync_if_stale(0)
+        resign_and_notify()  # so phones hear about a release without anyone opening the page first
         time.sleep(3600)
 
 
@@ -315,7 +375,7 @@ PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=
 <title>sidedrop</title><meta name=description content="Apps shared between friends, signed for your iPhone.">
 <meta property=og:title content=sidedrop><meta property=og:description content="Apps shared between friends, signed for your iPhone."><meta property=og:site_name content=sidedrop>
 <meta property=og:type content=website><meta property=og:url content="%PUBLIC_URL%/"><meta property=og:image content="%PUBLIC_URL%/static/og.png"><meta property=og:image:width content=1200><meta property=og:image:height content=630>
-<meta name=twitter:card content=summary_large_image><meta name=twitter:image content="%PUBLIC_URL%/static/og.png"><link rel=apple-touch-icon href=/apple-touch-icon.png><meta name=theme-color content="#bdcbdc"><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=sidedrop>
+<meta name=twitter:card content=summary_large_image><meta name=twitter:image content="%PUBLIC_URL%/static/og.png"><link rel=apple-touch-icon href=/apple-touch-icon.png><link rel=manifest href=/manifest.webmanifest><meta name=theme-color content="#bdcbdc"><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=sidedrop>
 <script>/* Dark Mode follows the phone's theme until the More switch picks one (localStorage.dark = "1"/"0") */
 function theme(){let d=null;try{d=localStorage.dark}catch(e){}let on=document.documentElement.classList.toggle("dark",d?d=="1":matchMedia("(prefers-color-scheme: dark)").matches);
  document.querySelector("meta[name=theme-color]").content=on?"#5f656f":"#bdcbdc"}  /* Safari's top bar matches the nav */
@@ -388,7 +448,7 @@ html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6
 .hud{width:min(276px,100%);box-sizing:border-box;padding:34px 10px 26px;border-radius:14px;background:rgba(20,20,20,.82);color:#fff;text-align:center;font-weight:700;font-size:30px;line-height:1.1;letter-spacing:-.3px;
  display:grid;justify-items:center;gap:16px} /* Cydia's HUD: big bold label, grey spinner, no border */
 .spin{width:37px;height:37px;animation:spin 1s steps(12) infinite} @keyframes spin{to{transform:rotate(360deg)}}
-.scrim.clear{background:none}
+.scrim.clear{background:none} .a2l{text-align:left;font-size:15px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
 {% if back %}<header class=nav><a class="bar back" href="{{ back[1] }}" onclick="return goBack(this.href)">{{ back[0] }}</a><h1>{{ title }}</h1><span></span></header>
 <script>/* a pushed page: tapping back pops; iOS's own edge swipe (Safari and the home-screen app) does the same. history.back() keeps the previous page's scroll, like a native pop; first visits (no "/" behind us) follow the link */
@@ -641,7 +701,12 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:linear-gradient(#8fc6ff,#2a72d6)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
 <h3 class=hdr>Display</h3><div class=g><div class=row><div>Dark Mode</div><label class=sw><input type=checkbox id=darkSw aria-label="Dark Mode"
  onchange="try{localStorage.dark=this.checked?1:0}catch(e){}theme()"><i></i><span class=k></span></label></div></div>
+{% if enrolled %}<h3 class=hdr>Notifications</h3><div class=g><div class=row><div>Upgrade Alerts</div><label class=sw><input type=checkbox id=pushSw aria-label="Upgrade Alerts"
+ onchange="pushSet(this.checked)"><i></i><span class=k></span></label></div></div>
+<p class=ftr id=pushNote>Tells you when an app you installed has a new version.</p>{% endif %}
 <h3 class=hdr>Help</h3><div class=g>
+<details id=a2hs><summary>Add to Home Screen</summary><ol><li>In Safari, tap <b>Share</b> (on iOS 26 it's under <b>•••</b>).</li><li>Scroll down and tap <b>Add to Home Screen</b> (under <b>View More</b> if it isn't listed).</li>
+<li>Leave <b>Open as Web App</b> on and tap <b>Add</b>.</li><li>Open sidedrop from your Home Screen.</li></ol><div class=warn><span aria-hidden=true>🔔</span><div>Upgrade alerts only work from the Home Screen app.</div></div></details>
 <details id=dev><summary>Turn on Developer Mode</summary>
 <figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Privacy &amp; Security</b></span></figcaption>
 <img src=/static/dev1.jpg alt="Settings with Privacy and Security circled" width=640 height=243></figure>
@@ -659,6 +724,11 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <a class="b grey out" href=/logout>Sign out</a>
 </section>
 
+{% if enrolled %}<div class=scrim id=pushAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=pushT>
+<h3 id=pushT>Get Notified of Upgrades?</h3><p>sidedrop can tell you when an app you installed has a new version.</p>
+<div id=pushWeb hidden><p>Notifications only work from the Home Screen:</p><div class=a2l><ol><li>In Safari, tap <b>Share</b> (on iOS 26 it's under <b>•••</b>).</li><li>Scroll down and tap <b>Add to Home Screen</b> (under <b>View More</b> if it isn't listed).</li>
+<li>Leave <b>Open as Web App</b> on and tap <b>Add</b>.</li><li>Open sidedrop from your Home Screen.</li></ol></div></div>
+<div class=abtns><button type=button onclick="pushAsk.hidden=true">Not Now</button><button type=button class=ok id=pushOk>Allow</button></div></div></div>{% endif %}
 <nav class=tabs aria-label=Sections>
 <a href=#apps><svg viewBox="0 0 30 30"><path d="M4 4h9v9H4zm13 0h9v9h-9zM4 17h9v9H4zm13 0h9v9h-9z"/></svg>Apps</a>
 <a href=#changes><svg viewBox="0 0 30 30"><path fill-rule=evenodd d="M15 3a12 12 0 1 0 0 24a12 12 0 1 0 0-24zm0 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18z"/><path d="M14 8h2.4v6.8l4.8 3.1-1.3 2-5.9-3.8z"/></svg>Changes<span class=badge id=badge{% if not updates %} hidden{% endif %}>{{ updates|length }}</span></a>
@@ -675,12 +745,25 @@ function show(){let t=location.hash.slice(1);if(!document.getElementById("t-"+t)
 function navR(){let n=document.querySelectorAll(".cyr.up").length,r=document.querySelector(".nav .bar.r"),l=document.querySelector(".nav .bar:not(.r)"),ch=location.hash=="#changes",c=ch&&n;
  r.textContent=c?"Upgrade ("+n+")":"Reload";r.onclick=c?upgradeAll:reloadData;
  l.textContent=c?"Refresh":"About";l.onclick=c?reloadData:()=>{about.hidden=false;about.querySelector(".ok").focus()};badge.textContent=n;badge.hidden=!n;let h=document.getElementById("uph");if(h)h.hidden=!n}
-function mark(b){let n=b.dataset.app;if(!n)return;navigator.sendBeacon("/installed",new URLSearchParams({name:n}));
+function mark(b){let n=b.dataset.app;if(!n)return;navigator.sendBeacon("/installed",new URLSearchParams({name:n}));setTimeout(pushMaybe,1500);  // after iOS's install prompt
  setTimeout(()=>{document.querySelectorAll('.cyr.up [data-app="'+n+'"]').forEach(x=>x.closest(".cyr").remove());navR()},500)}  // after the link has followed: a removed link doesn't navigate
 function upgradeAll(){let l=[...document.querySelectorAll(".cyr.up b")].map(b=>b.textContent);upqT.textContent="Upgrade "+l.length+(l.length>1?" Apps":" App");upqL.textContent=l.join(", ");upq.hidden=false}
 /* ponytail: one install link every 3 s; iOS shows one install prompt per link, re-tap UPDATE on any it drops */
 function upgradeGo(){upq.hidden=true;[...document.querySelectorAll(".cyr.up a.get")].map(b=>[b,b.href]).forEach(([b,h],i)=>setTimeout(()=>{mark(b);location.href=h},i*3000))}
 addEventListener("hashchange",show);
+/* web push: iOS offers it only to the Home Screen app (separate storage from Safari, so Safari's "asked" doesn't stop the app asking) */
+const PUSHKEY="{{ vapid }}",pushOK="PushManager" in window&&"serviceWorker" in navigator&&{{ 'true' if enrolled else 'false' }};
+function pushSub(){return navigator.serviceWorker.register("/sw.js").then(r=>r.pushManager.getSubscription().then(s=>[r,s]))}
+function pushSet(on){if(!pushOK){pushSw.checked=false;let d=document.getElementById("a2hs");d.open=true;goTo(d);return}
+ if(!on){pushSub().then(([r,s])=>s&&s.unsubscribe());return}  // the server drops it the next time a push gets a 410
+ Notification.requestPermission().then(p=>{if(p!="granted")throw 0;return pushSub()}).then(([r,s])=>s||r.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:Uint8Array.from(atob(PUSHKEY.replace(/-/g,"+").replace(/_/g,"/")),c=>c.charCodeAt(0))}))
+  .then(s=>fetch("/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(s)})).catch(()=>{if(window.pushSw)pushSw.checked=false})}
+/* asked once per phone: after the first INSTALL tap or the first visit to Changes */
+function pushMaybe(){let a=null;try{a=localStorage.pushAsked}catch(e){}if(a||!window.pushAsk||(pushOK&&Notification.permission!="default"))return;
+ try{localStorage.pushAsked=1}catch(e){}pushWeb.hidden=pushOK;pushOk.textContent=pushOK?"Allow":"OK";let bs=pushOk.parentNode;bs.style.gridTemplateColumns=pushOK?"":"1fr";bs.firstElementChild.hidden=!pushOK;
+ pushOk.onclick=()=>{pushAsk.hidden=true;if(pushOK){pushSet(true);if(window.pushSw)pushSw.checked=true}};pushAsk.hidden=false}
+if(pushOK&&window.pushSw)pushSub().then(([r,s])=>pushSw.checked=!!s&&Notification.permission=="granted").catch(()=>{});
+let pushOnChanges=()=>{if(location.hash=="#changes")setTimeout(pushMaybe,600)};addEventListener("hashchange",pushOnChanges);pushOnChanges();
 function disarm(keep){document.querySelectorAll(".get.go[data-arm]").forEach(b=>{if(b!=keep){b.classList.remove("go");b.textContent=b.dataset.arm}})}
 function arm(b){if(b.classList.contains("go")){mark(b);setTimeout(()=>disarm(),1500);return true}disarm(b);b.classList.add("go");b.textContent="INSTALL";return false}
 addEventListener("click",e=>{if(!e.target.closest("[data-arm]"))disarm()});
@@ -691,7 +774,7 @@ try{if(localStorage.sdp)sdpDone()}catch(e){}
 function nudge(){location.hash="apps";let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();darkSw.checked=document.documentElement.classList.contains("dark")});
-</script>""", error=error, enrolled=enrolled, admin_on=bool(ADMIN_PASSWORD), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
+</script>""", error=error, enrolled=enrolled, vapid=vapid_public() if enrolled else "", admin_on=bool(ADMIN_PASSWORD), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")), apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
         sources=read_urls("feather-sources.txt"),
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
@@ -713,6 +796,35 @@ def login():
         return redirect("/?err=1")
     session.permanent, session["ok"] = True, True
     return redirect("/")
+
+
+@app.get("/sw.js")
+def service_worker():
+    """Shows pushes; tapping one opens Changes. Served from / so its scope is the whole site."""
+    return """self.addEventListener("push",e=>{let d=e.data.json();e.waitUntil(self.registration.showNotification(d.title,{body:d.body,icon:"/apple-touch-icon.png",data:d.url}))});
+self.addEventListener("notificationclick",e=>{e.notification.close();e.waitUntil(clients.openWindow(e.notification.data||"/"))});""", 200, {
+        "Content-Type": "text/javascript", "Cache-Control": "no-cache"}
+
+
+@app.get("/manifest.webmanifest")
+def manifest_json():  # iOS only offers web push to Home Screen apps with display: standalone
+    return {"name": "sidedrop", "short_name": "sidedrop", "display": "standalone", "start_url": "/", "background_color": "#c8cfd6",
+            "icons": [{"src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png"}]}
+
+
+@app.post("/push")
+def push_subscribe():
+    """Save this phone's push subscription. Upgrades already waiting count as told, so only new releases notify."""
+    udid, sub = token_udid(request.cookies.get("device", "")), request.get_json(silent=True) or {}
+    if not logged_in() or not udid:
+        abort(403)
+    if not str(sub.get("endpoint", "")).startswith("https://") or not isinstance(sub.get("keys"), dict):
+        abort(400)
+    with push_lock:
+        subs = load_json(PUSH)
+        subs[sub["endpoint"]] = {"sub": {"endpoint": sub["endpoint"], "keys": sub["keys"]}, "udid": udid, "sent": pending(udid, signed_versions())}
+        save_json(PUSH, subs)
+    return "", 204
 
 
 @app.post("/installed")
@@ -902,11 +1014,7 @@ def sync_now():
 
     def run():
         sync_if_stale(0)
-        try:
-            with lock:
-                resign()
-        except Exception as e:
-            print("resign failed:", e, flush=True)
+        resign_and_notify()
     threading.Thread(target=run, daemon=True).start()  # return right away; CI shouldn't wait on downloads
     return "", 202
 
