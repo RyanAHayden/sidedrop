@@ -448,7 +448,7 @@ html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6
 .hud{width:min(276px,100%);box-sizing:border-box;padding:34px 10px 26px;border-radius:14px;background:rgba(20,20,20,.82);color:#fff;text-align:center;font-weight:700;font-size:30px;line-height:1.1;letter-spacing:-.3px;
  display:grid;justify-items:center;gap:16px} /* Cydia's HUD: big bold label, grey spinner, no border */
 .spin{width:37px;height:37px;animation:spin 1s steps(12) infinite} @keyframes spin{to{transform:rotate(360deg)}}
-.scrim.clear{background:none}
+.scrim.clear{background:none} .nw{white-space:nowrap} .a2l>span{display:block;margin:2px 0} .ic{width:1.15em;height:1.15em;vertical-align:-.2em;margin-right:3px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
 {% if back %}<header class=nav><a class="bar back" href="{{ back[1] }}" onclick="return goBack(this.href)">{{ back[0] }}</a><h1>{{ title }}</h1><span></span></header>
 <script>/* a pushed page: tapping back pops; iOS's own edge swipe (Safari and the home-screen app) does the same. history.back() keeps the previous page's scroll, like a native pop; first visits (no "/" behind us) follow the link */
@@ -705,7 +705,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
  onchange="pushSet(this.checked)"><i></i><span class=k></span></label></div></div>
 <p class=ftr id=pushNote>Tells you when an app you installed has a new version.</p>{% endif %}
 <h3 class=hdr>Help</h3><div class=g>
-<details id=a2hs><summary>Add to Home Screen</summary><p>Tap <b>Share</b> → <b>Add to Home Screen</b>, then open sidedrop from there.</p></details>
+<details id=a2hs><summary>Add to Home Screen</summary><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open sidedrop from there</span></p></details>
 <details id=dev><summary>Turn on Developer Mode</summary>
 <figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Privacy &amp; Security</b></span></figcaption>
 <img src=/static/dev1.jpg alt="Settings with Privacy and Security circled" width=640 height=243></figure>
@@ -725,7 +725,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 
 {% if enrolled %}<div class=scrim id=pushAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=pushT>
 <h3 id=pushT>Get Notified of Upgrades?</h3><p>sidedrop can tell you when an app you installed has a new version.</p>
-<div id=pushWeb hidden><div><p>Tap <b>Share</b> → <b>Add to Home Screen</b>, then open sidedrop from there.</p></div></div>
+<div id=pushWeb hidden><div><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open sidedrop from there</span></p></div></div>
 <div class=abtns><button type=button onclick="pushAsk.hidden=true">Not Now</button><button type=button class=ok id=pushOk>Allow</button></div></div></div>{% endif %}
 <nav class=tabs aria-label=Sections>
 <a href=#apps><svg viewBox="0 0 30 30"><path d="M4 4h9v9H4zm13 0h9v9h-9zM4 17h9v9H4zm13 0h9v9h-9z"/></svg>Apps</a>
