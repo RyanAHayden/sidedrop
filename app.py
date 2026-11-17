@@ -496,6 +496,8 @@ function goTo(el){let b=document.body;b.scrollTo({top:Math.min(b.scrollTop+el.ge
 addEventListener("gesturestart",e=>e.preventDefault())
 addEventListener("touchstart",()=>{},{passive:true})  // without a touch listener iOS never shows :active
 addEventListener("DOMContentLoaded",()=>{
+ /* haptic tick: Safari has no vibration API, but toggling a hidden <input switch> plays the system switch haptic (iOS 18+); elsewhere navigator.vibrate. Only from a touch handler. */
+ window.hap=()=>{if(navigator.vibrate){navigator.vibrate(10);return}let l=document.createElement("label"),i=document.createElement("input");i.type="checkbox";i.setAttribute("switch","");l.style.cssText="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";l.append(i);document.body.append(l);l.click();l.remove()};
  /* scroll indicator: shows while scrolling; while it's showing, grab it to scrub like native */
  let b=document.body,sb=document.createElement("div"),t,grab=null,g=()=>{let n=document.querySelector(".nav").getBoundingClientRect().bottom,tb=document.querySelector(".tabs"),
   track=(tb?tb.getBoundingClientRect().top:innerHeight)-3-n-6,h=b.scrollHeight-b.clientHeight,th=Math.max(36,track*b.clientHeight/b.scrollHeight);return{n,track,h,th}};
@@ -503,7 +505,7 @@ addEventListener("DOMContentLoaded",()=>{
  let draw=()=>{let m=g();if(m.h<=1)return;let y=Math.min(Math.max(b.scrollTop/m.h,0),1);sb.style.top=m.n+3+(m.track-m.th)*y+"px";sb.style.height=m.th+"px";
   sb.style.opacity=1;sb.classList.add("on");clearTimeout(t);if(!grab)t=setTimeout(()=>{sb.style.opacity=0;sb.classList.remove("on")},grab===null?500:900)};
  b.addEventListener("scroll",draw,{passive:true});
- sb.addEventListener("touchstart",e=>{e.preventDefault();grab=e.touches[0].clientY-sb.getBoundingClientRect().top;sb.classList.add("grab");b.classList.add("grabbing");clearTimeout(t)},{passive:false});  // preventDefault: no long-press text selection
+ sb.addEventListener("touchstart",e=>{e.preventDefault();grab=e.touches[0].clientY-sb.getBoundingClientRect().top;sb.classList.add("grab");b.classList.add("grabbing");clearTimeout(t);hap()},{passive:false});  // preventDefault: no long-press text selection
  sb.addEventListener("touchmove",e=>{e.preventDefault();let m=g();b.scrollTop=(e.touches[0].clientY-grab-m.n-3)/(m.track-m.th)*m.h},{passive:false});
  sb.addEventListener("touchend",()=>{grab=undefined;sb.classList.remove("grab");b.classList.remove("grabbing");draw();grab=null});
  /* on/off switches drag like UISwitch; a plain tap still toggles */
