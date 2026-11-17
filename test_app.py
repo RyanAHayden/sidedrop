@@ -193,4 +193,6 @@ for data in ({"ipa": (io.BytesIO(demo), "x.ipa")}, {"url": "https://gh/t.ipa"}):
 assert "Pick an .ipa" in c.post("/sign", data={"url": "file:///etc/passwd"}).data.decode()
 assert not list((tmp / "signed" / "custom").glob(".*"))  # temp files cleaned up
 assert c.get("/static/sdp1.jpg").status_code == 200  # setup screenshots served
+assert A.app.test_client().post("/refresh").status_code == 403 and c.post("/refresh").status_code == 204  # Reload button
+assert b"Setup Complete" in c.get("/?enrolled=" + A.device_token("00008130-AAAA")).data and b"Setup Complete" not in c.get("/").data
 print("ok")
