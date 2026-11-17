@@ -609,11 +609,13 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
  onchange="try{localStorage.dark=this.checked?1:0}catch(e){}theme()"><i></i><span class=k></span></label></div></div>
 <h3 class=hdr>Help</h3><div class=g>
 <details id=dev><summary>Turn on Developer Mode</summary>
-<p class=m>Needed once per iPhone for apps not from the App Store.</p>
-<ol><li>Install an app first. The switch only shows up after that.</li>
-<li>Open Settings → Privacy &amp; Security → <b>Developer Mode</b> (near the bottom) → turn it on → <b>Restart</b>.</li>
-<li>After the restart, tap <b>Turn On</b> and enter your passcode. The apps open normally from then on.</li></ol>
-<div class=mini><div class=row><div>Developer Mode</div><label class=sw><input type=checkbox checked aria-label="Developer Mode (example of the switch)"><i></i><span class=k></span></label></div></div></details>
+<figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Privacy &amp; Security</b></span></figcaption>
+<img src=/static/dev1.jpg alt="Settings with Privacy and Security circled" width=640 height=243></figure>
+<figure class=shot><figcaption><span class=num>b</span><span>Scroll down, tap <b>Developer Mode</b></span></figcaption>
+<img src=/static/dev2.jpg alt="The Developer Mode row circled" width=640 height=215></figure>
+<figure class=shot><figcaption><span class=num>c</span><span>Turn it <b>on</b>, tap <b>Restart</b>, then <b>Turn On</b> after the restart</span></figcaption>
+<img src=/static/dev3.jpg alt="The Developer Mode switch turned on, circled" width=640 height=305></figure>
+<div class=warn><span aria-hidden=true>💡</span><div>Don't see it? Install an app first, then look again.</div></div></details>
 {% if enrolled %}<details><summary>Turn off Stolen Device Protection</summary>{{ sdp_steps }}</details>
 <details id=other><summary>Add another iPhone</summary><p class=m>An iPhone can only register itself. Open this link in Safari on the other iPhone and follow the setup there.</p>
 <div style="display:flex;flex-direction:column;gap:10px"><input id=site readonly value="{{ public_url }}" aria-label="Link to open on the other iPhone" onfocus="this.select()">
