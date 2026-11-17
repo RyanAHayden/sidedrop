@@ -323,14 +323,12 @@ h3.hdr{font-size:17px;font-weight:700;color:var(--head);margin:20px 10px 7px;tex
 .ftr{font-size:14px;color:var(--head);text-align:center;text-shadow:var(--emboss);margin:7px 12px 0}
 .c,.g{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8);overflow:hidden}
 .c{padding:14px;margin:0 0 12px;display:flex;flex-direction:column;gap:10px} .c p{margin:0}
-a.b,button{display:block;box-sizing:border-box;width:100%;font:inherit;font-weight:700;line-height:1.2;text-align:center;cursor:pointer;padding:11px;color:#fff;
+a.b,label.b,button{display:block;box-sizing:border-box;width:100%;font:inherit;font-weight:700;line-height:1.2;text-align:center;cursor:pointer;padding:11px;color:#fff;
  text-shadow:0 -1px 0 rgba(0,0,0,.4);border:1px solid #2b4f8a;border-radius:9px;background:var(--bluebtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 1px 2px rgba(0,0,0,.3)}
-a.b.grey,button.grey{color:#38404b;text-shadow:var(--emboss);border-color:#8d97a5;background:linear-gradient(#fff,#e9ebee 50%,#dde0e5 51%,#eceef1)}
+a.b.grey,label.b.grey,button.grey{color:#38404b;text-shadow:var(--emboss);border-color:#8d97a5;background:linear-gradient(#fff,#e9ebee 50%,#dde0e5 51%,#eceef1)}
 button:disabled{opacity:.5;cursor:default}
 input{font:inherit;width:100%;box-sizing:border-box;padding:10px 12px;background:#fff;border:1px solid #9aa3ae;border-radius:6px;box-shadow:inset 0 1px 2px rgba(0,0,0,.2);color:var(--acc)}
-label.drop{display:block;padding:18px 12px;text-align:center;border:1px solid #9aa3ae;border-radius:8px;color:#6b7684;font-weight:700;text-shadow:var(--emboss);
- background:repeating-linear-gradient(90deg,#d5dae0 0 5px,#dadfe4 5px 7px);box-shadow:inset 0 2px 5px rgba(0,0,0,.3),0 1px 0 #fff}
-label.drop input{border:0;box-shadow:none;background:none;padding:8px 0 0;font-size:13px}
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden} /* file input behind its styled label */
 textarea{width:100%;box-sizing:border-box;font:12px/1.5 ui-monospace,Menlo,monospace;border:1px solid #b7bec8;border-radius:6px;padding:8px;color:#333;resize:none;
  background:linear-gradient(#eef0f3,#fff 12px);box-shadow:inset 0 1px 2px rgba(0,0,0,.15);white-space:pre;overflow-x:auto}
 ol{margin:0;padding-left:1.3rem} li{margin:.35rem 0}
@@ -360,8 +358,7 @@ html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6
 .dark .c,.dark .g{background:#2c2f34;border-color:#0d0e10;box-shadow:0 1px 0 rgba(255,255,255,.06)}
 .dark .row,.dark details>summary{background:linear-gradient(#34373d,#2a2d32);box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
 .dark input{background:#1f2125;border-color:#0d0e10;color:#e6e8eb;box-shadow:inset 0 1px 3px #000} .dark textarea{background:#1f2125;border-color:#0d0e10;color:#ccc}
-.dark label.drop{background:repeating-linear-gradient(90deg,#16181b 0 5px,#1a1c1f 5px 7px);border-color:#0d0e10;color:#8b9099;box-shadow:inset 0 2px 5px #000,0 1px 0 rgba(255,255,255,.06)}
-.dark a.b.grey,.dark button.grey{color:#e6e8eb;border-color:#111;background:linear-gradient(#4a4f58,#2c2f34 50%,#24272c 51%,#2c2f34);box-shadow:inset 0 1px 0 rgba(255,255,255,.15)}
+.dark a.b.grey,.dark label.b.grey,.dark button.grey{color:#e6e8eb;border-color:#111;background:linear-gradient(#4a4f58,#2c2f34 50%,#24272c 51%,#2c2f34);box-shadow:inset 0 1px 0 rgba(255,255,255,.15)}
 /* Cydia-style "Reloading Data" HUD while Reload syncs sources and re-signs */
 .hud{width:min(276px,100%);box-sizing:border-box;padding:34px 10px 26px;border-radius:14px;background:rgba(20,20,20,.82);color:#fff;text-align:center;font-weight:700;font-size:30px;line-height:1.1;letter-spacing:-.3px;
  display:grid;justify-items:center;gap:16px} /* Cydia's HUD: big bold label, grey spinner, no border */
@@ -379,8 +376,10 @@ Reloading Data</div></div>
 <div class=scrim id=about hidden onclick="if(event.target==this)this.hidden=true"><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
 <h3 id=aboutT>About sidedrop</h3><p>Apps shared between friends, signed for each registered iPhone. Register once in Safari, then tap GET.</p>
 {% if stats %}<p>{{ stats[0] }} of 100 iPhones registered.{% if stats[1] %} Apps keep working until {{ stats[1].strftime('%B %-d, %Y') }}.{% endif %}</p>{% endif %}
-<div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){location.hash='more';d.open=true;setTimeout(()=>d.scrollIntoView(),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
+<div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){location.hash='more';d.open=true;setTimeout(()=>goTo(d),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
 <script>addEventListener("keydown",e=>{if(e.key=="Escape")about.hidden=true})
+/* body is the scroller; scrollIntoView would also scroll the locked <html> and drag the fixed nav down */
+function goTo(el){document.body.scrollBy({top:el.getBoundingClientRect().top-56,behavior:"smooth"})}
 addEventListener("gesturestart",e=>e.preventDefault())  // Safari ignores user-scalable=no for pinch
 function reloadData(){reloading.hidden=false;fetch("/refresh",{method:"POST"}).catch(()=>{}).finally(()=>{history.replaceState(null,"","/"+location.hash);location.reload()})}  // replace() to the same /#tab only jumps to the hash, it never reloads</script>
 {{ body|safe }}"""
@@ -600,11 +599,11 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% if stats[1] %}<div class=kv><b>Apps work until</b><span>{{ stats[1].strftime('%b %-d, %Y') }}</span></div>{% endif %}{% endif %}</div>
 {% if enrolled %}<p class=ftr>This iPhone is registered and can install every app.</p>{% endif %}
 <div class="g split">
-{% if enrolled %}<button type=button class=tile onclick="let d=document.getElementById('other');d.open=true;d.scrollIntoView({behavior:'smooth'})">{% else %}<a class=tile href=#apps>{% endif %}
+{% if enrolled %}<button type=button class=tile onclick="let d=document.getElementById('other');d.open=true;goTo(d)">{% else %}<a class=tile href=#apps>{% endif %}
 <span class=tic style="background:linear-gradient(#8fd96b,#3c9a1d)"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#3c9a1d"/></svg></span>Register{% if enrolled %}</button>{% else %}</a>{% endif %}
-<button type=button class=tile onclick="document.getElementById('sign').scrollIntoView({behavior:'smooth'})"><span class=tic style="background:linear-gradient(#b7c0cc,#5d6878)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</button></div>
+<button type=button class=tile onclick="goTo(document.getElementById('sign'))"><span class=tic style="background:linear-gradient(#b7c0cc,#5d6878)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</button></div>
 <div class=pair>
-<button type=button class=tile onclick="let d=document.getElementById('dev');d.open=true;d.scrollIntoView({behavior:'smooth'})"><span class=tic style="background:linear-gradient(#bfc4c9,#5f666e)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-dasharray="2.4 2"><circle cx="12" cy="12" r="7"/></svg></span>Help</button>
+<button type=button class=tile onclick="let d=document.getElementById('dev');d.open=true;goTo(d)"><span class=tic style="background:linear-gradient(#bfc4c9,#5f666e)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-dasharray="2.4 2"><circle cx="12" cy="12" r="7"/></svg></span>Help</button>
 <button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:linear-gradient(#8fc6ff,#2a72d6)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
 <h3 class=hdr>Display</h3><div class=g><div class=row><div>Dark Mode</div><label class=sw><input type=checkbox id=darkSw aria-label="Dark Mode"
  onchange="try{localStorage.dark=this.checked?1:0}catch(e){}theme()"><i></i><span class=k></span></label></div></div>
@@ -619,7 +618,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <details id=other><summary>Register a different iPhone</summary><p class=m>Turn off Stolen Device Protection on that iPhone first.</p>{{ enroll_form }}</details>{% endif %}</div>
 <h3 class=hdr id=sign>Sign your own IPA</h3>
 <form class=c method=post action=/sign enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Signing…'">
-<label class=drop>Drop an .ipa here or tap to browse<input type=file name=ipa accept=.ipa></label>
+<input type=file name=ipa id=ipaf accept=.ipa class=vh onchange="ipal.textContent=this.files[0]?this.files[0].name:'Choose .ipa File'"><label class="b grey" for=ipaf id=ipal>Choose .ipa File</label>
 <input type=url name=url placeholder="…or paste a link to an .ipa" aria-label="Link to an .ipa">
 <button>Sign</button><small>Signed for registered iPhones. The install link lasts 7 days.</small></form>
 <a class="b grey out" href=/logout>Sign out</a>
