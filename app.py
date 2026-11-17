@@ -344,7 +344,6 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5
 /* iOS 6 back button: arrow art drawn after UIKit's UINavigationBarDefaultBack, stretched through the middle */
 .nav .back{display:inline-flex;align-items:center;height:30px;box-sizing:border-box;max-width:40vw;overflow:hidden;white-space:nowrap;padding:0 5px 0 1px;background:none;box-shadow:none;border-radius:0;
  border:solid transparent;border-width:0 5px 0 13px;border-image:url(/static/back.svg) 0 10 0 26 fill/0 5px 0 13px} .nav .back:active{filter:brightness(.8)}
-#pg{will-change:transform}
 h3.hdr{font-size:17px;font-weight:700;color:var(--head);margin:20px 10px 7px;text-shadow:var(--emboss)}
 .ftr{font-size:14px;color:var(--head);text-align:center;text-shadow:var(--emboss);margin:7px 12px 0}
 .c,.g{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8);overflow:hidden}
