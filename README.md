@@ -1,26 +1,24 @@
 # sidedrop
 
-A password-protected site for sharing ad hoc iOS apps and large files with friends.
+A password-protected site for sharing ad hoc iOS apps with friends.
 
 1. A friend opens the site in Safari, types the password, turns off Stolen Device Protection (the page walks through it with screenshots from `static/`) and taps **Register iPhone**. They install the profile it downloads.
 2. iOS sends the server the phone's UDID. The server registers the device with Apple, regenerates the ad hoc profile and re-signs every app.
 3. Safari comes back to the site, where they tap **Install**.
 
-Under **Sign your own IPA**, a logged-in friend can drop an IPA or paste a link to one and get an install link signed with the same profile (stored in `signed/custom/`, deleted after 7 days). A **Feather** menu links to the Feather on-device signer. Feather's own repo is in `mirror-sources.txt`, so a signed Feather install shows up there, next to the sources in `feather-sources.txt` with a **Copy sources** button.
+Under **Sign your own IPA**, a logged-in friend can drop an IPA or paste a link to one and get an install link signed with the same profile (stored in `signed/custom/`, deleted after 7 days).
 
-iFizBox (`https://ifizbox.com/source.json` in `mirror-sources.txt`) is signed with `cert.p12`, its password and the ad hoc profile inside it (`ifizbox-identity.plist`), which it imports on first launch, so friends never have to pick a certificate in it. Anyone who installs it can pull the certificate out of the app.
+The **iFizBox** tab installs iFizBox (`https://ifizbox.com/source.json` in `mirror-sources.txt`) and says why to use it; the iFizBox row on **Apps** opens it and starts the install. It is signed with `cert.p12`, its password and the ad hoc profile inside it (`ifizbox-identity.plist`) and the sources in `ifizbox-sources.txt` (`web/transfer.link`), which it imports on first launch, so friends never have to pick a certificate or add a source. Anyone who installs it can pull the certificate out of the app. The install shows ifizbox.com's progress page, which follows iOS fetching the manifest and the app (`/install/<token>`).
 
-Files in `appfiles/<ipa name>/` (e.g. `appfiles/io.github.fizl0.hst/`) are listed under that app's Install button instead, with the same kind of signed link.
+Files in `appfiles/<ipa name>/` (e.g. `appfiles/io.github.fizl0.hst/`) are listed under that app's Install button. The links are signed, last 7 days, work without a login (so `wget`/`curl` can use them) and can be resumed.
 
 The **Changes** tab lists apps by release date, Cydia style. Tapping INSTALL records that version for the phone (in `installed.json`), so newer versions show there under **Available Updates**, with a badge on the tab and an **Update** button that installs them all.
-
-Files placed in `files/` show up as download links. The links are signed, last 7 days, work without a login (so `wget`/`curl` can use them) and can be resumed.
 
 ## Editing on GitHub
 
 These files can be edited on github.com. The NAS picks up changes within 5 minutes:
 
-- `feather-sources.txt`: sources shown in the Feather menu, one URL per line
+- `ifizbox-sources.txt`: the sources iFizBox starts with, one URL per line
 - `mirror-sources.txt`: AltStore sources whose apps are downloaded, signed and listed
 - `third-party-sources.txt`: the same for other people's apps, listed under **Third-party apps**; a URL, then the bundle IDs to take from it (none = all)
 - `app.py`: everything else, including page text
@@ -35,7 +33,6 @@ Everything lives in one data folder (`/mnt/SSD/sidedrop` in `compose.yaml`), whi
 asc.p8          App Store Connect API key (Users and Access → Integrations → Keys, role Admin or App Manager)
 cert.p12        Apple Distribution certificate + private key (export from Keychain, or openssl)
 apps/*.ipa      unsigned or dev-signed IPAs to share (or list AltStore sources in mirror-sources.txt)
-files/          anything you want downloadable
 ```
 
 `signed/` and `adhoc.mobileprovision` are generated.
@@ -48,7 +45,7 @@ docker compose up -d --build
 
 **HTTPS with a real certificate is required.** iOS won't install profiles or apps over plain HTTP or with a self-signed cert. Put the site behind a reverse proxy, Cloudflare Tunnel or `tailscale funnel 8080`, and set `PUBLIC_URL` to match.
 
-With `ADMIN_PASSWORD` set, **More → Manage** (on a registered iPhone) lists the account's iPhones with when each was added and last used, and can disable or re-enable them. Apple has no API to delete a device: disabling takes it out of the profile so its apps stop opening, but its slot only frees up at renewal.
+With `ADMIN_PASSWORD` set, **Settings → Manage** (on a registered iPhone) lists the account's iPhones with when each was added and last used, and can disable or re-enable them. Apple has no API to delete a device: disabling takes it out of the profile so its apps stop opening, but its slot only frees up at renewal.
 
 ## Limits
 

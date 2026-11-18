@@ -11,8 +11,7 @@ start, threading.Thread.start = threading.Thread.start, lambda self: None  # no 
 import app as A
 threading.Thread.start, A.SOURCES = start, []
 
-(tmp / "apps").mkdir(); (tmp / "files").mkdir()
-(tmp / "files" / "big.bin").write_bytes(b"0123456789")
+(tmp / "apps").mkdir()
 with zipfile.ZipFile(tmp / "apps" / "Demo.ipa", "w") as z:
     z.writestr("Payload/Demo.app/Info.plist", plistlib.dumps(
         {"CFBundleIdentifier": "com.me.demo", "CFBundleVersion": "7", "CFBundleShortVersionString": "1.2", "CFBundleName": "Demo"}, fmt=plistlib.FMT_BINARY))
@@ -81,8 +80,8 @@ assert r.status_code == 301 and r.location.endswith("/?enrolled=" + A.device_tok
 assert calls == [("00008130-AAAA", "Sam script iPhone16,1")]
 # landing back in Safari sets a device cookie (checked against the profile, survives sign-out); forged tokens do nothing
 html = c.get("/").data
-assert b"First, set up this iPhone" in html and b"/static/sdp1.jpg" in html and b"itms-services" not in html  # apps locked until registered
-assert b"itms-services" not in c.get("/?enrolled=1").data and b"itms-services" not in c.get("/?enrolled=00008130-AAAA.x").data
+assert b"First, set up this iPhone" in html and b"/static/sdp1.jpg" in html and b'href="itms-services' not in html and b"id=ifzb " not in html  # apps locked until registered
+assert b'href="itms-services' not in c.get("/?enrolled=1").data and b'href="itms-services' not in c.get("/?enrolled=00008130-AAAA.x").data
 html = c.get(r.location.replace("https://x.test", ""), base_url="https://localhost").data
 assert b"This iPhone is registered" in html and b"href=/admin" in html and b"/static/sdp1.jpg" in html
 c.get("/logout", base_url="https://localhost"); c.post("/login", data={"password": "hunter2-but-longer"}, base_url="https://localhost")
@@ -94,7 +93,7 @@ assert signed_ents[-1]["keychain-access-groups"] == ["TEAM.com.me.demo"] and sig
 
 # tampered / expired signatures are refused
 assert A.app.test_client().post(path_qs(url).replace("Sam", "Eve"), data=body).status_code == 403
-assert A.app.test_client().get("/f/big.bin?e=1&s=x").status_code == 403
+assert A.app.test_client().get("/af/Demo/game.iso?e=1&s=x").status_code == 403
 
 # install page -> manifest -> ipa, all cookie-less
 html = c.get("/").data.decode()
@@ -105,11 +104,13 @@ mf = plistlib.loads(anon.get(path_qs(m)).data)["items"][0]
 assert mf["metadata"] == {"bundle-identifier": "com.me.demo", "bundle-version": "7", "kind": "software", "title": "Demo"}
 assert anon.get(path_qs(mf["assets"][0]["url"])).status_code == 200
 
-# file links work without login and support Range (resumable)
-f = re.search(r'href="(https://x\.test/f/[^"]+)"', html).group(1).replace("&amp;", "&")
-r = anon.get(path_qs(f), headers={"Range": "bytes=2-4"})
-assert r.status_code == 206 and r.data == b"234"
-assert anon.get(path_qs(f.replace("big.bin", "..%2Fadhoc.mobileprovision"))).status_code in (403, 404)
+# install tracking for the install page: the manifest and app carry the page's token (outside the signature), the page polls it
+tk = "ab" * 12
+assert anon.get(path_qs(m) + "&t=" + tk).status_code == 200 and c.get(f"/install/{tk}").json == {"manifest": True, "started": False}
+mf = plistlib.loads(anon.get(path_qs(m) + "&t=" + tk).data)["items"][0]
+assert mf["assets"][0]["url"].endswith("&t=" + tk) and anon.get(path_qs(mf["assets"][0]["url"])).status_code == 200
+assert c.get(f"/install/{tk}").json == {"manifest": True, "started": True} and anon.get(f"/install/{tk}").status_code == 403
+assert anon.get(path_qs(m) + "&t=../x").status_code == 200 and "../x" not in A.INSTALLS
 
 # AltStore source mirroring: downloads new versions, skips unchanged ones
 class Resp:
@@ -180,17 +181,34 @@ A.sign_ipa(tmp / "apps" / "Demo.ipa", tmp / "demo-signed.ipa")
 A.subprocess.run = run0
 ident = plistlib.loads(seen_in[0])
 assert ident == {"p12": b"p12bytes", "password": A.P12_PASSWORD, "profile": A.PROFILE.read_bytes()}, ident
+# and sidedrop's sources as web/transfer.link, iFizBox's import link (gzipped JSON, base64url)
+import base64, gzip, json
+with zipfile.ZipFile(tmp / "ifz-src.ipa", "w") as z:
+    z.writestr("Payload/iFizBox.app/Info.plist", plistlib.dumps({"CFBundleIdentifier": "com.ryha.ifizbox"}))
+A.subprocess.run = lambda cmd, **kw: seen_in.append(zipfile.ZipFile(cmd[-1]).read("Payload/iFizBox.app/web/transfer.link").decode())
+A.sign_ipa(tmp / "ifz-src.ipa", tmp / "ifz-src-signed.ipa"); A.subprocess.run = run0
+d = seen_in[-1].removeprefix("ifizbox://import?d=")
+sent = json.loads(gzip.decompress(base64.urlsafe_b64decode(d + "=" * (-len(d) % 4))))
+assert sent["v"] == 1 and sent["sources"][:2] == ["https://provenance-emu.com/apps.json", "https://fizl0.github.io/apps/source.json"], sent
 assert not any("ifizbox-identity" in n for n in seen_in[1]) and not (tmp / ".ifz-signed.ipa.in").exists()
 # iFizBox gets its own category above Apps
 (tmp / "signed" / "com.ryha.ifizbox.ipa").write_bytes((tmp / "ifz.ipa").read_bytes())
 html = c.get("/").data.decode()
 assert html.index("<h3 class=hdr>iFizBox</h3>") < html.index("<h3 class=hdr>Apps</h3>") < html.index("Demo")
+# its GET opens the iFizBox tab and installs; the tab has the install button with the manifest and the benefits
+assert 'href=#ifizbox onclick="return ifzGo()"' in html and 'id=t-ifizbox' in html and 'id=ifzb data-app="com.ryha.ifizbox" data-m="https://x.test/m/com.ryha.ifizbox.plist?e=' in html
+assert "Your certificate, already in it" in html and "10 sources" in html
+# tabs: Apps, Changes, iFizBox, Settings (no Feather, no Files, no More)
+assert re.findall(r"<a href=#(\w+)><svg", html) == ["apps", "changes", "ifizbox", "settings"] and "t-feather" not in html and "t-files" not in html
 (tmp / "signed" / "com.ryha.ifizbox.ipa").unlink()
 # per-app files sit under that app's Install button, not in Files
 (tmp / "appfiles" / "Demo").mkdir(parents=True); (tmp / "appfiles" / "Demo" / "game.iso").write_bytes(b"iso")
 html = c.get("/").data.decode()
 a = re.search(r'href="(https://x\.test/af/Demo/game\.iso[^"]+)"', html).group(1).replace("&amp;", "&")
-assert anon.get(path_qs(a)).data == b"iso" and "Files</h3>" in html and html.index("game.iso") < html.index("Files</h3>")
+assert anon.get(path_qs(a)).data == b"iso"
+r = anon.get(path_qs(a), headers={"Range": "bytes=1-2"})  # resumable
+assert r.status_code == 206 and r.data == b"so"
+assert anon.get(path_qs(a.replace("game.iso", "..%2F..%2Fadhoc.mobileprovision"))).status_code in (403, 404)
 assert html.count("game.iso<") == 1
 assert "steps(this)" in html and "Download game.iso" in html  # files turn INSTALL grey and become steps
 (tmp / "appfiles" / "Demo" / "labels.txt").write_text("game.iso = the game disc\n")
@@ -208,13 +226,9 @@ if shutil.which("node"):
         r = subprocess.Popen(["node", "--check", str(tmp / "inline.js")], stderr=subprocess.PIPE, text=True)  # subprocess.run is stubbed above
         assert r.wait() == 0, r.stderr.read()
 
-# Feather sources come from the repo's feather-sources.txt and get a copy button
+# custom signing: upload and URL both give a cookie-less install link
 html = c.get("/").data.decode()
-assert "https://provenance-emu.com/apps.json\nhttps://fizl0" in html and "Copy sources" in html
-
-# custom signing: upload and URL both give a cookie-less install link; Feather sits in its own menu
-html = c.get("/").data.decode()
-assert "Sign your own IPA" in html and "claration/Feather" in html
+assert "Sign your own IPA" in html
 assert A.app.test_client().post("/sign").status_code == 403
 demo = (tmp / "apps" / "Demo.ipa").read_bytes()
 import io

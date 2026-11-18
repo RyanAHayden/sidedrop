@@ -1,5 +1,5 @@
 """sidedrop: password-gated UDID enrollment, ad hoc OTA installs and private file downloads."""
-import base64, datetime, hashlib, hmac, itertools, json, os, plistlib, re, secrets, subprocess, threading, time, uuid, zipfile, zlib
+import base64, datetime, gzip, hashlib, hmac, itertools, json, os, plistlib, re, secrets, subprocess, threading, time, uuid, zipfile, zlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import quote
@@ -13,13 +13,14 @@ from pywebpush import WebPushException, webpush
 from flask import Flask, abort, make_response, redirect, render_template_string, request, send_from_directory, session, url_for
 
 DATA = Path(os.environ.get("DATA", "/data"))
-APPS, SIGNED, FILES = DATA / "apps", DATA / "signed", DATA / "files"
-APP_FILES = DATA / "appfiles"  # appfiles/<ipa name>/* are listed under that app's Install button, not in Files
+APPS, SIGNED = DATA / "apps", DATA / "signed"
+APP_FILES = DATA / "appfiles"  # appfiles/<ipa name>/* are listed under that app's Install button
 CUSTOM = SIGNED / "custom"  # one-off IPAs friends upload or link on the page
 HERE = Path(__file__).parent  # config files edited on GitHub; the NAS pulls and rebuilds (deploy.sh)
 read_urls = lambda f: [u for u in (HERE / f).read_text().split() if u.startswith(("https://", "http://"))] if (HERE / f).exists() else []
-FEATHER_REPO = "https://github.com/claration/Feather"
-IFIZBOX_ID = "com.ryha.ifizbox"  # signed with our certificate inside it (ifizbox_identity)
+IFIZBOX_SOURCES = "ifizbox-sources.txt"  # the sources iFizBox starts with (ifizbox_transfer)
+IFIZBOX_ID = "com.ryha.ifizbox"  # signed with our certificate and sources inside it (ifizbox_identity, ifizbox_transfer)
+INSTALLS = {}  # ponytail: in memory (one gunicorn worker); {token: {"at", "manifest", "started"}}: iOS's requests, for the install page
 PROFILE = DATA / "adhoc.mobileprovision"
 P12, ASC_KEY = DATA / "cert.p12", DATA / "asc.p8"
 PASSWORD = os.environ["PASSWORD"]
@@ -224,10 +225,17 @@ def ifizbox_identity():
     return plistlib.dumps({"p12": P12.read_bytes(), "password": P12_PASSWORD, "profile": PROFILE.read_bytes()})
 
 
+def ifizbox_transfer():
+    """iFizBox imports web/transfer.link from its bundle once, on first launch: ifizbox://import?d=<base64url of gzipped JSON>
+    (iFizBox's core/transfer.js), here only our sources."""
+    payload = {"v": 1, "sources": read_urls(IFIZBOX_SOURCES), "settings": {}, "holds": []}
+    return "ifizbox://import?d=" + base64.urlsafe_b64encode(gzip.compress(json.dumps(payload).encode())).decode().rstrip("=")
+
+
 def sign_ipa(src, out):
     old_id = ipa_info(src)["id"]
     new_id = fit_bundle_id(old_id)
-    extra = {"ifizbox-identity.plist": ifizbox_identity()} if old_id == IFIZBOX_ID else {}
+    extra = {"ifizbox-identity.plist": ifizbox_identity(), "web/transfer.link": ifizbox_transfer().encode()} if old_id == IFIZBOX_ID else {}
     rewrite = bool(new_id or extra)
     tmp = out.with_name(f".{out.name}.in") if rewrite else src
     if rewrite:  # rewrite ourselves: zsign 1.1.2's -b can't find Info.plist
@@ -250,7 +258,8 @@ def resign(force=False):
     SIGNED.mkdir(exist_ok=True)
     for src in sorted(APPS.glob("*.ipa")):
         out = SIGNED / src.name
-        if force or not out.exists() or out.stat().st_mtime < max(src.stat().st_mtime, PROFILE.stat().st_mtime):
+        deps = [src, PROFILE] + [p for p in [HERE / IFIZBOX_SOURCES] if src.stem == IFIZBOX_ID and p.exists()]  # its sources are inside it
+        if force or not out.exists() or out.stat().st_mtime < max(d.stat().st_mtime for d in deps):
             sign_ipa(src, out)
 
 
@@ -391,7 +400,7 @@ PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=
 <meta property=og:title content=sidedrop><meta property=og:description content="Apps shared between friends, signed for your iPhone."><meta property=og:site_name content=sidedrop>
 <meta property=og:type content=website><meta property=og:url content="%PUBLIC_URL%/"><meta property=og:image content="%PUBLIC_URL%/static/og.png"><meta property=og:image:width content=1200><meta property=og:image:height content=630>
 <meta name=twitter:card content=summary_large_image><meta name=twitter:image content="%PUBLIC_URL%/static/og.png"><link rel=apple-touch-icon href=/apple-touch-icon.png><link rel=manifest href=/manifest.webmanifest><meta name=theme-color content="#bdcbdc"><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=sidedrop>
-<script>/* Dark Mode follows the phone's theme until the More switch picks one (localStorage.dark = "1"/"0") */
+<script>/* Dark Mode follows the phone's theme until the Settings switch picks one (localStorage.dark = "1"/"0") */
 function theme(){let d=null;try{d=localStorage.dark}catch(e){}let on=document.documentElement.classList.toggle("dark",d?d=="1":matchMedia("(prefers-color-scheme: dark)").matches);
  document.querySelector("meta[name=theme-color]").content=on?"#5f656f":"#bdcbdc"}  /* Safari's top bar matches the nav */
 theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",theme)</script>
@@ -442,7 +451,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5
 .sw{touch-action:none} .sw.drag i:before,.sw.drag i:after,.sw.drag .k{transition:none}  /* while dragging, everything follows --x with the finger */
 #sb.on{pointer-events:auto}
 *{-webkit-tap-highlight-color:transparent}  /* no grey tap flash; controls have their own pressed looks */
-body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none} input,textarea,#src{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}  /* app, not a document: holding never selects, except fields and Feather's sources */ #sb::before{content:"";position:absolute;inset:-12px -2px -12px -26px} #sb.grab{width:7px;right:1px;border-radius:4px}
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none} input,textarea{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}  /* app, not a document: holding never selects, except fields */ #sb::before{content:"";position:absolute;inset:-12px -2px -12px -26px} #sb.grab{width:7px;right:1px;border-radius:4px}
 h3.hdr{font-size:17px;font-weight:700;line-height:21px;letter-spacing:-.01em;color:var(--head);margin:23px 9px 7px;text-shadow:var(--emboss)}
 .ftr{font-size:15px;line-height:19px;color:var(--head);text-align:center;text-shadow:var(--emboss);margin:7px 9px 0;overflow-wrap:anywhere}
 .c,.g{background:#fff;border:1px solid var(--line);border-radius:9.5px;box-shadow:inset 0 .5px .5px rgba(0,0,0,.2);overflow:hidden} .g{background:var(--table)}
@@ -476,7 +485,7 @@ details[open]>summary:after{transform:rotate(90deg)} details>:not(summary){margi
  
  background:linear-gradient(#707a91,#283659 49%,#0b1b43 50%,#182747)}  /* Cancel-style (left), as UIAlertView draws it on the 4S */
 .alert .abtns .ok{background:linear-gradient(#b4b9c8,#5f6882 49%,#596484 51%,#4d597a)}  /* sampled from Cydia's alert on the 4S: opaque greys, no white line */
-/* Dark Mode (follows the phone, or the More tab switch): gunmetal bars, dark pinstripes, inverted emboss */
+/* Dark Mode (follows the phone, or the Settings tab switch): gunmetal bars, dark pinstripes, inverted emboss */
 html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6fa8ff;--head:#8b9099;--emboss:0 -1px 0 #000;
  --pin:repeating-linear-gradient(90deg,#1b1d21 0 5px,#202227 5px 7px);--navbg:linear-gradient(#5f656f,#3b4048 50%,#30343b 51%,#23262b);--statbg:#000;--navhi:#7a808a;--navedge:#0b0c0e;--table:#2c2f34;--div:#17191c;--divhi:rgba(255,255,255,.07);
  --barbtn:linear-gradient(#4a4f58,#24272c);--greybtn:linear-gradient(#4a4f58,#2c2f34);background:#1d1f23}
@@ -486,12 +495,13 @@ html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6
 .dark input{background:#1f2125;border-color:#0d0e10;color:#e6e8eb;box-shadow:inset 0 1px 3px #000} .dark textarea{background:#1f2125;border-color:#0d0e10;color:#ccc}
 .dark a.b.grey,.dark label.b.grey,.dark button.grey{color:#e6e8eb;border-color:#111;background:linear-gradient(#4a4f58,#2c2f34 50%,#24272c 51%,#2c2f34);box-shadow:inset 0 1px 0 rgba(255,255,255,.15)}
 /* Cydia's reload bar while Reload syncs sources and re-signs: the kit's "Semi-transparent black bar" (#4c4c4c to black at 52%, a white-at-20%
-   line on top, black-at-70% at the bottom) at .8 over the status bar and nav, which move down by its 44pt; a 20pt white spinner, a bold white line */
-#rbar{position:fixed;z-index:7;top:0;left:0;right:0;height:44px;padding:env(safe-area-inset-top) max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));
+   line on top, black-at-70% at the bottom) at .8, a 20pt white spinner, a bold white line. As iFizBox's F204: it sits on top of the tab bar, sliding
+   up from behind it, and nothing on the page moves; the page gets 44pt more room at the bottom while it shows, so the last row still scrolls clear */
+#rbar{position:fixed;z-index:4;bottom:var(--tabh,0);left:0;right:0;height:44px;box-sizing:border-box;padding:0 max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));
  display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.8);pointer-events:none;
- background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7)) bottom/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.2),rgba(255,255,255,.2)) 0 env(safe-area-inset-top)/100% 1px no-repeat,linear-gradient(rgba(76,76,76,.8),rgba(0,0,0,.8) 52%),var(--pin);background-color:#c8cfd6;
- transform:translateY(-100%);transition:transform .3s} html.reloading #rbar{transform:none} .dark #rbar{background-color:#1d1f23}  /* over the page's own pinstripes, so what scrolled under the nav doesn't show through */
-html.reloading .nav,html.reloading body>.page{transform:translateY(44px)} .nav,body>.page{transition:transform .3s}
+ background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7)) bottom/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.2),rgba(255,255,255,.2)) top/100% 1px no-repeat,linear-gradient(rgba(76,76,76,.8),rgba(0,0,0,.8) 52%);
+ transform:translateY(calc(100% + var(--tabh,0px)));transition:transform .3s} html.reloading #rbar{transform:none}
+html.reloading body{padding-bottom:calc(116px + env(safe-area-inset-bottom))}
 .spin{width:20px;height:20px;flex:none;animation:spin 1s steps(12) infinite} @keyframes spin{to{transform:rotate(360deg)}}
 .scrim.clear{background:none} .nw{white-space:nowrap} .a2l>span{display:block;margin:2px 0} .ic{width:1.15em;height:1.15em;vertical-align:-.2em;margin-right:3px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
@@ -504,7 +514,7 @@ function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.leng
 <div class=scrim id=about hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
 <h3 id=aboutT>About sidedrop</h3><p>Apps shared between friends, signed for each registered iPhone. Register once in Safari, then tap GET.</p>
 {% if stats %}<p>{{ stats[0] }} of 100 iPhones registered.{% if stats[1] %} Apps keep working until {{ stats[1].strftime('%B %-d, %Y') }}.{% endif %}</p>{% endif %}
-<div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){go('more');d.open=true;setTimeout(()=>goTo(d),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
+<div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){go('settings');d.open=true;setTimeout(()=>goTo(d),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
 <script>/* alerts are modal like UIAlertView: only their buttons close them */
 /* body is the scroller; scrollIntoView would also scroll the locked <html> and drag the fixed nav down */
 /* clamp to the real bottom: iOS lets a smooth scroll on a non-root scroller overshoot past the end, then snaps back on the next touch */
@@ -555,7 +565,7 @@ def file_labels(folder):
 
 
 def page(body, back=None, title="sidedrop", **ctx):
-    """back=("More", "/#more") makes it a pushed screen: title in the nav, iOS back button and edge swipe."""
+    """back=("Settings", "/#settings") makes it a pushed screen: title in the nav, iOS back button and edge swipe."""
     stats = None
     if logged_in() and PROFILE.exists():  # for the About alert: devices used, and when the profile (so every app) expires
         prof = embedded_plist(PROFILE.read_bytes())
@@ -583,8 +593,7 @@ def home():
         error = str(e)
     apps = [dict(ipa_info(p), name=p.stem, files=sorted(f for f in (APP_FILES / p.stem).glob("*") if f.is_file() and f.name != "labels.txt"))
             for p in sorted(SIGNED.glob("*.ipa"))] if SIGNED.exists() else []
-    feather = [a for a in apps if "feather" in a["name"].lower()]  # mirrored via SOURCES, shown in its own menu
-    third = [a for a in apps if a not in feather and (APPS / f".{a['name']}.third").exists()]
+    third = [a for a in apps if (APPS / f".{a['name']}.third").exists()]
     for a in third:
         a["title"] = (APPS / f".{a['name']}.third").read_text().strip() or a["title"]
     for a in apps:
@@ -601,8 +610,8 @@ def home():
     updates = [a for a in apps if a["name"] in mine and mine[a["name"]] != a["vkey"]]
     recent = [(d, list(g)) for d, g in itertools.groupby(sorted(apps, key=lambda a: a["when"], reverse=True)[:30], key=lambda a: a["when"])]
     ifizbox = [a for a in apps if IFIZBOX_ID in (a["id"], a["name"])]  # its own category, on top
-    apps = [a for a in apps if a not in feather and a not in third and a not in ifizbox]
-    files = sorted(p for p in FILES.rglob("*") if p.is_file()) if FILES.exists() else []
+    apps = [a for a in apps if a not in third and a not in ifizbox]
+    ifz = ifizbox[0] if ifizbox else None
     resp = make_response(page("""<style>
 .splash{display:flex;align-items:center;gap:14px;padding:2px 6px 4px} .splash img{width:76px;height:76px;flex:none;border-radius:15px;box-shadow:0 3px 6px rgba(0,0,0,.45)}
 .splash h2{font-size:23px;font-weight:400;letter-spacing:-.3px;line-height:1.15;text-shadow:var(--emboss)} .splash p{margin:3px 0 0;font-size:16px;text-shadow:var(--emboss)}
@@ -634,11 +643,11 @@ details.c[open]>summary:after{transform:rotate(-45deg)} details.c>summary,.dark 
 .shot{display:flex;flex-direction:column;gap:6px} .shot figcaption{display:flex;gap:8px;align-items:center;font-size:15px} .shot .num{width:20px;height:20px;font-size:11px}
 .shot img{display:block;width:100%;height:auto;border-radius:8px;border:1px solid var(--line);box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .warn{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;background:#fff8e1;border:1px solid #e6cf7a;font-size:14px}
-button.gbtn{border-color:#2f7a17;background:var(--greenbtn)} /* not .green: that's the More tab's status panel */
+button.gbtn{border-color:#2f7a17;background:var(--greenbtn)} /* not .green: that's the Settings tab's status panel */
 fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;filter:grayscale(.6)}
 .dark .warn{background:#3a3220;border-color:#6b5a26}
 .nudge{animation:nudge .45s} @keyframes nudge{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
-/* More tab: Cydia-style rows */
+/* Settings tab: Cydia-style rows */
 .green{background:#e9f8e4} .kv{display:flex;justify-content:space-between;gap:10px;padding:11px 12px;border-top:1px solid #d6e6cf} .kv span{color:var(--acc);text-align:right}
 .split{display:grid;grid-template-columns:1fr 1fr;margin-top:12px} .pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
 .tile{display:flex;align-items:center;gap:9px;min-height:50px;padding:8px 10px;box-sizing:border-box;font-weight:700;color:#000;background:var(--table);cursor:pointer;text-align:left;border:0;border-radius:0;box-shadow:none;text-shadow:none;line-height:1.35}
@@ -660,6 +669,23 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
  box-shadow:0 1px 2px rgba(0,0,0,.3);transform:translateX(var(--x));transition:transform .2s;pointer-events:none}
 
 .mini{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.why .row{align-items:flex-start;padding:10px} .why .tic{margin-top:2px} .why b{display:block;font-size:16px} .why small{font-size:14px;line-height:1.3}
+/* the install page, as ifizbox.com's (Cydia's Running/Complete screen made cleaner): black page and bar, bold white steps, grey output, a block
+   cursor while it runs, then the black finish button (the 4S's UIAlertSheetBlackCancelButton; pressed, UIAlertSheetBlackButtonPressed) */
+.con{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;background:#000;animation:conup .35s cubic-bezier(.36,.66,.04,1)} .con[hidden]{display:none}
+@keyframes conup{from{transform:translateY(100%)}}
+.con .nav{position:relative;flex:none;background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7)) bottom/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.2),rgba(255,255,255,.2)) 0 env(safe-area-inset-top)/100% 1px no-repeat,linear-gradient(#4c4c4c,#000 52%) bottom/100% 44px no-repeat,#000}
+.con .nav .bar{border-color:#111;background:linear-gradient(#4a4f58,#24272c);background-origin:border-box} .con .nav .bar.is-pressed{background:linear-gradient(#2a2d32,#121316);background-origin:border-box}
+.conlog{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:14px max(12px,env(safe-area-inset-right)) 14px max(12px,env(safe-area-inset-left));-webkit-user-select:text;user-select:text}
+.pl{white-space:pre-wrap;overflow-wrap:anywhere} .pl-raw{font:11px/15px ui-monospace,"SF Mono",Menlo,monospace;color:#a9a9a9}
+.pl-step{margin-top:7px;font:bold 13px/17px "Helvetica Neue",Helvetica,sans-serif;color:#fff} .pl-step:first-child{margin-top:0} .pl-raw+.pl-step{margin-top:9px}
+.pl-error{margin:5px 0;font:bold 12px/16px "Helvetica Neue",Helvetica,sans-serif;color:#ff453a}
+.concur{display:block;width:7px;height:13px;margin-top:3px;background:#a9a9a9;animation:blink 1s steps(1,end) infinite} .concur[hidden]{display:none} @keyframes blink{50%{opacity:0}}
+.confoot{flex:none;display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px max(21px,env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(21px,env(safe-area-inset-left))}
+.cons{min-height:16px;max-width:100%;color:#fff;font:bold 12px/16px "Helvetica Neue",Helvetica,sans-serif;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.con .confin{width:100%;max-width:360px;height:44px;margin:2px 0 0;padding:0 12px;border:0;border-radius:10px;font:bold 20px/44px "Helvetica Neue",Helvetica,sans-serif;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);
+ box-shadow:0 0 0 2.5px #000,0 3.5px 0 0 rgba(211,211,211,.19);background:linear-gradient(#878787,#686868 7%,#545454 23%,#383838 38%,#1a1a1a 54%,#020202 69%,#000 77%,#131313)} .con .confin[hidden]{display:none}
+.con .confin.is-pressed{background:linear-gradient(#c7cde9,#c7cde9 .5px,#818fce .5px,#7a8acb 8%,#6577c3 18%,#485db8 31%,#2b45ae 44%,#253eaa 50%,#001d9d 50%,#04229e 56%,#1330a7 69%,#1940b4 82%,#1354cd calc(100% - .5px),#2c68d4 calc(100% - .5px))}
 .dark .get{color:#c9ced5;border-color:#111;box-shadow:inset 0 1px 0 rgba(255,255,255,.15)} .dark .get[aria-expanded=true]{color:#8b9099;background:linear-gradient(#1f2125,#2a2d32);box-shadow:inset 0 1px 3px #000}
 .dark .steps{background:linear-gradient(#26292d,#2c2f34)} .dark .step+.step{border-top-color:#3a3d42}
 .dark .green{background:#24302a} .dark .kv{border-top-color:#1a221d}
@@ -683,7 +709,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 /* Cydia: while it checks for updates the badge spins instead of counting */
 .badge.busy{font-size:0;padding:0} .badge.busy:after{content:"";position:absolute;inset:0;margin:auto;width:10px;height:10px;box-sizing:border-box;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
 /* Cydia tab bar */
-.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;display:grid;grid-template-columns:repeat(5,1fr);
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;display:grid;grid-template-columns:repeat(4,1fr);
  padding:0 max(2px,env(safe-area-inset-right)) calc(2px + env(safe-area-inset-bottom)) max(2px,env(safe-area-inset-left));
  background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7)) top/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.1),rgba(255,255,255,.1)) 0 1px/100% 1px no-repeat,linear-gradient(#2f2f2f,#151515 49.5%,#000 49.5%) 0 1px/100% 48px no-repeat,#000}
 .tabs:before{content:"";position:absolute;left:0;right:0;bottom:100%;height:2.5px;pointer-events:none;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.18))}
@@ -721,6 +747,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% else %}{% set lbl = 'GET' if a.name not in mine else 'INSTALLED' if mine[a.name] == a.vkey else 'UPDATE' %}
 {% if a.files %}<button type=button class="get{{ ' done' if lbl == 'INSTALLED' }}" data-app="{{ a.name }}" aria-expanded=false onclick="steps(this)">{{ lbl }}</button>
 {% else %}<a class="get{{ ' done' if lbl == 'INSTALLED' }}" data-arm={{ lbl }} data-app="{{ a.name }}" aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">{{ lbl }}</a>{% endif %}{% endif %}{% endmacro %}
+{% macro ifz_icon(a) %}{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}{% endmacro %}
 {% macro install_list(apps) %}<div class="g{{ '' if enrolled else ' locked' }}">{% for a in apps %}
 <div class=row>{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
 <div>{{ a.title }}<small>Version {{ a.short }}{% if a.files %} · needs {{ a.files|length }} file{{ 's' if a.files|length > 1 }}{% endif %}</small></div>{{ install(a) }}</div>
@@ -749,7 +776,11 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <button type=button class=gbtn onclick="sdpDone(true)">I turned it off</button></details>
 <div class=c id=reg><div class=sh><span class=num>2</span><div>Register this iPhone<small>In Safari on this iPhone</small></div></div>
 <fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
-{% if ifizbox %}<h3 class=hdr>iFizBox</h3>{{ install_list(ifizbox) }}<p class=ftr>Installs apps from AltStore sources right on your iPhone. The certificate is already in it.</p>{% endif %}
+{% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class=row>{{ ifz_icon(ifz) }}
+<div>{{ ifz.title }}<small>Version {{ ifz.short }} · your certificate inside</small></div>
+{% if enrolled %}<a class="get{{ ' done' if mine.get(ifz.name) == ifz.vkey }}" data-app="{{ ifz.name }}" aria-label="Install {{ ifz.title }}" href=#ifizbox onclick="return ifzGo()">{{ 'GET' if ifz.name not in mine else 'INSTALLED' if mine[ifz.name] == ifz.vkey else 'UPDATE' }}</a>
+{% else %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>{% endif %}</div></div>
+<p class=ftr>Installs apps right on your iPhone. <a href=#ifizbox onclick="go('ifizbox');return false">Why iFizBox</a></p>{% endif %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
 </section>
@@ -766,24 +797,23 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <h3 id=upqT>Update</h3><p id=upqL></p><div class=abtns><button type=button onclick="upq.hidden=true">Cancel</button><button type=button class=ok onclick="upgradeGo()">Confirm</button></div></div></div>
 </section>
 
-<section class=page id=t-feather data-title=Feather>
-<h3 class=hdr>Feather</h3><div class="g{{ '' if enrolled else ' locked' }}">{% for a in feather %}
-<div class=row><div class=ico style="background:linear-gradient(#ffd27a,#e08a12)"><svg viewBox="0 0 24 24" width=28 height=28 fill="#fff"><path d="M20 3c-8 1-13 6-14 14l-2 4 1 1 4-2c8-1 12-6 13-14-2 2-5 3-8 3 2-1 5-3 6-6z"/></svg></div>
-<div>Feather<small>On-device signer · Version {{ a.short }}</small></div>{{ install(a) }}</div>{% else %}<div class=row><div class=m>Feather isn't mirrored right now.</div></div>{% endfor %}</div>
-<p class=ftr>Installs and re-signs IPAs on the iPhone. It needs your own Apple certificate. <a href="{{ FEATHER_REPO }}">GitHub</a></p>
-{% if sources %}<h3 class=hdr>Sources</h3><div class=c>
-<textarea id=src readonly rows={{ sources|length }} wrap=off aria-label="Sources to add in Feather">{{ sources|join('\n') }}</textarea>
-<button type=button class=grey onclick="navigator.clipboard.writeText(src.value).then(()=>this.textContent='Copied ✓',()=>src.select())">Copy sources</button></div>{% endif %}
+<section class=page id=t-ifizbox data-title=iFizBox>
+{% if ifz %}<div class=splash>{% if ifz.icon %}<img src="{{ ifz.icon }}" alt="">{% else %}<div class=ico style="width:76px;height:76px;border-radius:15px;background:hsl({{ ifz.name|hue }} 65% 50%)">{{ ifz.title[:1] }}</div>{% endif %}
+<div><h2>{{ ifz.title }}</h2><p>A package manager for your iPhone</p></div></div>
+<div class=c>{% if enrolled %}<button type=button class=gbtn id=ifzb data-app="{{ ifz.name }}" data-m="{{ ifz_m }}" data-title="{{ ifz.title }}" data-v="{{ ifz.short }}" data-n="{{ n_sources }}" onclick="ifzRun()">Install {{ ifz.title }}</button>
+{% else %}<button type=button class=gbtn onclick="nudge()">Register This iPhone First</button>{% endif %}
+<small>Version {{ ifz.short }}, signed for this iPhone. Your certificate and {{ n_sources }} sources come with it.</small></div>
+<h3 class=hdr>Why {{ ifz.title }}</h3><div class="g why">
+<div class=row><span class=tic style="background:linear-gradient(#ffb36b,#d9650f)"><svg viewBox="0 0 24 24"><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="#fff" stroke-width="2.4"/><rect x="5" y="11" width="14" height="10" rx="2" fill="#fff"/></svg></span><div><b>Your certificate, already in it</b><small>No .p12 to find and no password to type: it signs with this site's certificate from the first launch.</small></div></div>
+<div class=row><span class=tic style="background:linear-gradient(#8fc6ff,#2a72d6)"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="4" rx="1.5" fill="#fff"/><rect x="4" y="10" width="16" height="4" rx="1.5" fill="#fff"/><rect x="4" y="16" width="16" height="4" rx="1.5" fill="#fff"/></svg></span><div><b>Comes with the sources</b><small>{{ n_sources }} sources, ready the first time it opens.</small></div></div>
+<div class=row><span class=tic style="background:linear-gradient(#8fd96b,#3c9a1d)"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><path d="M12 7v7m-3-3 3 3 3-3" fill="none" stroke="#3c9a1d" stroke-width="2"/></svg></span><div><b>Signs on your iPhone</b><small>Install any IPA or AltStore app right on the phone: no computer, nothing uploaded.</small></div></div>
+<div class=row><span class=tic style="background:linear-gradient(#ff8f8f,#d42a2a)"><svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zm0 2.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 1 1 0-13z" fill="#fff"/><path d="M11 7.5h2.2v4.4l3 2-1.2 1.8-4-2.7z" fill="#fff"/></svg></span><div><b>Updates in one tap</b><small>Changes lists the new versions of what you installed.</small></div></div>
+<div class=row><span class=tic style="background:linear-gradient(#b7c0cc,#5d6878)"><svg viewBox="0 0 24 24"><path d="M12 3 21 7.5v9L12 21l-9-4.5v-9z" fill="#fff"/></svg></span><div><b>The iOS 6 look, at 120 Hz</b><small>A package manager with the classic look, smooth on today's iPhones.</small></div></div></div>
+<p class=ftr>It needs Developer Mode, like every app here. <a href="https://ifizbox.com">ifizbox.com</a></p>
+{% else %}<p class="c m">iFizBox isn't here yet. Tap Reload in a minute.</p>{% endif %}
 </section>
 
-<section class=page id=t-files data-title=Files>
-<h3 class=hdr>Files</h3>{% if files %}<div class=g>{% for f in files %}
-<div class=row><div>{{ f.relative_to(FILES) }}<small>{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · link works without login for 7 days</small></div><a class="get blue" href="{{ dl(f) }}" target=_blank download>DOWNLOAD</a></div>
-{% endfor %}</div>{% else %}<p class="c m">No files right now.</p>{% endif %}
-<p class=ftr>Game discs are under each app's GET.</p>
-</section>
-
-<section class=page id=t-more data-title=More>
+<section class=page id=t-settings data-title=Settings>
 <h3 class=hdr>This iPhone</h3><div class="g green">
 <div class=kv><b>Status</b><span>{{ 'Registered' if enrolled else 'Not registered' }}</span></div>
 {% if stats %}<div class=kv><b>iPhones used</b><span>{{ stats[0] }} of 100</span></div>
@@ -828,18 +858,21 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <h3 id=pushT>Get Notified of Updates?</h3><p>sidedrop can tell you when an app you installed has a new version.</p>
 <div id=pushWeb hidden><div><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open sidedrop from there</span></p></div></div>
 <div class=abtns><button type=button onclick="pushAsk.hidden=true">Not Now</button><button type=button class=ok id=pushOk>Allow</button></div></div></div>{% endif %}
+<div class=con id=con hidden role=dialog aria-modal=true aria-labelledby=conT><header class=nav><span></span><h1 id=conT>Running</h1>
+<button type=button class="bar r" id=conX onclick="conClose()">Cancel</button></header><div class=conlog id=conL aria-live=polite><span class=concur id=conCur></span></div>
+<div class=confoot><div class=cons id=conS></div><button type=button class=confin id=conF hidden></button></div></div>
 <nav class=tabs aria-label=Sections>
 <a href=#apps><svg viewBox="0 0 30 30"><path d="M4 4h9v9H4zm13 0h9v9h-9zM4 17h9v9H4zm13 0h9v9h-9z"/></svg>Apps</a>
 <a href=#changes><svg viewBox="0 0 30 30"><path fill-rule=evenodd d="M15 3a12 12 0 1 0 0 24a12 12 0 1 0 0-24zm0 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18z"/><path d="M14 8h2.4v6.8l4.8 3.1-1.3 2-5.9-3.8z"/></svg>Changes<span class=badge id=badge{% if not updates %} hidden{% endif %}>{{ updates|length }}</span></a>
-<a href=#feather><svg viewBox="0 0 30 30"><path d="M25 4c-10 1-16 8-17 17l-3 5 1 1 5-3c10-1 15-7 16-17-3 2-6 4-10 4 3-1 6-4 8-7z"/></svg>Feather</a>
-<a href=#files><svg viewBox="0 0 30 30"><path d="M3 7h10l3 3h11v15H3z"/></svg>Files</a>
-<a href=#more><svg viewBox="0 0 30 30"><circle cx="7" cy="15" r="3"/><circle cx="15" cy="15" r="3"/><circle cx="23" cy="15" r="3"/></svg>More</a></nav>
+<a href=#ifizbox><svg viewBox="0 0 30 30"><path d="M15 3l11 5.5-11 5.5L4 8.5zM4 10.7l10 5v11.1l-10-5zM16 15.7l10-5v11.1l-10 5z"/></svg>iFizBox</a>
+<a href=#settings><svg viewBox="0 0 30 30"><path fill-rule=evenodd d="M15 7.5a7.5 7.5 0 1 0 0 15a7.5 7.5 0 1 0 0-15zm0 4.3a3.2 3.2 0 1 1 0 6.4a3.2 3.2 0 1 1 0-6.4z"/>{% for r in range(0, 360, 45) %}<rect x="12.8" y="3" width="4.4" height="6" rx="1" transform="rotate({{ r }} 15 15)"/>{% endfor %}</svg>Settings</a></nav>
 <svg width=0 height=0 style="position:absolute" aria-hidden=true><linearGradient id=taboff x1=0 y1=0 x2=0 y2=1><stop offset=0 stop-color="#9d9d9d"/><stop offset=1 stop-color="#595959"/></linearGradient><linearGradient id=tabglow x1=.37 y1=0 x2=.63 y2=1><stop offset=0 stop-color="#d9e5f9"/><stop offset=.473 stop-color="#77b5eb"/><stop offset=.488 stop-color="#0091e5"/><stop offset=1 stop-color="#0fbff7"/></linearGradient></svg>
 <script>
-/* tabs keep their place (scroll, and a page pushed on More) and add no history, as in an iOS app; tapping the open tab pops its page, then scrolls to the top */
+document.documentElement.style.setProperty("--tabh",document.querySelector(".tabs").offsetHeight+"px");
+/* tabs keep their place (scroll, and a page pushed on Settings) and add no history, as in an iOS app; tapping the open tab pops its page, then scrolls to the top */
 let cur=null,pos={},L=null,cache={},STAMP={{ stamp }};
 function go(t){history.replaceState(history.state,"","#"+t);dispatchEvent(new HashChangeEvent("hashchange"))}  // replaceState fires no hashchange of its own
-function show(){let t=location.hash.slice(1);if(!document.getElementById("t-"+t))t="apps";if(cur&&cur!=t)pos[cur]=document.body.scrollTop;
+function show(){let t=location.hash.slice(1);if(t=="more")t="settings";if(!document.getElementById("t-"+t))t="apps";  // more: Home Screen links from beforeif(cur&&cur!=t)pos[cur]=document.body.scrollTop;
  document.querySelectorAll("body>.page").forEach(p=>p.hidden=p.id!="t-"+t);
  document.querySelectorAll(".tabs a").forEach(a=>a.getAttribute("href")=="#"+t?a.setAttribute("aria-current","page"):a.removeAttribute("aria-current"));
  navT.textContent=document.getElementById("t-"+t).dataset.title;if(cur!=t)document.body.scrollTo(0,pos[t]||0);cur=t;if(L)L.hidden=L.dataset.tab!=t;navR()}
@@ -879,12 +912,32 @@ document.querySelectorAll("form button").forEach(b=>b.dataset.t=b.textContent);
 /* a form with no action posts to its own page: on a pushed page that's the page's URL, not / */
 document.addEventListener("submit",e=>{let f=e.target;if(e.defaultPrevented||!(f.matches("[data-push]")||f.closest(".layer")))return;e.preventDefault();
  push(L&&L.contains(f)?new URL(f.getAttribute("action")||"",L.url).href:f.action,{method:"POST",body:new FormData(f)}).then(ok=>{if(!ok)return f.submit();f.querySelectorAll("button[data-t]").forEach(b=>b.textContent=b.dataset.t)})});
+/* iFizBox's install, as on ifizbox.com: iOS's prompt straight from the tap, then a log that follows iOS's own requests for the manifest and
+   the app (the server sees them, /install/<token>). The page completes once iOS starts the download: the rest happens on the Home Screen. */
+const IFZ_STEPS=a=>["Waiting for iOS…","iOS is asking: tap Install.",`iOS is installing ${a}. Press Home to watch it on the Home Screen.`];
+let conRun=0;const wait=ms=>new Promise(r=>setTimeout(r,ms));
+function conLine(kind,text){let d=document.createElement("div");d.className="pl pl-"+kind;d.textContent=text;conL.insertBefore(d,conCur);conL.scrollTop=conL.scrollHeight}
+function conOpen(){conRun++;conL.replaceChildren(conCur);conCur.hidden=false;conT.textContent="Running";conX.textContent="Cancel";conF.hidden=true;conS.textContent="";con.hidden=false;return conRun}
+function conDone(status,label,action){conT.textContent="Complete";conCur.hidden=true;conS.textContent=status;conX.textContent="Close";conF.textContent=label;conF.onclick=()=>{if(!(action&&action()))conClose()};conF.hidden=false}
+function conClose(){conRun++;con.hidden=true;setTimeout(devMaybe,400)}
+function ifzGo(){go("ifizbox");ifzRun();return false}
+function ifzRun(){let b=document.getElementById("ifzb");if(!b)return nudge();
+ let t=[...crypto.getRandomValues(new Uint8Array(12))].map(x=>x.toString(16).padStart(2,"0")).join(""),itms="itms-services://?action=download-manifest&url="+encodeURIComponent(b.dataset.m+"&t="+t);
+ location.href=itms;mark(b,1);  // first, while Safari still counts this as the tap
+ let run=conOpen(),a=b.dataset.title,st=IFZ_STEPS(a),shown=-1,at=0,t0=Date.now();
+ conLine("step","Installing "+a+" "+b.dataset.v);conLine("raw","Signed for this iPhone by sidedrop");conLine("raw","Certificate: inside, imported on first launch");conLine("raw",b.dataset.n+" sources: inside, added on first launch");
+ const show=async n=>{while(shown<n&&run==conRun){if(shown>=0){let l=400-(Date.now()-at);if(l>0)await wait(l)}if(run!=conRun)return;shown++;conLine("step",st[shown]);conS.textContent=st[shown];at=Date.now()}};  // each step shows at least 400 ms
+ (async()=>{for(;;){if(run!=conRun)return;let s=null;try{s=await(await fetch("/install/"+t,{cache:"no-store"})).json()}catch(e){}
+  let stage=s?(s.started?2:s.manifest?1:0):Math.max(shown,0);await show(stage);if(run!=conRun)return;
+  if(stage==2){await wait(400);if(run==conRun)conDone(st[2],"Done");return}
+  if(!(s&&s.started)&&Date.now()-t0>60000){conLine("error","iOS didn't ask for the app. Tap Retry.");conDone("iOS didn't ask for the app.","Retry",()=>{ifzRun();return true});return}
+  await wait(500)}})()}
 /* Reload: Cydia's reload bar while sources sync, then the lists swap in place (scroll, the open tab and a pushed page stay). Pull down past the top does the same. */
 function reloadData(){let h=document.documentElement;if(h.classList.contains("reloading"))return;h.classList.add("reloading");
  fetch("/refresh",{method:"POST"}).catch(()=>{}).then(refreshIn).finally(()=>h.classList.remove("reloading"))}
 function refreshIn(){return fetch("/",{credentials:"same-origin"}).then(r=>r.text()).then(t=>{let d=new DOMParser().parseFromString(t,"text/html");
  if(!d.getElementById("t-apps")||!d.getElementById("reg")!=!document.getElementById("reg"))return location.reload();  // signed out, or registered since: the whole page changes
- ["t-apps","t-changes","t-feather","t-files"].forEach(i=>document.getElementById(i).innerHTML=d.getElementById(i).innerHTML);STAMP=+d.getElementById("stamp").dataset.v;
+ ["t-apps","t-changes","t-ifizbox"].forEach(i=>document.getElementById(i).innerHTML=d.getElementById(i).innerHTML);STAMP=+d.getElementById("stamp").dataset.v;
  try{if(localStorage.sdp)sdpDone()}catch(e){}document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());navR()}).catch(()=>{})}
 let held=0,pulled=0;addEventListener("touchstart",()=>{held=1;pulled=0},{passive:true});
 document.body.addEventListener("scroll",()=>{if(held&&!pulled&&document.body.scrollTop<-70){pulled=1;hap()}},{passive:true});  // the tick as it arms, like UIRefreshControl
@@ -893,8 +946,8 @@ addEventListener("touchend",()=>{held=0;if(pulled){pulled=0;reloadData()}},{pass
 function navR(){let n=document.querySelectorAll(".cyr.up").length,r=document.querySelector(".nav .bar.r"),l=document.querySelector(".nav .bar:not(.r)"),ch=location.hash=="#changes",c=ch&&n;
  r.textContent=c?"Update ("+n+")":"Reload";r.onclick=c?upgradeAll:reloadData;
  l.textContent=c?"Refresh":"About";l.onclick=c?reloadData:()=>{about.hidden=false;about.querySelector(".ok").focus()};badge.textContent=n;badge.hidden=!n&&!badge.classList.contains("busy");let h=document.getElementById("uph");if(h)h.hidden=!n}
-function mark(b){let n=b.dataset.app;if(!n)return;navigator.sendBeacon("/installed",new URLSearchParams({name:n}));
- document.querySelectorAll('.row .get[data-app="'+n+'"]').forEach(x=>{x.classList.add("done");if(x.dataset.arm)x.dataset.arm="INSTALLED";if(!x.classList.contains("go"))x.textContent="INSTALLED"});setTimeout(devMaybe,1500);  // after iOS's install prompt
+function mark(b,quiet){let n=b.dataset.app;if(!n)return;navigator.sendBeacon("/installed",new URLSearchParams({name:n}));
+ document.querySelectorAll('.row .get[data-app="'+n+'"]').forEach(x=>{x.classList.add("done");if(x.dataset.arm)x.dataset.arm="INSTALLED";if(!x.classList.contains("go"))x.textContent="INSTALLED"});if(!quiet)setTimeout(devMaybe,1500);  // after iOS's install prompt
  setTimeout(()=>{document.querySelectorAll('.cyr.up [data-app="'+n+'"]').forEach(x=>x.closest(".cyr").remove());navR()},500)}  // after the link has followed: a removed link doesn't navigate
 function upgradeAll(){let l=[...document.querySelectorAll(".cyr.up b")].map(b=>b.textContent);upqT.textContent="Update "+l.length+(l.length>1?" Apps":" App");upqL.textContent=l.join(", ");upq.hidden=false}
 /* ponytail: one install link every 3 s; iOS shows one install prompt per link, re-tap UPDATE on any it drops */
@@ -913,7 +966,7 @@ function pushSet(on){if(!pushOK){pushSw.checked=false;pushShow();return}  // Saf
 /* asked once per phone: after the first INSTALL tap or the first visit to Changes */
 /* first INSTALL on this phone: warn that opening the app will ask for Developer Mode; then the notifications ask */
 function devMaybe(){let a=null;try{a=localStorage.devTold}catch(e){}if(a||!window.devAsk)return pushMaybe();try{localStorage.devTold=1}catch(e){}devAsk.hidden=false}
-function devDone(show){devAsk.hidden=true;if(show){go("more");let d=document.getElementById("dev");d.open=true;setTimeout(()=>goTo(d),50)}else setTimeout(pushMaybe,400)}
+function devDone(show){devAsk.hidden=true;if(show){go("settings");let d=document.getElementById("dev");d.open=true;setTimeout(()=>goTo(d),50)}else setTimeout(pushMaybe,400)}
 function pushMaybe(){let a=null;try{a=localStorage.pushAsked}catch(e){}if(a||!window.pushAsk||(pushOK&&Notification.permission!="default"))return;
  try{localStorage.pushAsked=1}catch(e){}pushShow()}
 function pushShow(){pushWeb.hidden=pushOK;pushOk.textContent=pushOK?"Allow":"OK";let bs=pushOk.parentNode;bs.style.gridTemplateColumns=pushOK?"":"1fr";bs.firstElementChild.style.display=pushOK?"":"none";
@@ -932,10 +985,10 @@ try{if(localStorage.sdp)sdpDone()}catch(e){}
 function nudge(){go("apps");let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();darkSw.checked=document.documentElement.classList.contains("dark")});
-</script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=bool(ADMIN_PASSWORD), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifizbox=ifizbox, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
-        sources=read_urls("feather-sources.txt"),
+</script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=bool(ADMIN_PASSWORD), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
+        ifz_m=signed_url(f"/m/{ifz['name']}.plist") if ifz else "",
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
-        dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
+        adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
         file_labels=file_labels))
     if enrolled and request.args.get("enrolled"):  # survives sign-out; re-checked against the profile on every load
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
@@ -1008,7 +1061,7 @@ def is_admin():
     return bool(ADMIN_PASSWORD) and logged_in() and bool(session.get("admin")) and bool(session.get("csrf"))
 
 
-MORE = ("More", "/#more")  # back button for screens pushed from the More tab
+MORE = ("Settings", "/#settings")  # back button for screens pushed from the Settings tab
 ADMIN_CSS = """<style>.act{flex:none;width:auto;min-width:76px;padding:5px 10px;font-size:12px;border-radius:4px;letter-spacing:.02em}
 .act.red{border-color:#8a1c1c;background:linear-gradient(#f58b8b,#d43a3a 50%,#c22424 51%,#d23333)} .off>div{opacity:.5} .row b{font-weight:700}</style>"""
 
@@ -1192,16 +1245,37 @@ def sync_now():
     return "", 202
 
 
+def install_mark(step):
+    """Note iOS fetching a manifest or app for an install page's token (?t=, outside the signature: it only names the page)."""
+    t, now = request.args.get("t", ""), time.time()
+    if not re.fullmatch(r"[0-9a-f]{24}", t):
+        return ""
+    for k in [k for k, v in INSTALLS.items() if now - v["at"] > 3600]:
+        INSTALLS.pop(k, None)
+    INSTALLS.setdefault(t, {"at": now})[step] = now
+    return t
+
+
+@app.get("/install/<t>")
+def install_status(t):
+    """The install page's poll: has iOS asked for the manifest (its prompt is up) and the app (it's installing)?"""
+    if not logged_in():
+        abort(403)
+    s = INSTALLS.get(t, {})
+    return {"manifest": "manifest" in s, "started": "started" in s}
+
+
 @app.get("/m/<path:name>.plist")
 def manifest(name):
     check_sig()
+    t = install_mark("manifest")
     ipa = SIGNED / f"{name}.ipa"
     if not ipa.exists():
         abort(404)
     info = ipa_info(ipa)
     icon = (APPS / f".{name}.icon").read_text().strip() if (APPS / f".{name}.icon").exists() else ""
     return plistlib.dumps({"items": [{
-        "assets": [{"kind": "software-package", "url": signed_url(f"/i/{name}.ipa", ttl=3600)}]
+        "assets": [{"kind": "software-package", "url": signed_url(f"/i/{name}.ipa", ttl=3600) + (f"&t={t}" if t else "")}]
                   + [{"kind": k, "url": icon} for k in ("display-image", "full-size-image") if icon],
         "metadata": {"bundle-identifier": info["id"], "bundle-version": info["version"],
                      "kind": "software", "title": info["title"]}}]}), 200, {"Content-Type": "text/xml"}
@@ -1210,19 +1284,14 @@ def manifest(name):
 @app.get("/i/<path:name>.ipa")
 def ipa(name):
     check_sig()
+    install_mark("started")
     return send_from_directory(SIGNED, f"{name}.ipa", mimetype="application/octet-stream")
-
-
-@app.get("/f/<path:rel>")
-def file(rel):
-    check_sig()
-    return send_from_directory(FILES, rel, as_attachment=True)  # handles Range, so downloads resume
 
 
 @app.get("/af/<path:rel>")
 def app_file(rel):
     check_sig()
-    return send_from_directory(APP_FILES, rel, as_attachment=True)
+    return send_from_directory(APP_FILES, rel, as_attachment=True)  # handles Range, so downloads resume
 
 
 if __name__ == "__main__":
