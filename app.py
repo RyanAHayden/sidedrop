@@ -420,9 +420,10 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
 /* scroll indicator, drawn by us between the nav and tab bar (iOS doesn't show one for a scrolling body) */
 /* UIKit's UIScrollerIndicatorDefault: 5pt black at 50% with a 1pt 15% white ring, fully rounded (7pt overall) */
 #sb{position:fixed;right:2px;z-index:6;width:5px;border-radius:3px;background:rgba(0,0,0,.5);box-shadow:0 0 0 1px rgba(255,255,255,.15);opacity:0;transition:opacity .3s;pointer-events:none}
-/* the page scrolls in #scr, a fixed full-screen box, as iFizBox's screens do; <html> and <body> never scroll. iOS 26 blurs the top edge of a
-   scrolling page in the home-screen app (the document, or body, even fixed), washing out the nav, with no switch for it; inner scrollers don't get
-   it. And a fixed box follows the screen through a rotation, where body at 100% went stale (top cut off, bars not taking taps). */
+/* the pages scroll in #scr, a fixed full-screen box, as iFizBox's screens do; <html> and <body> never scroll, and the bars and alerts are outside
+   it, above. iOS 26 blurs the top edge of a scroller in the home-screen app, with no switch for it: over a nav bar inside the scroller, or the
+   whole page, that washed the bar out; under an opaque bar on top it doesn't show. A fixed box also follows the screen through a rotation, where
+   body at 100% went stale (top cut off, bars not taking taps). */
 html,body{height:100%;overflow:hidden;margin:0}
 body{font:17px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;-webkit-font-smoothing:antialiased}
 #scr{position:fixed;inset:0;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;
@@ -510,7 +511,6 @@ html.reloading #scr{padding-bottom:calc(116px + env(safe-area-inset-bottom))}
 .spin{width:20px;height:20px;flex:none;animation:spin 1s steps(12) infinite} @keyframes spin{to{transform:rotate(360deg)}}
 .scrim.clear{background:none} .nw{white-space:nowrap} .a2l>span{display:block;margin:2px 0} .ic{width:1.15em;height:1.15em;vertical-align:-.2em;margin-right:3px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
-<div id=scr><!-- everything, bars and alerts too: a fixed box is its own stacking context, so anything left outside would sit over or under all of it -->
 {% if back %}<header class=nav><a class="bar back" href="{{ back[1] }}" onclick="return goBack(this.href)">{{ back[0] }}</a><h1>{{ title }}</h1><span></span></header>
 <script>/* a pushed page: tapping back pops; iOS's own edge swipe (Safari and the home-screen app) does the same. history.back() keeps the previous page's scroll, like a native pop; first visits (no "/" behind us) follow the link */
 function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.length>1){history.back();return false}}catch(e){}location.href=h;return false}
@@ -540,7 +540,7 @@ addEventListener("DOMContentLoaded",()=>{
  /* scroll indicator: shows while scrolling; while it's showing, grab it to scrub like native */
  let b=scr,sb=document.createElement("div"),t,grab=null,sm=[],fl=0,g=()=>{let n=document.querySelector(".nav").getBoundingClientRect().bottom,tb=document.querySelector(".tabs"),
   track=(tb?tb.getBoundingClientRect().top:innerHeight)-3-n-6,h=b.scrollHeight-b.clientHeight,th=Math.max(36,track*b.clientHeight/b.scrollHeight);return{n,track,h,th}};
- sb.id="sb";b.append(sb);
+ sb.id="sb";document.body.append(sb);
  let draw=()=>{let m=g(),st=b.scrollTop,ov=st<0?-st:st>m.h?st-m.h:0,th=Math.max(7,(m.h<=1?m.track:m.th)-ov),y=m.h<=1?(st>0?1:0):Math.min(Math.max(st/m.h,0),1);sb.style.top=m.n+3+(m.track-th)*y+"px";sb.style.height=th+"px";  /* like UIScrollView: a page that fits still shows a full-length indicator while it bounces; overscroll squashes it against that end */
   sb.style.opacity=1;sb.classList.add("on");clearTimeout(t);if(!grab)t=setTimeout(()=>{sb.style.opacity=0;sb.classList.remove("on")},grab===null?500:900)};
  b.addEventListener("scroll",draw,{passive:true});
@@ -561,7 +561,7 @@ addEventListener("DOMContentLoaded",()=>{
    w.skip=1;setTimeout(()=>w.skip=0,400);if(on!=i.checked){i.checked=on;i.dispatchEvent(new Event("change"))}};
   w.addEventListener("touchend",end);w.addEventListener("touchcancel",end)})})  // iOS ends a gesture it took over with touchcancel  // Safari ignores user-scalable=no for pinch
 </script>
-{% if back %}<section class=page>{{ body|safe }}</section>{% else %}{{ body|safe }}{% endif %}</div>""".replace("%PUBLIC_URL%", PUBLIC_URL).replace("%BUILD%", BUILD)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
+{% if back %}<div id=scr><section class=page>{{ body|safe }}</section></div>{% else %}{{ body|safe }}{% endif %}""".replace("%PUBLIC_URL%", PUBLIC_URL).replace("%BUILD%", BUILD)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
 
 
 def file_labels(folder):
@@ -727,7 +727,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 /* a pushed page (Manage, Sign) in place over its tab: the iOS slide (350 ms, UINavigationController's curve), the page below moving a third as far and
    darkening 10%; transform and opacity only */
 .layer{position:fixed;z-index:6;top:0;left:0;right:0;bottom:var(--tabh,0);background:var(--pin);background-color:#c8cfd6} .dark .layer{background-color:#1d1f23}
-.layer[hidden]{display:none} .layer .nav{position:absolute} .layer .nav h1{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.layer[hidden]{display:none} .layer .nav{position:absolute;z-index:1}  /* above its own scroller, as the main nav is above #scr */ .layer .nav h1{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .lscroll{position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;scrollbar-width:none;
  padding:calc(56px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right),(100% - 30rem)/2) 20px max(10px,env(safe-area-inset-left),(100% - 30rem)/2)}
 .lscroll>.page{min-height:calc(100% + 1px)}
@@ -772,12 +772,10 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(90 12 12)" opacity=.76 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(120 12 12)" opacity=.68 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(150 12 12)" opacity=.6 />
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(180 12 12)" opacity=.52 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(210 12 12)" opacity=.44 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(240 12 12)" opacity=.36 />
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(270 12 12)" opacity=.3 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(300 12 12)" opacity=.25 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(330 12 12)" opacity=.2 /></g></svg><span id=rbarT>Reloading Data</span></div>
+<div id=scr><!-- only the pages scroll; the bars and alerts sit outside, above it, as in iFizBox: iOS 26 blurs a scroller's top edge, which the
+     opaque nav bar then hides, instead of blurring the nav bar itself -->
 <section class=page id=t-apps data-title=sidedrop>
 <div class=splash><img src=/apple-touch-icon.png alt=""><div><h2>Welcome to sidedrop</h2><p>by <a href="https://github.com/RyanAHayden">Ryan Hayden</a></p></div></div>
-{% if just_enrolled %}<div class=scrim id=welcome><div class=alert role=alertdialog aria-modal=true aria-labelledby=welT>
-<h3 id=welT>Setup Complete</h3><p>This iPhone is registered. Enjoy!</p><p>Tap GET to install apps.</p>
-<div class=abtns style="grid-template-columns:1fr"><button type=button class=ok onclick="welcomeOk()">OK</button></div></div></div>
-<script>function welcomeOk(){welcome.hidden=true;history.replaceState(null,"","/")}</script>{% endif %}
 {% if not enrolled %}<h3 class=hdr>First, set up this iPhone</h3>
 <details class=c id=sdp open><summary><span class=num>1</span><div>Turn off Stolen Device Protection</div></summary>
 {{ sdp_steps }}
@@ -801,8 +799,6 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% for day, group in recent %}<div class=cyh>New at {{ day.strftime('%b %-d, %Y') }}</div>{% for a in group %}{{ cyrow(a, False) }}{% endfor %}{% endfor %}</div>
 {% if not recent %}<p class="c m">No apps yet.</p>{% endif %}
 <p class=ftr>{% if enrolled %}Updates show for apps you installed from here on this iPhone.{% else %}Register this iPhone to get updates.{% endif %}</p>
-<div class=scrim id=upq hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=upqT>
-<h3 id=upqT>Update</h3><p id=upqL></p><div class=abtns><button type=button onclick="upq.hidden=true">Cancel</button><button type=button class=ok onclick="upgradeGo()">Confirm</button></div></div></div>
 </section>
 
 <section class=page id=t-ifizbox data-title=iFizBox>
@@ -857,6 +853,13 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <button>Sign</button><small>Signed for registered iPhones. The install link lasts 7 days.</small></form>
 <a class="b grey out" href=/logout>Sign out</a>
 </section>
+</div>
+{% if just_enrolled %}<div class=scrim id=welcome><div class=alert role=alertdialog aria-modal=true aria-labelledby=welT>
+<h3 id=welT>Setup Complete</h3><p>This iPhone is registered. Enjoy!</p><p>Tap GET to install apps.</p>
+<div class=abtns style="grid-template-columns:1fr"><button type=button class=ok onclick="welcomeOk()">OK</button></div></div></div>
+<script>function welcomeOk(){welcome.hidden=true;history.replaceState(null,"","/")}</script>{% endif %}
+<div class=scrim id=upq hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=upqT>
+<h3 id=upqT>Update</h3><p id=upqL></p><div class=abtns><button type=button onclick="upq.hidden=true">Cancel</button><button type=button class=ok onclick="upgradeGo()">Confirm</button></div></div></div>
 
 {% if enrolled %}<div class=scrim id=devAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=devT>
 <h3 id=devT>Developer Mode Required</h3><p>When the app finishes installing, opening it will ask you to turn on Developer Mode.</p>
@@ -892,14 +895,14 @@ function fetchPage(url,init){return fetch(url,Object.assign({credentials:"same-o
 function fill(p){L.url=p.url;L.querySelector("h1").textContent=p.title;L.querySelector(".page").innerHTML=p.body;L.querySelector(".lscroll").scrollTop=0}
 const EASE="cubic-bezier(.36,.66,.04,1)";
 function slide(l,from,to,done){  /* p: 0 the tab alone, 1 the pushed page l in place */
- let o={duration:350,easing:EASE,fill:"forwards"},base=[document.querySelector("#scr>.nav"),document.getElementById("t-"+cur)],sh=document.createElement("div");sh.className="shade";l.before(sh);
+ let o={duration:350,easing:EASE,fill:"forwards"},base=[document.querySelector(".nav"),document.getElementById("t-"+cur)],sh=document.createElement("div");sh.className="shade";l.before(sh);
  let an=[l.animate([{transform:`translate3d(${(1-from)*100}%,0,0)`},{transform:`translate3d(${(1-to)*100}%,0,0)`}],o),sh.animate([{opacity:.1*from},{opacity:.1*to}],o),
   ...base.map(b=>b.animate([{transform:`translate3d(${-30*from}%,0,0)`},{transform:`translate3d(${-30*to}%,0,0)`}],o))];
  an[0].finished.then(()=>{an.forEach(a=>a.cancel());sh.remove();done&&done()})}
 function open(p,from,anim){
  L=document.createElement("div");L.className="layer";L.dataset.tab=cur;
  L.innerHTML='<header class=nav><button type=button class="bar back"></button><h1></h1><span></span></header><div class=lscroll><section class=page></section></div>';
- L.querySelector(".back").textContent=navT.textContent;L.querySelector(".back").onclick=()=>history.back();L.sel=from;fill(p);scr.append(L);
+ L.querySelector(".back").textContent=navT.textContent;L.querySelector(".back").onclick=()=>history.back();L.sel=from;fill(p);document.body.append(L);
  if(anim)slide(L,0,1,()=>from&&from.classList.remove("sel"));else if(from)from.classList.remove("sel")}
 function close(anim){let l=L;if(!l)return;L=null;if(!anim||l.hidden)return l.remove();
  /* the row that opened it fades from blue as the page slides off (a copy over it, so only opacity animates) */
