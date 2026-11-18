@@ -167,6 +167,20 @@ with zipfile.ZipFile(tmp / "pb2.ipa") as z:
     assert plistlib.loads(z.read("Payload/PB.app/Info.plist"))["CFBundleIdentifier"] == "com.me.pb"
     assert plistlib.loads(z.read("Payload/PB.app/PlugIns/W.appex/Info.plist"))["CFBundleIdentifier"] == "com.me.pb.widget"
     assert z.read("Payload/PB.app/PB") == b"\xca\xfe"
+# iFizBox gets our certificate inside it, so friends never pick one; other apps don't
+A.P12.write_bytes(b"p12bytes")
+with zipfile.ZipFile(tmp / "ifz.ipa", "w") as z:
+    z.writestr("Payload/iFizBox.app/Info.plist", plistlib.dumps({"CFBundleIdentifier": "com.ryha.ifizbox"}))
+    z.writestr("Payload/iFizBox.app/ifizbox-identity.plist", b"stale")
+seen_in = []
+A.subprocess.run, run0 = lambda cmd, **kw: seen_in.append(zipfile.ZipFile(cmd[-1]).read("Payload/iFizBox.app/ifizbox-identity.plist")), A.subprocess.run
+A.sign_ipa(tmp / "ifz.ipa", tmp / "ifz-signed.ipa")
+A.subprocess.run = lambda cmd, **kw: seen_in.append(zipfile.ZipFile(cmd[-1]).namelist())
+A.sign_ipa(tmp / "apps" / "Demo.ipa", tmp / "demo-signed.ipa")
+A.subprocess.run = run0
+ident = plistlib.loads(seen_in[0])
+assert ident == {"p12": b"p12bytes", "password": A.P12_PASSWORD, "profile": A.PROFILE.read_bytes()}, ident
+assert not any("ifizbox-identity" in n for n in seen_in[1]) and not (tmp / ".ifz-signed.ipa.in").exists()
 # per-app files sit under that app's Install button, not in Files
 (tmp / "appfiles" / "Demo").mkdir(parents=True); (tmp / "appfiles" / "Demo" / "game.iso").write_bytes(b"iso")
 html = c.get("/").data.decode()

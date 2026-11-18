@@ -19,6 +19,7 @@ CUSTOM = SIGNED / "custom"  # one-off IPAs friends upload or link on the page
 HERE = Path(__file__).parent  # config files edited on GitHub; the NAS pulls and rebuilds (deploy.sh)
 read_urls = lambda f: [u for u in (HERE / f).read_text().split() if u.startswith(("https://", "http://"))] if (HERE / f).exists() else []
 FEATHER_REPO = "https://github.com/claration/Feather"
+IFIZBOX_ID = "com.ryha.ifizbox"  # signed with our certificate inside it (ifizbox_identity)
 PROFILE = DATA / "adhoc.mobileprovision"
 P12, ASC_KEY = DATA / "cert.p12", DATA / "asc.p8"
 PASSWORD = os.environ["PASSWORD"]
@@ -184,10 +185,16 @@ def fit_bundle_id(bid):
     return prefix + bid.rsplit(".", 1)[-1]  # ponytail: two apps sharing a last component would collide
 
 
-def retarget(src, dst, old_id, new_id):
-    """Copy an IPA, swapping the old bundle ID prefix for the new one in the app's and its extensions' Info.plists."""
+def retarget(src, dst, old_id, new_id, extra={}):
+    """Copy an IPA, swapping the old bundle ID prefix for the new one in the app's and its extensions' Info.plists,
+    and adding extra {file name: bytes} into the .app."""
     with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout:
+        app_dir = next(n for n in zin.namelist() if re.fullmatch(r"Payload/[^/]+\.app/Info\.plist", n))[:-len("Info.plist")]
+        for name, data in extra.items():
+            zout.writestr(app_dir + name, data)
         for item in zin.infolist():
+            if item.filename[len(app_dir):] in extra and item.filename.startswith(app_dir):
+                continue
             data = zin.read(item)
             if item.filename.endswith("Info.plist") and ".lproj/" not in item.filename:
                 info = plistlib.loads(data)
@@ -211,12 +218,20 @@ def app_entitlements(bid):
     return ents
 
 
+def ifizbox_identity():
+    """iFizBox's sideload build imports this file from its bundle into the Keychain on first launch (its
+    BundledIdentity), so friends never pick a certificate: our .p12, its password and the ad hoc profile."""
+    return plistlib.dumps({"p12": P12.read_bytes(), "password": P12_PASSWORD, "profile": PROFILE.read_bytes()})
+
+
 def sign_ipa(src, out):
     old_id = ipa_info(src)["id"]
     new_id = fit_bundle_id(old_id)
-    tmp = out.with_name(f".{out.name}.in") if new_id else src
-    if new_id:  # rewrite ourselves: zsign 1.1.2's -b can't find Info.plist
-        retarget(src, tmp, old_id, new_id)
+    extra = {"ifizbox-identity.plist": ifizbox_identity()} if old_id == IFIZBOX_ID else {}
+    rewrite = bool(new_id or extra)
+    tmp = out.with_name(f".{out.name}.in") if rewrite else src
+    if rewrite:  # rewrite ourselves: zsign 1.1.2's -b can't find Info.plist
+        retarget(src, tmp, old_id, new_id or old_id, extra)
     ents = out.with_name(f".{out.name}.entitlements.plist")
     ents.write_bytes(plistlib.dumps(app_entitlements(new_id or old_id)))
     try:
@@ -224,7 +239,7 @@ def sign_ipa(src, out):
                         "-e", ents, "-o", out, tmp], check=True, timeout=600)
     finally:
         ents.unlink(missing_ok=True)
-        if new_id:
+        if rewrite:
             tmp.unlink(missing_ok=True)
 
 

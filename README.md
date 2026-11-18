@@ -8,6 +8,8 @@ A password-protected site for sharing ad hoc iOS apps and large files with frien
 
 Under **Sign your own IPA**, a logged-in friend can drop an IPA or paste a link to one and get an install link signed with the same profile (stored in `signed/custom/`, deleted after 7 days). A **Feather** menu links to the Feather on-device signer. Feather's own repo is in `mirror-sources.txt`, so a signed Feather install shows up there, next to the sources in `feather-sources.txt` with a **Copy sources** button.
 
+iFizBox (`https://ifizbox.com/source.json` in `mirror-sources.txt`) is signed with `cert.p12`, its password and the ad hoc profile inside it (`ifizbox-identity.plist`), which it imports on first launch, so friends never have to pick a certificate in it. Anyone who installs it can pull the certificate out of the app.
+
 Files in `appfiles/<ipa name>/` (e.g. `appfiles/io.github.fizl0.hst/`) are listed under that app's Install button instead, with the same kind of signed link.
 
 The **Changes** tab lists apps by release date, Cydia style. Tapping INSTALL records that version for the phone (in `installed.json`), so newer versions show there under **Available Updates**, with a badge on the tab and an **Update** button that installs them all.

@@ -2,3 +2,4 @@ https://github.com/FIZL0/opentennis/releases/latest/download/altstore-source.jso
 https://github.com/FIZL0/partyboard/releases/latest/download/altstore-source.json
 https://github.com/FIZL0/openmx/releases/latest/download/altstore-source.json
 https://raw.githubusercontent.com/claration/Feather/main/app-repo.json
+https://ifizbox.com/source.json
