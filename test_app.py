@@ -195,8 +195,8 @@ assert not any("ifizbox-identity" in n for n in seen_in[1]) and not (tmp / ".ifz
 (tmp / "signed" / "com.ryha.ifizbox.ipa").write_bytes((tmp / "ifz.ipa").read_bytes())
 html = c.get("/").data.decode()
 assert html.index("<h3 class=hdr>iFizBox</h3>") < html.index("<h3 class=hdr>Apps</h3>") < html.index("Demo")
-# its GET opens the iFizBox tab and installs; the tab has the install button with the manifest and the benefits
-assert 'href=#ifizbox onclick="return ifzGo()"' in html and 'id=t-ifizbox' in html and 'id=ifzb data-app="com.ryha.ifizbox" data-m="https://x.test/m/com.ryha.ifizbox.plist?e=' in html
+# its GET opens the iFizBox tab (the install is that page's button); the tab has the install button with the manifest and the benefits
+assert 'href=#ifizbox onclick="go(\'ifizbox\');return false"' in html and 'id=t-ifizbox' in html and 'id=ifzb data-app="com.ryha.ifizbox" data-m="https://x.test/m/com.ryha.ifizbox.plist?e=' in html
 assert "Your certificate, already in it" in html and "10 sources" in html
 # tabs: Apps, Changes, iFizBox, Settings (no Feather, no Files, no More)
 assert re.findall(r"<a href=#(\w+)><svg", html) == ["apps", "changes", "ifizbox", "settings"] and "t-feather" not in html and "t-files" not in html

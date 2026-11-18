@@ -779,7 +779,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
 {% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class=row>{{ ifz_icon(ifz) }}
 <div>{{ ifz.title }}<small>Version {{ ifz.short }} · your certificate inside</small></div>
-{% if enrolled %}<a class="get{{ ' done' if mine.get(ifz.name) == ifz.vkey }}" data-app="{{ ifz.name }}" aria-label="Install {{ ifz.title }}" href=#ifizbox onclick="return ifzGo()">{{ 'GET' if ifz.name not in mine else 'INSTALLED' if mine[ifz.name] == ifz.vkey else 'UPDATE' }}</a>
+{% if enrolled %}<a class="get{{ ' done' if mine.get(ifz.name) == ifz.vkey }}" data-app="{{ ifz.name }}" aria-label="{{ ifz.title }}: why and install" href=#ifizbox onclick="go('ifizbox');return false">{{ 'GET' if ifz.name not in mine else 'INSTALLED' if mine[ifz.name] == ifz.vkey else 'UPDATE' }}</a>
 {% else %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>{% endif %}</div></div>
 <p class=ftr>Installs apps right on your iPhone. <a href=#ifizbox onclick="go('ifizbox');return false">Why iFizBox</a></p>{% endif %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
@@ -801,7 +801,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <section class=page id=t-ifizbox data-title=iFizBox>
 {% if ifz %}<div class=splash>{% if ifz.icon %}<img src="{{ ifz.icon }}" alt="">{% else %}<div class=ico style="width:76px;height:76px;border-radius:15px;background:hsl({{ ifz.name|hue }} 65% 50%)">{{ ifz.title[:1] }}</div>{% endif %}
 <div><h2>{{ ifz.title }}</h2><p>A package manager for your iPhone</p></div></div>
-<div class=c>{% if enrolled %}<button type=button class=gbtn id=ifzb data-app="{{ ifz.name }}" data-m="{{ ifz_m }}" data-title="{{ ifz.title }}" data-v="{{ ifz.short }}" data-n="{{ n_sources }}" onclick="ifzRun()">Install {{ ifz.title }}</button>
+<div class=c style="margin-top:16px">{% if enrolled %}<button type=button class=gbtn id=ifzb data-app="{{ ifz.name }}" data-m="{{ ifz_m }}" data-title="{{ ifz.title }}" data-v="{{ ifz.short }}" data-n="{{ n_sources }}" onclick="ifzRun()">Install {{ ifz.title }}</button>
 {% else %}<button type=button class=gbtn onclick="nudge()">Register This iPhone First</button>{% endif %}
 <small>Version {{ ifz.short }}, signed for this iPhone. Your certificate and {{ n_sources }} sources come with it.</small></div>
 <h3 class=hdr>Why {{ ifz.title }}</h3><div class="g why">
@@ -920,7 +920,6 @@ function conLine(kind,text){let d=document.createElement("div");d.className="pl 
 function conOpen(){conRun++;conL.replaceChildren(conCur);conCur.hidden=false;conT.textContent="Running";conX.textContent="Cancel";conF.hidden=true;conS.textContent="";con.hidden=false;return conRun}
 function conDone(status,label,action){conT.textContent="Complete";conCur.hidden=true;conS.textContent=status;conX.textContent="Close";conF.textContent=label;conF.onclick=()=>{if(!(action&&action()))conClose()};conF.hidden=false}
 function conClose(){conRun++;con.hidden=true;setTimeout(devMaybe,400)}
-function ifzGo(){go("ifizbox");ifzRun();return false}
 function ifzRun(){let b=document.getElementById("ifzb");if(!b)return nudge();
  let t=[...crypto.getRandomValues(new Uint8Array(12))].map(x=>x.toString(16).padStart(2,"0")).join(""),itms="itms-services://?action=download-manifest&url="+encodeURIComponent(b.dataset.m+"&t="+t);
  location.href=itms;mark(b,1);  // first, while Safari still counts this as the tap
