@@ -414,15 +414,16 @@ theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",the
 /* fixed backdrop: stays put while iOS rubber-bands the page, so the bounce shows pinstripes instead of a flat color */
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
 /* always 1px taller than the screen, so short pages still rubber-band like native */
-body{scrollbar-width:none} body::-webkit-scrollbar{display:none} .page{min-height:calc(100% + 1px)}
+#scr{scrollbar-width:none} #scr::-webkit-scrollbar{display:none} .page{min-height:calc(100% + 1px)}
 /* scroll indicator, drawn by us between the nav and tab bar (iOS doesn't show one for a scrolling body) */
 /* UIKit's UIScrollerIndicatorDefault: 5pt black at 50% with a 1pt 15% white ring, fully rounded (7pt overall) */
 #sb{position:fixed;right:2px;z-index:6;width:5px;border-radius:3px;background:rgba(0,0,0,.5);box-shadow:0 0 0 1px rgba(255,255,255,.15);opacity:0;transition:opacity .3s;pointer-events:none}
-/* body scrolls, not the page: iOS 26 blurs the top edge of a scrolling page in the home-screen app, washing out the nav, and has no switch to turn that off */
-/* body is pinned to the screen's edges (fixed, inset 0), not 100% of <html>'s height: after a rotation iOS can keep the old height and leave the
-   page offset, which cut off the top and moved the bars' touch areas away from where they're drawn. Nothing is left that can scroll but body. */
-html{height:100%;overflow:hidden}
-body{position:fixed;inset:0;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;margin:0;font:17px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;-webkit-font-smoothing:antialiased;
+/* the page scrolls in #scr, a fixed full-screen box, as iFizBox's screens do; <html> and <body> never scroll. iOS 26 blurs the top edge of a
+   scrolling page in the home-screen app (the document, or body, even fixed), washing out the nav, with no switch for it; inner scrollers don't get
+   it. And a fixed box follows the screen through a rotation, where body at 100% went stale (top cut off, bars not taking taps). */
+html,body{height:100%;overflow:hidden;margin:0}
+body{font:17px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;-webkit-font-smoothing:antialiased}
+#scr{position:fixed;inset:0;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;
  padding:calc(56px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right),(100% - 30rem)/2) calc(72px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left),(100% - 30rem)/2)}
 a{color:var(--acc);text-decoration:none} small,.m{color:var(--mute)} small{font-size:13px} .err{color:#d70015} h2{font-size:19px;margin:0}
 html{touch-action:manipulation} /* no double-tap zoom; pinch is blocked by the viewport and gesturestart */
@@ -503,10 +504,11 @@ html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6
  display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.8);pointer-events:none;
  background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7)) bottom/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.2),rgba(255,255,255,.2)) top/100% 1px no-repeat,linear-gradient(rgba(76,76,76,.8),rgba(0,0,0,.8) 52%);
  transform:translateY(100%);transition:transform .25s ease-in} html.reloading #rbar{transform:none;transition:transform .3s cubic-bezier(.25,.1,.25,1)}  /* F204's timings: up .3s, down .25s */
-html.reloading body{padding-bottom:calc(116px + env(safe-area-inset-bottom))}
+html.reloading #scr{padding-bottom:calc(116px + env(safe-area-inset-bottom))}
 .spin{width:20px;height:20px;flex:none;animation:spin 1s steps(12) infinite} @keyframes spin{to{transform:rotate(360deg)}}
 .scrim.clear{background:none} .nw{white-space:nowrap} .a2l>span{display:block;margin:2px 0} .ic{width:1.15em;height:1.15em;vertical-align:-.2em;margin-right:3px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
+<div id=scr><!-- everything, bars and alerts too: a fixed box is its own stacking context, so anything left outside would sit over or under all of it -->
 {% if back %}<header class=nav><a class="bar back" href="{{ back[1] }}" onclick="return goBack(this.href)">{{ back[0] }}</a><h1>{{ title }}</h1><span></span></header>
 <script>/* a pushed page: tapping back pops; iOS's own edge swipe (Safari and the home-screen app) does the same. history.back() keeps the previous page's scroll, like a native pop; first visits (no "/" behind us) follow the link */
 function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.length>1){history.back();return false}}catch(e){}location.href=h;return false}
@@ -518,9 +520,9 @@ function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.leng
 {% if stats %}<p>{{ stats[0] }} of 100 iPhones registered.{% if stats[1] %} Apps keep working until {{ stats[1].strftime('%B %-d, %Y') }}.{% endif %}</p>{% endif %}
 <div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){go('settings');d.open=true;setTimeout(()=>goTo(d),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
 <script>/* alerts are modal like UIAlertView: only their buttons close them */
-/* body is the scroller; scrollIntoView would also scroll the locked <html> and drag the fixed nav down */
+/* #scr is the scroller; scrollIntoView would also scroll the locked <html> and drag the fixed nav down */
 /* clamp to the real bottom: iOS lets a smooth scroll on a non-root scroller overshoot past the end, then snaps back on the next touch */
-function goTo(el){let b=document.body;b.scrollTo({top:Math.min(b.scrollTop+el.getBoundingClientRect().top-56,b.scrollHeight-b.clientHeight),behavior:"smooth"})}
+function goTo(el){let b=scr;b.scrollTo({top:Math.min(b.scrollTop+el.getBoundingClientRect().top-56,b.scrollHeight-b.clientHeight),behavior:"smooth"})}
 addEventListener("gesturestart",e=>e.preventDefault())
 /* pressed looks: .is-pressed while a finger is down, off when it lifts, slides off the control or the page scrolls.
    Not :active: iOS keeps that on a held control after the touch has turned into a scroll. A quick tap still shows it for 140 ms, as UIKit does. */
@@ -534,7 +536,7 @@ addEventListener("DOMContentLoaded",()=>{
  /* haptic tick: Safari has no vibration API, but toggling a hidden <input switch> plays the system switch haptic (iOS 18+); elsewhere navigator.vibrate. Only from a touch handler. */
  window.hap=()=>{if(navigator.vibrate){navigator.vibrate(10);return}let l=document.createElement("label"),i=document.createElement("input");i.type="checkbox";i.setAttribute("switch","");l.style.cssText="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";l.append(i);document.body.append(l);l.click();l.remove()};
  /* scroll indicator: shows while scrolling; while it's showing, grab it to scrub like native */
- let b=document.body,sb=document.createElement("div"),t,grab=null,sm=[],fl=0,g=()=>{let n=document.querySelector(".nav").getBoundingClientRect().bottom,tb=document.querySelector(".tabs"),
+ let b=scr,sb=document.createElement("div"),t,grab=null,sm=[],fl=0,g=()=>{let n=document.querySelector(".nav").getBoundingClientRect().bottom,tb=document.querySelector(".tabs"),
   track=(tb?tb.getBoundingClientRect().top:innerHeight)-3-n-6,h=b.scrollHeight-b.clientHeight,th=Math.max(36,track*b.clientHeight/b.scrollHeight);return{n,track,h,th}};
  sb.id="sb";b.append(sb);
  let draw=()=>{let m=g(),st=b.scrollTop,ov=st<0?-st:st>m.h?st-m.h:0,th=Math.max(7,(m.h<=1?m.track:m.th)-ov),y=m.h<=1?(st>0?1:0):Math.min(Math.max(st/m.h,0),1);sb.style.top=m.n+3+(m.track-th)*y+"px";sb.style.height=th+"px";  /* like UIScrollView: a page that fits still shows a full-length indicator while it bounces; overscroll squashes it against that end */
@@ -557,7 +559,7 @@ addEventListener("DOMContentLoaded",()=>{
    w.skip=1;setTimeout(()=>w.skip=0,400);if(on!=i.checked){i.checked=on;i.dispatchEvent(new Event("change"))}};
   w.addEventListener("touchend",end);w.addEventListener("touchcancel",end)})})  // iOS ends a gesture it took over with touchcancel  // Safari ignores user-scalable=no for pinch
 </script>
-{% if back %}<section class=page>{{ body|safe }}</section>{% else %}{{ body|safe }}{% endif %}""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
+{% if back %}<section class=page>{{ body|safe }}</section>{% else %}{{ body|safe }}{% endif %}</div>""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
 
 
 def file_labels(folder):
@@ -595,6 +597,7 @@ def home():
         error = str(e)
     apps = [dict(ipa_info(p), name=p.stem, files=sorted(f for f in (APP_FILES / p.stem).glob("*") if f.is_file() and f.name != "labels.txt"))
             for p in sorted(SIGNED.glob("*.ipa"))] if SIGNED.exists() else []
+    apps = [a for a in apps if "feather" not in a["name"].lower()]  # iFizBox replaced it; a copy synced before stays on disk, unlisted
     third = [a for a in apps if (APPS / f".{a['name']}.third").exists()]
     for a in third:
         a["title"] = (APPS / f".{a['name']}.third").read_text().strip() or a["title"]
@@ -874,12 +877,12 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 /* tabs keep their place (scroll, and a page pushed on Settings) and add no history, as in an iOS app; tapping the open tab pops its page, then scrolls to the top */
 let cur=null,pos={},L=null,cache={},STAMP={{ stamp }};
 function go(t){history.replaceState(history.state,"","#"+t);dispatchEvent(new HashChangeEvent("hashchange"))}  // replaceState fires no hashchange of its own
-function show(){let t=location.hash.slice(1);if(t=="more")t="settings";if(!document.getElementById("t-"+t))t="apps";  // more: Home Screen links from beforeif(cur&&cur!=t)pos[cur]=document.body.scrollTop;
- document.querySelectorAll("body>.page").forEach(p=>p.hidden=p.id!="t-"+t);
+function show(){let t=location.hash.slice(1);if(t=="more")t="settings";/* more: Home Screen links from before */if(!document.getElementById("t-"+t))t="apps";if(cur&&cur!=t)pos[cur]=scr.scrollTop;
+ document.querySelectorAll("#scr>.page").forEach(p=>p.hidden=p.id!="t-"+t);
  document.querySelectorAll(".tabs a").forEach(a=>a.getAttribute("href")=="#"+t?a.setAttribute("aria-current","page"):a.removeAttribute("aria-current"));
- navT.textContent=document.getElementById("t-"+t).dataset.title;if(cur!=t)document.body.scrollTo(0,pos[t]||0);cur=t;if(L)L.hidden=L.dataset.tab!=t;navR()}
+ navT.textContent=document.getElementById("t-"+t).dataset.title;if(cur!=t)scr.scrollTo(0,pos[t]||0);cur=t;if(L)L.hidden=L.dataset.tab!=t;navR()}
 document.querySelectorAll(".tabs a").forEach(a=>a.addEventListener("click",e=>{e.preventDefault();let t=a.getAttribute("href").slice(1);
- if(t!=cur)return go(t);if(L)history.back();else document.body.scrollTo({top:0,behavior:"smooth"})}));
+ if(t!=cur)return go(t);if(L)history.back();else scr.scrollTo({top:0,behavior:"smooth"})}));
 /* a pushed page: fetched and drawn over the tab (its own nav with Back), one history entry, so Back, iOS's edge swipe and forward all work.
    The server still serves each page whole (a reload, or no JS, gets the old full-page screen); anything unexpected falls back to that. */
 function parsePage(r,h){if(!r.ok||new URL(r.url).pathname=="/")return null;let d=new DOMParser().parseFromString(h,"text/html"),s=d.querySelector("section.page"),n=d.querySelector(".nav h1");return s&&n?{title:n.textContent,body:s.innerHTML,url:r.url}:null}
@@ -887,14 +890,14 @@ function fetchPage(url,init){return fetch(url,Object.assign({credentials:"same-o
 function fill(p){L.url=p.url;L.querySelector("h1").textContent=p.title;L.querySelector(".page").innerHTML=p.body;L.querySelector(".lscroll").scrollTop=0}
 const EASE="cubic-bezier(.36,.66,.04,1)";
 function slide(l,from,to,done){  /* p: 0 the tab alone, 1 the pushed page l in place */
- let o={duration:350,easing:EASE,fill:"forwards"},base=[document.querySelector("body>.nav"),document.getElementById("t-"+cur)],sh=document.createElement("div");sh.className="shade";l.before(sh);
+ let o={duration:350,easing:EASE,fill:"forwards"},base=[document.querySelector("#scr>.nav"),document.getElementById("t-"+cur)],sh=document.createElement("div");sh.className="shade";l.before(sh);
  let an=[l.animate([{transform:`translate3d(${(1-from)*100}%,0,0)`},{transform:`translate3d(${(1-to)*100}%,0,0)`}],o),sh.animate([{opacity:.1*from},{opacity:.1*to}],o),
   ...base.map(b=>b.animate([{transform:`translate3d(${-30*from}%,0,0)`},{transform:`translate3d(${-30*to}%,0,0)`}],o))];
  an[0].finished.then(()=>{an.forEach(a=>a.cancel());sh.remove();done&&done()})}
 function open(p,from,anim){
  L=document.createElement("div");L.className="layer";L.dataset.tab=cur;
  L.innerHTML='<header class=nav><button type=button class="bar back"></button><h1></h1><span></span></header><div class=lscroll><section class=page></section></div>';
- L.querySelector(".back").textContent=navT.textContent;L.querySelector(".back").onclick=()=>history.back();L.sel=from;fill(p);document.body.append(L);
+ L.querySelector(".back").textContent=navT.textContent;L.querySelector(".back").onclick=()=>history.back();L.sel=from;fill(p);scr.append(L);
  if(anim)slide(L,0,1,()=>from&&from.classList.remove("sel"));else if(from)from.classList.remove("sel")}
 function close(anim){let l=L;if(!l)return;L=null;if(!anim||l.hidden)return l.remove();
  /* the row that opened it fades from blue as the page slides off (a copy over it, so only opacity animates) */
@@ -941,7 +944,7 @@ function refreshIn(){return fetch("/",{credentials:"same-origin"}).then(r=>r.tex
  ["t-apps","t-changes","t-ifizbox"].forEach(i=>document.getElementById(i).innerHTML=d.getElementById(i).innerHTML);STAMP=+d.getElementById("stamp").dataset.v;
  try{if(localStorage.sdp)sdpDone()}catch(e){}document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());navR()}).catch(()=>{})}
 let held=0,pulled=0;addEventListener("touchstart",()=>{held=1;pulled=0},{passive:true});
-document.body.addEventListener("scroll",()=>{if(held&&!pulled&&document.body.scrollTop<-70){pulled=1;hap()}},{passive:true});  // the tick as it arms, like UIRefreshControl
+scr.addEventListener("scroll",()=>{if(held&&!pulled&&scr.scrollTop<-70){pulled=1;hap()}},{passive:true});  // the tick as it arms, like UIRefreshControl
 addEventListener("touchend",()=>{held=0;if(pulled){pulled=0;reloadData()}},{passive:true});
 /* on Changes with upgrades, the nav is Cydia's: Refresh (reloads data) on the left, Update (n) on the right */
 function navR(){let n=document.querySelectorAll(".cyr.up").length,r=document.querySelector(".nav .bar.r"),l=document.querySelector(".nav .bar:not(.r)"),ch=location.hash=="#changes",c=ch&&n;
