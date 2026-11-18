@@ -520,6 +520,11 @@ function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.leng
 /* clamp to the real bottom: iOS lets a smooth scroll on a non-root scroller overshoot past the end, then snaps back on the next touch */
 function goTo(el){let b=document.body;b.scrollTo({top:Math.min(b.scrollTop+el.getBoundingClientRect().top-56,b.scrollHeight-b.clientHeight),behavior:"smooth"})}
 addEventListener("gesturestart",e=>e.preventDefault())
+/* body is the scroller and <html> is locked (overflow:hidden), but rotating lets iOS leave <html> itself scrolled: the page slides up under the
+   nav, its top out of reach since nothing can scroll <html> back. Put it back whenever the viewport changes. */
+const unshift=()=>{if(scrollX||scrollY||document.documentElement.scrollTop)scrollTo(0,0)};
+addEventListener("resize",unshift);addEventListener("orientationchange",()=>setTimeout(unshift,300));addEventListener("scroll",unshift,{passive:true});
+if(window.visualViewport)visualViewport.addEventListener("resize",unshift)
 /* pressed looks: .is-pressed while a finger is down, off when it lifts, slides off the control or the page scrolls.
    Not :active: iOS keeps that on a held control after the touch has turned into a scroll. A quick tap still shows it for 140 ms, as UIKit does. */
 const PRESS=".get,.tile,a.b,label.b,button,.nav .bar,.sw";let pd=null,pdAt=0;
