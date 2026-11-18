@@ -395,7 +395,9 @@ def sign_profile(data):
 
 # --- pages ---
 
-PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+BUILD = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:12]  # changes with every deploy of the page's code; an open page that sees a new one reloads
+
+PAGE = """<!doctype html><meta charset=utf-8><meta name=build content=%BUILD%><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>sidedrop</title><meta name=description content="Apps shared between friends, signed for your iPhone.">
 <meta property=og:title content=sidedrop><meta property=og:description content="Apps shared between friends, signed for your iPhone."><meta property=og:site_name content=sidedrop>
 <meta property=og:type content=website><meta property=og:url content="%PUBLIC_URL%/"><meta property=og:image content="%PUBLIC_URL%/static/og.png"><meta property=og:image:width content=1200><meta property=og:image:height content=630>
@@ -559,7 +561,7 @@ addEventListener("DOMContentLoaded",()=>{
    w.skip=1;setTimeout(()=>w.skip=0,400);if(on!=i.checked){i.checked=on;i.dispatchEvent(new Event("change"))}};
   w.addEventListener("touchend",end);w.addEventListener("touchcancel",end)})})  // iOS ends a gesture it took over with touchcancel  // Safari ignores user-scalable=no for pinch
 </script>
-{% if back %}<section class=page>{{ body|safe }}</section>{% else %}{{ body|safe }}{% endif %}</div>""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
+{% if back %}<section class=page>{{ body|safe }}</section>{% else %}{{ body|safe }}{% endif %}</div>""".replace("%PUBLIC_URL%", PUBLIC_URL).replace("%BUILD%", BUILD)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
 
 
 def file_labels(folder):
@@ -941,6 +943,7 @@ function reloadData(){let h=document.documentElement;if(h.classList.contains("re
  fetch("/refresh",{method:"POST"}).catch(()=>{}).then(refreshIn).finally(()=>h.classList.remove("reloading"))}
 function refreshIn(){return fetch("/",{credentials:"same-origin"}).then(r=>r.text()).then(t=>{let d=new DOMParser().parseFromString(t,"text/html");
  if(!d.getElementById("t-apps")||!d.getElementById("reg")!=!document.getElementById("reg"))return location.reload();  // signed out, or registered since: the whole page changes
+ if(newBuild((d.querySelector("meta[name=build]")||{}).content))return;  // a new deploy: newBuild reloads the whole page
  ["t-apps","t-changes","t-ifizbox"].forEach(i=>document.getElementById(i).innerHTML=d.getElementById(i).innerHTML);STAMP=+d.getElementById("stamp").dataset.v;
  try{if(localStorage.sdp)sdpDone()}catch(e){}document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());navR()}).catch(()=>{})}
 let held=0,pulled=0;addEventListener("touchstart",()=>{held=1;pulled=0},{passive:true});
@@ -958,8 +961,13 @@ function upgradeAll(){let l=[...document.querySelectorAll(".cyr.up b")].map(b=>b
 function upgradeGo(){upq.hidden=true;[...document.querySelectorAll(".cyr.up a.get")].map(b=>[b,b.href]).forEach(([b,h],i)=>setTimeout(()=>{mark(b);location.href=h},i*3000))}
 addEventListener("hashchange",show);
 /* check sources in the background (the page no longer waits on it); swap the lists in only if a new build got signed */
-{% if enrolled %}badge.classList.add("busy");badge.hidden=false;fetch("/check",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.stamp!=STAMP)return refreshIn()})
- .catch(()=>{}).finally(()=>{badge.classList.remove("busy");navR()});{% endif %}
+/* and when the Home Screen app comes back: iOS keeps it running for days, so a new deploy (another build) reloads the whole page, not just the lists */
+const BUILD=document.querySelector("meta[name=build]").content;
+/* once per new build: a server still answering with another one (mid-deploy) mustn't loop the page */
+function newBuild(b){if(!b||b==BUILD)return false;let seen=null;try{seen=sessionStorage.reloadedFor}catch(e){}if(seen==b)return false;try{sessionStorage.reloadedFor=b}catch(e){}location.reload();return true}
+function checkNow(){return fetch("/check",{method:"POST"}).then(r=>r.json()).then(d=>{if(newBuild(d.build))return;if(d.stamp!=STAMP)return refreshIn()}).catch(()=>{})}
+addEventListener("visibilitychange",()=>{if(document.visibilityState=="visible"&&con.hidden)checkNow()});  // not mid-install: the install page would vanish
+{% if enrolled %}badge.classList.add("busy");badge.hidden=false;checkNow().finally(()=>{badge.classList.remove("busy");navR()});{% endif %}
 /* web push: iOS offers it only to the Home Screen app (separate storage from Safari, so Safari's "asked" doesn't stop the app asking) */
 const PUSHKEY="{{ vapid }}",pushOK="PushManager" in window&&"serviceWorker" in navigator&&{{ 'true' if enrolled else 'false' }};
 function pushSub(){return navigator.serviceWorker.register("/sw.js").then(r=>r.pushManager.getSubscription().then(s=>[r,s]))}
@@ -1148,7 +1156,7 @@ def check():
         abort(403)
     sync_if_stale(60)
     resign_and_notify()
-    return {"stamp": signed_stamp()}
+    return {"stamp": signed_stamp(), "build": BUILD}
 
 
 @app.post("/refresh")

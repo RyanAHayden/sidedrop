@@ -147,6 +147,7 @@ c.get("/")
 assert gets.count("https://src/source.json") == n
 assert A.app.test_client().post("/check").status_code == 403
 assert "stamp" in c.post("/check").json; c.post("/check")
+assert c.post("/check").json["build"] == A.BUILD and f"<meta name=build content={A.BUILD}>" in c.get("/").data.decode()  # an open page reloads on a new deploy
 assert gets.count("https://src/source.json") == n + 1
 
 # CI trigger needs the token
