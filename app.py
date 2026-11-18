@@ -401,7 +401,7 @@ PAGE = """<!doctype html><meta charset=utf-8><meta name=build content=%BUILD%><m
 <title>sidedrop</title><meta name=description content="Apps shared between friends, signed for your iPhone.">
 <meta property=og:title content=sidedrop><meta property=og:description content="Apps shared between friends, signed for your iPhone."><meta property=og:site_name content=sidedrop>
 <meta property=og:type content=website><meta property=og:url content="%PUBLIC_URL%/"><meta property=og:image content="%PUBLIC_URL%/static/og.png"><meta property=og:image:width content=1200><meta property=og:image:height content=630>
-<meta name=twitter:card content=summary_large_image><meta name=twitter:image content="%PUBLIC_URL%/static/og.png"><link rel=apple-touch-icon href=/apple-touch-icon.png><link rel=manifest href=/manifest.webmanifest><meta name=theme-color content="#bdcbdc"><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=sidedrop>
+<meta name=twitter:card content=summary_large_image><meta name=twitter:image content="%PUBLIC_URL%/static/og.png"><link rel=apple-touch-icon href=/apple-touch-icon.png><link rel=manifest href=/manifest.webmanifest><meta name=theme-color content="#bdcbdc"><meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=sidedrop>
 <script>/* Dark Mode follows the phone's theme until the Settings switch picks one (localStorage.dark = "1"/"0") */
 function theme(){let d=null;try{d=localStorage.dark}catch(e){}let on=document.documentElement.classList.toggle("dark",d?d=="1":matchMedia("(prefers-color-scheme: dark)").matches);
  document.querySelector("meta[name=theme-color]").content=on?"#5f656f":"#bdcbdc"}  /* Safari's top bar matches the nav */
@@ -1034,7 +1034,10 @@ self.addEventListener("notificationclick",e=>{e.notification.close();e.waitUntil
 
 @app.get("/manifest.webmanifest")
 def manifest_json():  # iOS only offers web push to Home Screen apps with display: standalone
-    return {"name": "sidedrop", "short_name": "sidedrop", "display": "standalone", "start_url": "/", "background_color": "#c8cfd6",
+    # as iFizBox's: an opaque black status bar (capable + status-bar-style black above; a translucent one put the nav under it, where iOS 26 blurs
+    # it and taps near the top go to the status bar) and portrait only (rotating left the page offset). iOS reads these when the icon is added.
+    return {"name": "sidedrop", "short_name": "sidedrop", "id": "/", "scope": "/", "display": "standalone", "orientation": "portrait",
+            "start_url": "/", "background_color": "#c8cfd6", "theme_color": "#597498",
             "icons": [{"src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png"}]}
 
 
