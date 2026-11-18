@@ -408,7 +408,7 @@ theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",the
 /* 2012 iOS look (pinstripes, glossy bars, App Store buttons), with a gunmetal Dark Mode below. */
 :root{color-scheme:light;--mute:#6d7480;--sep:#e0e0e0;--line:#b7b9bd;--acc:#385487;--head:#4c566c;
  --pin:repeating-linear-gradient(90deg,#cbd0da 0 2.5px,#ced3dc 2.5px 8px);--gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
- --navbg:linear-gradient(#bdcbdc,#597498);--statbg:linear-gradient(#4f698b,#3f5b7f);--navhi:#eff2f7;--navedge:#2d3642;--table:#f7f7f7;--div:#c9c9c9;--divhi:#fff;--barbtn:linear-gradient(#99aac2,#41618e);  /* iOS 6 UIKit nav art: smooth, no gloss split */
+ --tabh:calc(49px + env(safe-area-inset-bottom));--navbg:linear-gradient(#bdcbdc,#597498);--statbg:linear-gradient(#4f698b,#3f5b7f);--navhi:#eff2f7;--navedge:#2d3642;--table:#f7f7f7;--div:#c9c9c9;--divhi:#fff;--barbtn:linear-gradient(#99aac2,#41618e);  /* iOS 6 UIKit nav art: smooth, no gloss split */
  --bluebtn:linear-gradient(#7aa5ef,#3b72d4 50%,#2861c9 51%,#3a73da);--greenbtn:linear-gradient(#8fd96b,#4caa2b 50%,#3c9a1d 51%,#4cae2a);
  --greybtn:linear-gradient(#fdfdfd,#e3e6ea);--emboss:0 1px 0 rgba(255,255,255,.75);--chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17.5 26.4'%3E%3Cpath fill='%237f7f7f' d='M.07 4.23 9.12 13.27 0 22.26 4.12 26.38 17.47 13.03 4.43 0Z'/%3E%3C/svg%3E");background:#c8cfd6}
 /* fixed backdrop: stays put while iOS rubber-bands the page, so the bounce shows pinstripes instead of a flat color */
@@ -708,8 +708,9 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
  font:700 13px/16px "Helvetica Neue",Helvetica,sans-serif;text-align:center;background:linear-gradient(#f7b3b7,#e92d35 48.8%,#e70f19 50.5%,#c50103);box-shadow:0 2px 2.5px rgba(0,0,0,.6)}
 /* Cydia: while it checks for updates the badge spins instead of counting */
 .badge.busy{font-size:0;padding:0} .badge.busy:after{content:"";position:absolute;inset:0;margin:auto;width:10px;height:10px;box-sizing:border-box;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
-/* Cydia tab bar */
-.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;display:grid;grid-template-columns:repeat(4,1fr);
+/* Cydia tab bar: 3pt + 44pt tabs + 2pt, then the home indicator's area. --tabh, in CSS (not measured once by script, before iOS has applied
+   the safe area), so the reload bar and pushed pages always sit right on top of it */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;height:var(--tabh);box-sizing:border-box;display:grid;grid-template-columns:repeat(4,1fr);
  padding:0 max(2px,env(safe-area-inset-right)) calc(2px + env(safe-area-inset-bottom)) max(2px,env(safe-area-inset-left));
  background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7)) top/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.1),rgba(255,255,255,.1)) 0 1px/100% 1px no-repeat,linear-gradient(#2f2f2f,#151515 49.5%,#000 49.5%) 0 1px/100% 48px no-repeat,#000}
 .tabs:before{content:"";position:absolute;left:0;right:0;bottom:100%;height:2.5px;pointer-events:none;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.18))}
@@ -868,7 +869,6 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <a href=#settings><svg viewBox="0 0 30 30"><path fill-rule=evenodd d="M15 7.5a7.5 7.5 0 1 0 0 15a7.5 7.5 0 1 0 0-15zm0 4.3a3.2 3.2 0 1 1 0 6.4a3.2 3.2 0 1 1 0-6.4z"/>{% for r in range(0, 360, 45) %}<rect x="12.8" y="3" width="4.4" height="6" rx="1" transform="rotate({{ r }} 15 15)"/>{% endfor %}</svg>Settings</a></nav>
 <svg width=0 height=0 style="position:absolute" aria-hidden=true><linearGradient id=taboff x1=0 y1=0 x2=0 y2=1><stop offset=0 stop-color="#9d9d9d"/><stop offset=1 stop-color="#595959"/></linearGradient><linearGradient id=tabglow x1=.37 y1=0 x2=.63 y2=1><stop offset=0 stop-color="#d9e5f9"/><stop offset=.473 stop-color="#77b5eb"/><stop offset=.488 stop-color="#0091e5"/><stop offset=1 stop-color="#0fbff7"/></linearGradient></svg>
 <script>
-document.documentElement.style.setProperty("--tabh",document.querySelector(".tabs").offsetHeight+"px");
 /* tabs keep their place (scroll, and a page pushed on Settings) and add no history, as in an iOS app; tapping the open tab pops its page, then scrolls to the top */
 let cur=null,pos={},L=null,cache={},STAMP={{ stamp }};
 function go(t){history.replaceState(history.state,"","#"+t);dispatchEvent(new HashChangeEvent("hashchange"))}  // replaceState fires no hashchange of its own
@@ -889,7 +889,7 @@ function slide(l,from,to,done){  /* p: 0 the tab alone, 1 the pushed page l in p
  let an=[l.animate([{transform:`translate3d(${(1-from)*100}%,0,0)`},{transform:`translate3d(${(1-to)*100}%,0,0)`}],o),sh.animate([{opacity:.1*from},{opacity:.1*to}],o),
   ...base.map(b=>b.animate([{transform:`translate3d(${-30*from}%,0,0)`},{transform:`translate3d(${-30*to}%,0,0)`}],o))];
  an[0].finished.then(()=>{an.forEach(a=>a.cancel());sh.remove();done&&done()})}
-function open(p,from,anim){document.documentElement.style.setProperty("--tabh",document.querySelector(".tabs").offsetHeight+"px");
+function open(p,from,anim){
  L=document.createElement("div");L.className="layer";L.dataset.tab=cur;
  L.innerHTML='<header class=nav><button type=button class="bar back"></button><h1></h1><span></span></header><div class=lscroll><section class=page></section></div>';
  L.querySelector(".back").textContent=navT.textContent;L.querySelector(".back").onclick=()=>history.back();L.sel=from;fill(p);document.body.append(L);
