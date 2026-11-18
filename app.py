@@ -592,7 +592,8 @@ def home():
     mine = installed().get(token_udid(tok), {}) if enrolled else {}
     updates = [a for a in apps if a["name"] in mine and mine[a["name"]] != a["vkey"]]
     recent = [(d, list(g)) for d, g in itertools.groupby(sorted(apps, key=lambda a: a["when"], reverse=True)[:30], key=lambda a: a["when"])]
-    apps = [a for a in apps if a not in feather and a not in third]
+    ifizbox = [a for a in apps if IFIZBOX_ID in (a["id"], a["name"])]  # its own category, on top
+    apps = [a for a in apps if a not in feather and a not in third and a not in ifizbox]
     files = sorted(p for p in FILES.rglob("*") if p.is_file()) if FILES.exists() else []
     resp = make_response(page("""<style>
 .splash{display:flex;align-items:center;gap:14px;padding:2px 6px 4px} .splash img{width:76px;height:76px;flex:none;border-radius:15px;box-shadow:0 3px 6px rgba(0,0,0,.45)}
@@ -724,6 +725,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <button type=button class=gbtn onclick="sdpDone(true)">I turned it off</button></details>
 <div class=c id=reg><div class=sh><span class=num>2</span><div>Register this iPhone<small>In Safari on this iPhone</small></div></div>
 <fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
+{% if ifizbox %}<h3 class=hdr>iFizBox</h3>{{ install_list(ifizbox) }}<p class=ftr>Installs apps from AltStore sources right on your iPhone. The certificate is already in it.</p>{% endif %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
 </section>
@@ -857,7 +859,7 @@ try{if(localStorage.sdp)sdpDone()}catch(e){}
 function nudge(){location.hash="apps";let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();darkSw.checked=document.documentElement.classList.contains("dark")});
-</script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=bool(ADMIN_PASSWORD), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
+</script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=bool(ADMIN_PASSWORD), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifizbox=ifizbox, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
         sources=read_urls("feather-sources.txt"),
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         dl=lambda f: signed_url(f"/f/{f.relative_to(FILES)}"), adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),

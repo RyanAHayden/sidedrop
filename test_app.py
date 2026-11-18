@@ -181,6 +181,11 @@ A.subprocess.run = run0
 ident = plistlib.loads(seen_in[0])
 assert ident == {"p12": b"p12bytes", "password": A.P12_PASSWORD, "profile": A.PROFILE.read_bytes()}, ident
 assert not any("ifizbox-identity" in n for n in seen_in[1]) and not (tmp / ".ifz-signed.ipa.in").exists()
+# iFizBox gets its own category above Apps
+(tmp / "signed" / "com.ryha.ifizbox.ipa").write_bytes((tmp / "ifz.ipa").read_bytes())
+html = c.get("/").data.decode()
+assert html.index("<h3 class=hdr>iFizBox</h3>") < html.index("<h3 class=hdr>Apps</h3>") < html.index("Demo")
+(tmp / "signed" / "com.ryha.ifizbox.ipa").unlink()
 # per-app files sit under that app's Install button, not in Files
 (tmp / "appfiles" / "Demo").mkdir(parents=True); (tmp / "appfiles" / "Demo" / "game.iso").write_bytes(b"iso")
 html = c.get("/").data.decode()
