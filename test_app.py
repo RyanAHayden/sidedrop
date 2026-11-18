@@ -197,6 +197,17 @@ assert "steps(this)" in html and "Download game.iso" in html  # files turn INSTA
 html = c.get("/").data.decode()
 assert "Download the game disc" in html and "labels.txt" not in html
 
+# Manage and Sign open as pages pushed in place; pressed looks come from JS (.is-pressed), never :active, which iOS leaves stuck
+html = c.get("/").data.decode()
+assert "href=/admin data-push" in html and "action=/sign enctype=multipart/form-data data-push" in html and ":active{" not in html and ":active," not in html
+# the inline scripts parse (a syntax error kills every button on the page)
+import shutil, subprocess
+if shutil.which("node"):
+    for js in re.findall(r"<script>(.*?)</script>", html, re.S):
+        (tmp / "inline.js").write_text(js)
+        r = subprocess.Popen(["node", "--check", str(tmp / "inline.js")], stderr=subprocess.PIPE, text=True)  # subprocess.run is stubbed above
+        assert r.wait() == 0, r.stderr.read()
+
 # Feather sources come from the repo's feather-sources.txt and get a copy button
 html = c.get("/").data.decode()
 assert "https://provenance-emu.com/apps.json\nhttps://fizl0" in html and "Copy sources" in html

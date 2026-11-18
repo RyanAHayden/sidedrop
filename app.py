@@ -397,11 +397,11 @@ function theme(){let d=null;try{d=localStorage.dark}catch(e){}let on=document.do
 theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",theme)</script>
 <style>
 /* 2012 iOS look (pinstripes, glossy bars, App Store buttons), with a gunmetal Dark Mode below. */
-:root{color-scheme:light;--mute:#6d7480;--sep:#e0e0e0;--line:#abb2bc;--acc:#385487;--head:#4c566c;
+:root{color-scheme:light;--mute:#6d7480;--sep:#e0e0e0;--line:#b7b9bd;--acc:#385487;--head:#4c566c;
  --pin:repeating-linear-gradient(90deg,#cbd0da 0 2.5px,#ced3dc 2.5px 8px);--gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
- --navbg:linear-gradient(#bdcbdc,#597498);--barbtn:linear-gradient(#99aac2,#41618e);  /* iOS 6 UIKit nav art: smooth, no gloss split */
+ --navbg:linear-gradient(#bdcbdc,#597498);--statbg:linear-gradient(#4f698b,#3f5b7f);--navhi:#eff2f7;--navedge:#2d3642;--table:#f7f7f7;--div:#c9c9c9;--divhi:#fff;--barbtn:linear-gradient(#99aac2,#41618e);  /* iOS 6 UIKit nav art: smooth, no gloss split */
  --bluebtn:linear-gradient(#7aa5ef,#3b72d4 50%,#2861c9 51%,#3a73da);--greenbtn:linear-gradient(#8fd96b,#4caa2b 50%,#3c9a1d 51%,#4cae2a);
- --greybtn:linear-gradient(#fdfdfd,#e3e6ea);--emboss:0 1px 0 rgba(255,255,255,.75);background:#c8cfd6}
+ --greybtn:linear-gradient(#fdfdfd,#e3e6ea);--emboss:0 1px 0 rgba(255,255,255,.75);--chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17.5 26.4'%3E%3Cpath fill='%237f7f7f' d='M.07 4.23 9.12 13.27 0 22.26 4.12 26.38 17.47 13.03 4.43 0Z'/%3E%3C/svg%3E");background:#c8cfd6}
 /* fixed backdrop: stays put while iOS rubber-bands the page, so the bounce shows pinstripes instead of a flat color */
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
 /* always 1px taller than the screen, so short pages still rubber-band like native */
@@ -417,32 +417,35 @@ a{color:var(--acc);text-decoration:none} small,.m{color:var(--mute)} small{font-
 html{touch-action:manipulation} /* no double-tap zoom; pinch is blocked by the viewport and gesturestart */
 button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5c542;outline-offset:2px}
 .nav{position:fixed;top:0;left:0;right:0;z-index:5;height:44px;padding:env(safe-area-inset-top) max(7px,env(safe-area-inset-right)) 0 max(7px,env(safe-area-inset-left));
- display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:var(--navbg);box-shadow:inset 0 1px 0 #eff2f7,0 1px 0 #2d3642,0 2px 4px rgba(0,0,0,.25)}
+ display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+ background:linear-gradient(var(--navedge),var(--navedge)) bottom/100% 1px no-repeat,linear-gradient(var(--navhi),var(--navhi)) 0 env(safe-area-inset-top)/100% 1px no-repeat,var(--navbg) bottom/100% 44px no-repeat,var(--statbg)}
+/* the kit's nav shadow: 2.5px of black at 18% fading down over the page */
+.nav:after{content:"";position:absolute;left:0;right:0;top:100%;height:2.5px;pointer-events:none;background:linear-gradient(rgba(0,0,0,.18),rgba(0,0,0,0))}
 .nav h1{margin:0;font-size:20px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45)}
 .nav .bar{justify-self:start;width:auto;font-size:12px;font-weight:700;line-height:1.2;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45);background:var(--barbtn);border:1px solid #2f4769;border-top-color:#343a42;
  border-radius:5px;padding:6px 10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 0 rgba(255,255,255,.25)} .nav .bar.r{justify-self:end}
 /* iOS 6 back button: arrow art drawn after UIKit's UINavigationBarDefaultBack, stretched through the middle */
 .nav .back{display:inline-flex;align-items:center;height:30px;box-sizing:border-box;max-width:40vw;overflow:hidden;white-space:nowrap;padding:0 5px 0 1px;background:none;box-shadow:none;border-radius:0;
- border:solid transparent;border-width:0 5px 0 13px;border-image:url(/static/back.svg) 0 10 0 26 fill/0 5px 0 13px} .nav .back:active{border-image-source:url(/static/back-pressed.svg)} .dark .nav .back:active{filter:brightness(.75)}
-/* pressed states (UIKit's *Pressed art); iOS only shows :active once the page has a touch listener, added below */
-.nav .bar:not(.back):active{background:linear-gradient(#8b97af,#283e6b);border-color:#1c2c4f;border-top-color:#30343c}
-.dark .nav .bar:not(.back):active{background:linear-gradient(#2a2d32,#121316)}
+ border:solid transparent;border-width:0 5px 0 13px;border-image:url(/static/back.svg) 0 10 0 26 fill/0 5px 0 13px} .nav .back.is-pressed{border-image-source:url(/static/back-pressed.svg)} .dark .nav .back.is-pressed{filter:brightness(.75)}
+/* pressed states (UIKit's *Pressed art), on .is-pressed: the script below sets it while a finger is down */
+.nav .bar:not(.back).is-pressed{background:linear-gradient(#8b97af,#283e6b);border-color:#1c2c4f;border-top-color:#30343c}
+.dark .nav .bar:not(.back).is-pressed{background:linear-gradient(#2a2d32,#121316)}
 /* held buttons, from the 4S art: white/grey round buttons go blue (iTunesStoreUI GradientButtonBackgroundPressed, same as the tiles);
    blue and green darken the way PurchaseButtonBluePressed (x.75) and PurchaseConfirmButtonPressed (x.8) do; red from UIAlertSheetDefaultDestroyButtonPressed */
-.get:not(.go):not(.blue):active,a.b.grey:active,label.b.grey:active,button.grey:active,.act:not(.red):active{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.3);border-color:#005ee8;background:linear-gradient(#058af5,#0160e6);box-shadow:none}
-.get.blue:active,a.b:not(.grey):active,form button:not(.grey):not(.act):active{border-color:#1f3b67;background:linear-gradient(#5c7cb3,#2c569f 50%,#1e4997 51%,#2c56a4);box-shadow:none}
-.get.go:active{border-color:#255e12} .get.go:active:before,button.gbtn:active{border-color:#255e12;background:linear-gradient(#72ae56,#3d8822 50%,#307b17 51%,#3d8b22);box-shadow:none}
-.act.red:active{border-color:#8a1c1c;background:linear-gradient(#cf848a,#9d010c 80%,#b33941)}
+.get:not(.go):not(.blue).is-pressed,a.b.grey.is-pressed,label.b.grey.is-pressed,button.grey.is-pressed,.act:not(.red).is-pressed{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.3);border-color:#005ee8;background:linear-gradient(#058af5,#0160e6);box-shadow:none}
+.get.blue.is-pressed,a.b:not(.grey).is-pressed,form button:not(.grey):not(.act).is-pressed{border-color:#1f3b67;background:linear-gradient(#5c7cb3,#2c569f 50%,#1e4997 51%,#2c56a4);box-shadow:none}
+.get.go.is-pressed{border-color:#255e12} .get.go.is-pressed:before,button.gbtn.is-pressed{border-color:#255e12;background:linear-gradient(#72ae56,#3d8822 50%,#307b17 51%,#3d8b22);box-shadow:none}
+.act.red.is-pressed{border-color:#8a1c1c;background:linear-gradient(#cf848a,#9d010c 80%,#b33941)}
 .alert .abtns button,.alert .abtns .ok{background-origin:border-box!important}  /* the background shorthands reset it; without it the gradient tiles into the see-through border and its bright top shows as a line at the bottom */
-.alert .abtns button:active{background:linear-gradient(#6d7da3,#3c4e7d 49%,#22325e 51%,#2f3f6c)}
-.sw:active .k{background:linear-gradient(#bcbcbc,#e6e6e6)} .dark .sw:active .k{background:linear-gradient(#55595f,#2e3136)}
+.alert .abtns button.is-pressed{background:linear-gradient(#6d7da3,#3c4e7d 49%,#22325e 51%,#2f3f6c)}
+.sw.is-pressed .k{background:linear-gradient(#bcbcbc,#e6e6e6)} .dark .sw.is-pressed .k{background:linear-gradient(#55595f,#2e3136)}
 .sw{touch-action:none} .sw.drag i:before,.sw.drag i:after,.sw.drag .k{transition:none}  /* while dragging, everything follows --x with the finger */
 #sb.on{pointer-events:auto}
 *{-webkit-tap-highlight-color:transparent}  /* no grey tap flash; controls have their own pressed looks */
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none} input,textarea,#src{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}  /* app, not a document: holding never selects, except fields and Feather's sources */ #sb::before{content:"";position:absolute;inset:-12px -2px -12px -26px} #sb.grab{width:7px;right:1px;border-radius:4px}
-h3.hdr{font-size:17px;font-weight:700;color:var(--head);margin:20px 10px 7px;text-shadow:var(--emboss)}
-.ftr{font-size:14px;color:var(--head);text-align:center;text-shadow:var(--emboss);margin:7px 12px 0}
-.c,.g{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8);overflow:hidden}
+h3.hdr{font-size:17px;font-weight:700;line-height:21px;letter-spacing:-.01em;color:var(--head);margin:23px 9px 7px;text-shadow:var(--emboss)}
+.ftr{font-size:15px;line-height:19px;color:var(--head);text-align:center;text-shadow:var(--emboss);margin:7px 9px 0;overflow-wrap:anywhere}
+.c,.g{background:#fff;border:1px solid var(--line);border-radius:9.5px;box-shadow:inset 0 .5px .5px rgba(0,0,0,.2);overflow:hidden} .g{background:var(--table)}
 .c{padding:14px;margin:0 0 12px;display:flex;flex-direction:column;gap:10px} .c p{margin:0}
 a.b,label.b,button{display:block;box-sizing:border-box;width:100%;font:inherit;font-weight:700;line-height:1.2;text-align:center;cursor:pointer;padding:11px;color:#fff;
  text-shadow:0 -1px 0 rgba(0,0,0,.4);border:1px solid #2b4f8a;border-radius:9px;background:var(--bluebtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 1px 2px rgba(0,0,0,.3)}
@@ -453,15 +456,15 @@ input{font:inherit;width:100%;box-sizing:border-box;padding:10px 12px;background
 textarea{width:100%;box-sizing:border-box;font:12px/1.5 ui-monospace,Menlo,monospace;border:1px solid #b7bec8;border-radius:6px;padding:8px;color:#333;resize:none;
  background:linear-gradient(#eef0f3,#fff 12px);box-shadow:inset 0 1px 2px rgba(0,0,0,.15);white-space:pre;overflow-x:auto}
 ol{margin:0;padding-left:1.3rem} li{margin:.35rem 0}
-.row{display:flex;align-items:center;gap:10px;min-height:44px;padding:9px 10px;border-top:1px solid var(--sep)}
+.row{display:flex;align-items:center;gap:10px;min-height:43px;box-sizing:border-box;padding:8px 10px;border-top:1px solid var(--div);box-shadow:inset 0 1px 0 var(--divhi)}
 .g>:first-child{border-top:0!important} .row>div:not(.ico){flex:1;min-width:0} .row small{display:block}
 .ico{position:relative;width:50px;height:50px;flex:none;border-radius:10px;object-fit:cover;display:grid;place-items:center;color:#fff;font-weight:700;font-size:21px;
  text-shadow:0 -1px 0 rgba(0,0,0,.3);box-shadow:0 1px 3px rgba(0,0,0,.45)} div.ico:after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--gloss)}
 .locked .ico{filter:grayscale(.8);opacity:.6}
 details{border-top:1px solid var(--sep)} details>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;
  padding:0 10px;font-weight:700} details>summary::-webkit-details-marker{display:none}
-details>summary:after{content:"";flex:none;width:8px;height:8px;margin-right:4px;border:solid #7f8a99;border-width:3px 3px 0 0;transform:rotate(45deg);transition:transform .2s}
-details[open]>summary:after{transform:rotate(135deg)} details>:not(summary){margin:0 10px 12px}
+details>summary:after{content:"";flex:none;width:9px;height:13px;margin-right:.5px;background:var(--chev) center/contain no-repeat;transition:transform .2s}
+details[open]>summary:after{transform:rotate(90deg)} details>:not(summary){margin:0 10px 12px}
 .scrim[hidden]{display:none} .scrim{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:16px;background:radial-gradient(rgba(0,0,0,.2),rgba(0,0,0,.6))}
 .alert{width:min(284px,100%);box-sizing:border-box;border-radius:10px;border:2px solid #b1b7c1;border-bottom-color:#e1e3e3;padding:16px 14px 14px;text-align:center;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);
  background:linear-gradient(rgba(255,255,255,.25),rgba(255,255,255,.06) 40px,transparent 41px),rgba(4,20,70,.88);box-shadow:0 4px 18px rgba(0,0,0,.6),inset 0 0 0 1px #000;animation:pop .3s ease-out}
@@ -475,17 +478,21 @@ details[open]>summary:after{transform:rotate(135deg)} details>:not(summary){marg
 .alert .abtns .ok{background:linear-gradient(#b4b9c8,#5f6882 49%,#596484 51%,#4d597a)}  /* sampled from Cydia's alert on the 4S: opaque greys, no white line */
 /* Dark Mode (follows the phone, or the More tab switch): gunmetal bars, dark pinstripes, inverted emboss */
 html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6fa8ff;--head:#8b9099;--emboss:0 -1px 0 #000;
- --pin:repeating-linear-gradient(90deg,#1b1d21 0 5px,#202227 5px 7px);--navbg:linear-gradient(#5f656f,#3b4048 50%,#30343b 51%,#23262b);
+ --pin:repeating-linear-gradient(90deg,#1b1d21 0 5px,#202227 5px 7px);--navbg:linear-gradient(#5f656f,#3b4048 50%,#30343b 51%,#23262b);--statbg:#000;--navhi:#7a808a;--navedge:#0b0c0e;--table:#2c2f34;--div:#17191c;--divhi:rgba(255,255,255,.07);
  --barbtn:linear-gradient(#4a4f58,#24272c);--greybtn:linear-gradient(#4a4f58,#2c2f34);background:#1d1f23}
-.dark body{color:#e6e8eb} .dark .nav{box-shadow:inset 0 1px 0 #7a808a,0 1px 0 #0b0c0e,0 2px 4px rgba(0,0,0,.5)} .dark .nav .bar{border-color:#111} .dark .nav .back{border-image-source:url(/static/back-dark.svg)}
+.dark body{color:#e6e8eb} .dark .nav .bar{border-color:#111} .dark .nav .back{border-image-source:url(/static/back-dark.svg)}
 .dark .c,.dark .g{background:#2c2f34;border-color:#0d0e10;box-shadow:0 1px 0 rgba(255,255,255,.06)}
 .dark .row,.dark details>summary{background:linear-gradient(#34373d,#2a2d32);box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
 .dark input{background:#1f2125;border-color:#0d0e10;color:#e6e8eb;box-shadow:inset 0 1px 3px #000} .dark textarea{background:#1f2125;border-color:#0d0e10;color:#ccc}
 .dark a.b.grey,.dark label.b.grey,.dark button.grey{color:#e6e8eb;border-color:#111;background:linear-gradient(#4a4f58,#2c2f34 50%,#24272c 51%,#2c2f34);box-shadow:inset 0 1px 0 rgba(255,255,255,.15)}
-/* Cydia-style "Reloading Data" HUD while Reload syncs sources and re-signs */
-.hud{width:min(276px,100%);box-sizing:border-box;padding:34px 10px 26px;border-radius:14px;background:rgba(20,20,20,.82);color:#fff;text-align:center;font-weight:700;font-size:30px;line-height:1.1;letter-spacing:-.3px;
- display:grid;justify-items:center;gap:16px} /* Cydia's HUD: big bold label, grey spinner, no border */
-.spin{width:37px;height:37px;animation:spin 1s steps(12) infinite} @keyframes spin{to{transform:rotate(360deg)}}
+/* Cydia's reload bar while Reload syncs sources and re-signs: the kit's "Semi-transparent black bar" (#4c4c4c to black at 52%, a white-at-20%
+   line on top, black-at-70% at the bottom) at .8 over the status bar and nav, which move down by its 44pt; a 20pt white spinner, a bold white line */
+#rbar{position:fixed;z-index:7;top:0;left:0;right:0;height:44px;padding:env(safe-area-inset-top) max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));
+ display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.8);pointer-events:none;
+ background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7)) bottom/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.2),rgba(255,255,255,.2)) 0 env(safe-area-inset-top)/100% 1px no-repeat,linear-gradient(rgba(76,76,76,.8),rgba(0,0,0,.8) 52%),var(--pin);background-color:#c8cfd6;
+ transform:translateY(-100%);transition:transform .3s} html.reloading #rbar{transform:none} .dark #rbar{background-color:#1d1f23}  /* over the page's own pinstripes, so what scrolled under the nav doesn't show through */
+html.reloading .nav,html.reloading body>.page{transform:translateY(44px)} .nav,body>.page{transition:transform .3s}
+.spin{width:20px;height:20px;flex:none;animation:spin 1s steps(12) infinite} @keyframes spin{to{transform:rotate(360deg)}}
 .scrim.clear{background:none} .nw{white-space:nowrap} .a2l>span{display:block;margin:2px 0} .ic{width:1.15em;height:1.15em;vertical-align:-.2em;margin-right:3px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
 {% if back %}<header class=nav><a class="bar back" href="{{ back[1] }}" onclick="return goBack(this.href)">{{ back[0] }}</a><h1>{{ title }}</h1><span></span></header>
@@ -494,22 +501,23 @@ function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.leng
 </script>
 {% else %}<header class=nav><button type=button class=bar onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button><h1 id=navT>sidedrop</h1>
 <button type=button class="bar r" onclick="reloadData()">Reload</button></header>{% endif %}
-<div class="scrim clear" id=reloading hidden><div class=hud role=status><svg class=spin viewBox="0 0 24 24" aria-hidden=true><g stroke="#d0d0d0" stroke-width="2.2" stroke-linecap="round">
-<line x1=12 y1=2.5 x2=12 y2=7 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(30 12 12)" opacity=.92 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(60 12 12)" opacity=.84 />
-<line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(90 12 12)" opacity=.76 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(120 12 12)" opacity=.68 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(150 12 12)" opacity=.6 />
-<line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(180 12 12)" opacity=.52 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(210 12 12)" opacity=.44 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(240 12 12)" opacity=.36 />
-<line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(270 12 12)" opacity=.3 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(300 12 12)" opacity=.25 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(330 12 12)" opacity=.2 /></g></svg>
-Reloading Data</div></div>
 <div class=scrim id=about hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
 <h3 id=aboutT>About sidedrop</h3><p>Apps shared between friends, signed for each registered iPhone. Register once in Safari, then tap GET.</p>
 {% if stats %}<p>{{ stats[0] }} of 100 iPhones registered.{% if stats[1] %} Apps keep working until {{ stats[1].strftime('%B %-d, %Y') }}.{% endif %}</p>{% endif %}
-<div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){location.hash='more';d.open=true;setTimeout(()=>goTo(d),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
+<div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){go('more');d.open=true;setTimeout(()=>goTo(d),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
 <script>/* alerts are modal like UIAlertView: only their buttons close them */
 /* body is the scroller; scrollIntoView would also scroll the locked <html> and drag the fixed nav down */
 /* clamp to the real bottom: iOS lets a smooth scroll on a non-root scroller overshoot past the end, then snaps back on the next touch */
 function goTo(el){let b=document.body;b.scrollTo({top:Math.min(b.scrollTop+el.getBoundingClientRect().top-56,b.scrollHeight-b.clientHeight),behavior:"smooth"})}
 addEventListener("gesturestart",e=>e.preventDefault())
-addEventListener("touchstart",()=>{},{passive:true})  // without a touch listener iOS never shows :active
+/* pressed looks: .is-pressed while a finger is down, off when it lifts, slides off the control or the page scrolls.
+   Not :active: iOS keeps that on a held control after the touch has turned into a scroll. A quick tap still shows it for 140 ms, as UIKit does. */
+const PRESS=".get,.tile,a.b,label.b,button,.nav .bar,.sw";let pd=null,pdAt=0;
+const unpress=now=>{let el=pd;if(!el)return;pd=null;setTimeout(()=>{if(pd!==el)el.classList.remove("is-pressed")},now?0:Math.max(0,140-(performance.now()-pdAt)))};
+addEventListener("touchstart",e=>{unpress(1);let el=e.target.closest&&e.target.closest(PRESS);if(!el||el.disabled||e.touches.length>1)return;pd=el;pdAt=performance.now();el.classList.add("is-pressed")},{passive:true});
+addEventListener("touchmove",e=>{let t=e.touches[0];if(pd&&!pd.contains(document.elementFromPoint(t.clientX,t.clientY)))unpress(1)},{passive:true});
+addEventListener("touchend",()=>unpress(),{passive:true});addEventListener("touchcancel",()=>unpress(1),{passive:true});
+addEventListener("scroll",()=>unpress(1),{passive:true,capture:true});  // scroll doesn't bubble: capture catches every scroller
 addEventListener("DOMContentLoaded",()=>{
  /* haptic tick: Safari has no vibration API, but toggling a hidden <input switch> plays the system switch haptic (iOS 18+); elsewhere navigator.vibrate. Only from a touch handler. */
  window.hap=()=>{if(navigator.vibrate){navigator.vibrate(10);return}let l=document.createElement("label"),i=document.createElement("input");i.type="checkbox";i.setAttribute("switch","");l.style.cssText="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";l.append(i);document.body.append(l);l.click();l.remove()};
@@ -536,7 +544,7 @@ addEventListener("DOMContentLoaded",()=>{
   let end=e=>{if(!mv)return;mv=false;if(e.cancelable)e.preventDefault();let on=parseFloat(w.style.getPropertyValue("--x"))>25;w.classList.remove("drag");w.style.removeProperty("--x");
    w.skip=1;setTimeout(()=>w.skip=0,400);if(on!=i.checked){i.checked=on;i.dispatchEvent(new Event("change"))}};
   w.addEventListener("touchend",end);w.addEventListener("touchcancel",end)})})  // iOS ends a gesture it took over with touchcancel  // Safari ignores user-scalable=no for pinch
-function reloadData(){reloading.hidden=false;fetch("/refresh",{method:"POST"}).catch(()=>{}).finally(()=>{history.replaceState(null,"","/"+location.hash);location.reload()})}  // replace() to the same /#tab only jumps to the hash, it never reloads</script>
+</script>
 {% if back %}<section class=page>{{ body|safe }}</section>{% else %}{{ body|safe }}{% endif %}""".replace("%PUBLIC_URL%", PUBLIC_URL)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
 
 
@@ -633,10 +641,11 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 /* More tab: Cydia-style rows */
 .green{background:#e9f8e4} .kv{display:flex;justify-content:space-between;gap:10px;padding:11px 12px;border-top:1px solid #d6e6cf} .kv span{color:var(--acc);text-align:right}
 .split{display:grid;grid-template-columns:1fr 1fr;margin-top:12px} .pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-.tile{display:flex;align-items:center;gap:9px;min-height:50px;padding:8px 10px;box-sizing:border-box;font-weight:700;color:#000;background:#fff;cursor:pointer;text-align:left;border:0;border-radius:0;box-shadow:none;text-shadow:none;line-height:1.35}
+.tile{display:flex;align-items:center;gap:9px;min-height:50px;padding:8px 10px;box-sizing:border-box;font-weight:700;color:#000;background:var(--table);cursor:pointer;text-align:left;border:0;border-radius:0;box-shadow:none;text-shadow:none;line-height:1.35}
 .split .tile+.tile{border-left:1px solid var(--sep)} .pair .tile{border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8)}
-.tile:after{content:"";margin-left:auto;flex:none;width:8px;height:8px;border:solid #6f7a88;border-width:3px 3px 0 0;transform:rotate(45deg);margin-right:4px}
-.tile:active{background:linear-gradient(#058cf5,#015fe6);color:#fff}
+.tile:after{content:"";margin-left:auto;flex:none;width:9px;height:13px;margin-right:.5px;background:var(--chev) center/contain no-repeat}
+.tile.is-pressed:after,.tile.sel:after{filter:brightness(0) invert(1)}
+.tile.is-pressed,.tile.sel{background:linear-gradient(#058cf5,#015fe6);color:#fff}
 .tic{position:relative;flex:none;width:30px;height:30px;border-radius:7px;display:grid;place-items:center;box-shadow:0 1px 2px rgba(0,0,0,.4)}
 .tic:after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--gloss)} .tic svg{width:19px;height:19px}
 .out{margin-top:20px}
@@ -654,7 +663,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .dark .get{color:#c9ced5;border-color:#111;box-shadow:inset 0 1px 0 rgba(255,255,255,.15)} .dark .get[aria-expanded=true]{color:#8b9099;background:linear-gradient(#1f2125,#2a2d32);box-shadow:inset 0 1px 3px #000}
 .dark .steps{background:linear-gradient(#26292d,#2c2f34)} .dark .step+.step{border-top-color:#3a3d42}
 .dark .green{background:#24302a} .dark .kv{border-top-color:#1a221d}
-.dark .tile{background:linear-gradient(#34373d,#2a2d32);color:#e6e8eb} .dark .pair .tile{border-color:#0d0e10;box-shadow:0 1px 0 rgba(255,255,255,.06)} .dark .split .tile+.tile{border-left-color:#17191c} .dark .tile:after{border-color:#777}
+.dark .tile{background:linear-gradient(#34373d,#2a2d32);color:#e6e8eb} .dark .pair .tile{border-color:#0d0e10;box-shadow:0 1px 0 rgba(255,255,255,.06)} .dark .split .tile+.tile{border-left-color:#17191c}
 .dark .sw i{border-color:#111;background:linear-gradient(#2b2e33,#3c4047);box-shadow:inset 0 1px 3px rgba(0,0,0,.8)} .dark .sw i:after{color:#9aa0a8}
 .dark .sw i:before{background:linear-gradient(#0b4fb0,#3d8cf0)} .dark .sw .k{background:linear-gradient(#6a6f78,#3c4047);border-color:#111}
 /* Changes tab: Cydia's plain list with sticky section strips (top is inside body's 56px padding, so -12px lands under the 44px nav) */
@@ -669,18 +678,28 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .dark .cy{background:#2c2f34;border-color:#0d0e10} .dark .cyr{border-color:#3a3d42} .dark .cyt small{color:#c9ced5}
 .dark .cyh{background:linear-gradient(rgba(86,92,102,.94),rgba(58,62,70,.94));border-color:#111}
 /* iOS 5 red count badge on the Changes tab */
-.badge{position:absolute;top:-2px;left:calc(50% + 4px);min-width:22px;height:22px;padding:0 6px;box-sizing:border-box;border-radius:11px;border:2px solid #fff;color:#fff;
- font:700 13px/18px "Helvetica Neue",Helvetica,sans-serif;text-align:center;background:linear-gradient(#ff7b7b,#e60000 50%,#cc0000 51%,#d40000);box-shadow:0 1px 3px rgba(0,0,0,.6)}
+.badge{position:absolute;top:-2px;left:calc(50% + 5px);min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:10px;border:2px solid #fff;color:#fff;letter-spacing:-.02em;
+ font:700 13px/16px "Helvetica Neue",Helvetica,sans-serif;text-align:center;background:linear-gradient(#f7b3b7,#e92d35 48.8%,#e70f19 50.5%,#c50103);box-shadow:0 2px 2.5px rgba(0,0,0,.6)}
 /* Cydia: while it checks for updates the badge spins instead of counting */
 .badge.busy{font-size:0;padding:0} .badge.busy:after{content:"";position:absolute;inset:0;margin:auto;width:10px;height:10px;box-sizing:border-box;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
 /* Cydia tab bar */
-.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;display:grid;grid-template-columns:repeat(5,1fr);gap:4px;
- padding:2px max(4px,env(safe-area-inset-right)) calc(2px + env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left));
- background:linear-gradient(#3a3a3a,#1a1a1a 50%,#000 51%,#0a0a0a);border-top:1px solid #000;box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
-.tabs a{position:relative;display:grid;justify-items:center;gap:1px;padding:4px 0 3px;border-radius:3px;color:#999;font-size:10px;font-weight:700}
-.tabs svg{width:30px;height:30px;fill:#8d8d8d}
-.tabs a[aria-current]{background:rgba(255,255,255,.14);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
-.tabs a[aria-current] svg{fill:url(#tabglow);filter:drop-shadow(0 0 3px rgba(88,170,255,.7))}
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;display:grid;grid-template-columns:repeat(5,1fr);
+ padding:0 max(2px,env(safe-area-inset-right)) calc(2px + env(safe-area-inset-bottom)) max(2px,env(safe-area-inset-left));
+ background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7)) top/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.1),rgba(255,255,255,.1)) 0 1px/100% 1px no-repeat,linear-gradient(#2f2f2f,#151515 49.5%,#000 49.5%) 0 1px/100% 48px no-repeat,#000}
+.tabs:before{content:"";position:absolute;left:0;right:0;bottom:100%;height:2.5px;pointer-events:none;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.18))}
+.tabs a{position:relative;display:flex;flex-direction:column;align-items:center;height:44px;box-sizing:border-box;margin:3px 2px 0;padding-top:3.5px;border-radius:2.5px;color:#a8a8a8;font-size:10px;font-weight:700;line-height:12px}
+.tabs svg{width:28px;height:28px;margin-bottom:1px;fill:url(#taboff);filter:drop-shadow(0 -1px 0 rgba(0,0,0,.75))}
+.tabs a[aria-current]{background:rgba(255,255,255,.15);color:#fff;box-shadow:inset 0 0 1px rgba(0,0,0,.31)}
+/* a pushed page (Manage, Sign) in place over its tab: the iOS slide (350 ms, UINavigationController's curve), the page below moving a third as far and
+   darkening 10%; transform and opacity only */
+.layer{position:fixed;z-index:6;top:0;left:0;right:0;bottom:var(--tabh,0);background:var(--pin);background-color:#c8cfd6} .dark .layer{background-color:#1d1f23}
+.layer[hidden]{display:none} .layer .nav{position:absolute} .layer .nav h1{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.lscroll{position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;scrollbar-width:none;
+ padding:calc(56px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right),(100% - 30rem)/2) 20px max(10px,env(safe-area-inset-left),(100% - 30rem)/2)}
+.lscroll>.page{min-height:calc(100% + 1px)}
+.shade{position:fixed;inset:0;z-index:6;background:#000;opacity:0;pointer-events:none}
+.ghost{position:absolute;margin:0;pointer-events:none;z-index:1}
+.tabs a[aria-current] svg{fill:url(#tabglow);filter:drop-shadow(0 2.5px 2.5px rgba(0,0,0,.4))}
 </style>
 {% if error %}<p class="c err">{{ error }}</p>{% endif %}
 {% set enroll_form %}<form method=post action=/enroll style="display:flex;flex-direction:column;gap:10px"
@@ -713,6 +732,11 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <a class="get blue" href="{{ adl(f) }}" target=_blank download onclick="this.closest('.step').classList.add('ok')">DOWNLOAD</a></div>{% endfor %}</div></div>{% endif %}
 {% endfor %}</div>{% endmacro %}
 
+<i id=stamp hidden data-v="{{ stamp }}"></i><div id=rbar role=status aria-live=polite><svg class=spin viewBox="0 0 24 24" aria-hidden=true><g stroke="#fff" stroke-width="2.2" stroke-linecap="round">
+<line x1=12 y1=2.5 x2=12 y2=7 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(30 12 12)" opacity=.92 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(60 12 12)" opacity=.84 />
+<line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(90 12 12)" opacity=.76 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(120 12 12)" opacity=.68 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(150 12 12)" opacity=.6 />
+<line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(180 12 12)" opacity=.52 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(210 12 12)" opacity=.44 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(240 12 12)" opacity=.36 />
+<line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(270 12 12)" opacity=.3 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(300 12 12)" opacity=.25 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(330 12 12)" opacity=.2 /></g></svg><span id=rbarT>Reloading Data</span></div>
 <section class=page id=t-apps data-title=sidedrop>
 <div class=splash><img src=/apple-touch-icon.png alt=""><div><h2>Welcome to sidedrop</h2><p>by <a href="https://github.com/RyanAHayden">Ryan Hayden</a></p></div></div>
 {% if just_enrolled %}<div class=scrim id=welcome><div class=alert role=alertdialog aria-modal=true aria-labelledby=welT>
@@ -766,7 +790,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% if stats[1] %}<div class=kv><b>Apps work until</b><span>{{ stats[1].strftime('%b %-d, %Y') }}</span></div>{% endif %}{% endif %}</div>
 {% if enrolled %}<p class=ftr>This iPhone is registered and can install every app.</p>{% endif %}
 <div class="g split">
-{% if enrolled and admin_on %}<a class=tile href=/admin><span class=tic style="background:linear-gradient(#ffb36b,#d9650f)"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="#fff"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z" fill="#fff"/></svg></span>Manage</a>
+{% if enrolled and admin_on %}<a class=tile href=/admin data-push><span class=tic style="background:linear-gradient(#ffb36b,#d9650f)"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="#fff"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z" fill="#fff"/></svg></span>Manage</a>
 {% else %}<a class=tile href=#apps><span class=tic style="background:linear-gradient(#8fd96b,#3c9a1d)"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#3c9a1d"/></svg></span>Register</a>{% endif %}
 <button type=button class=tile onclick="goTo(document.getElementById('sign'))"><span class=tic style="background:linear-gradient(#b7c0cc,#5d6878)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</button></div>
 <div class=pair>
@@ -789,7 +813,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class=warn><span aria-hidden=true>💡</span><div>Don't see it? Install an app first, then look again.</div></div></details>
 <details id=a2hs><summary>Add to Home Screen</summary><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open sidedrop from there</span></p></details></div>
 <h3 class=hdr id=sign>Sign your own IPA</h3>
-<form class=c method=post action=/sign enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Signing…'">
+<form class=c method=post action=/sign enctype=multipart/form-data data-push onsubmit="this.querySelector('button').textContent='Signing…'">
 <input type=file name=ipa id=ipaf accept=.ipa class=vh onchange="ipal.textContent=this.files[0]?this.files[0].name:'Choose .ipa File'"><label class="b grey" for=ipaf id=ipal>Choose .ipa File</label>
 <input type=url name=url placeholder="…or paste a link to an .ipa" aria-label="Link to an .ipa">
 <button>Sign</button><small>Signed for registered iPhones. The install link lasts 7 days.</small></form>
@@ -810,12 +834,61 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <a href=#feather><svg viewBox="0 0 30 30"><path d="M25 4c-10 1-16 8-17 17l-3 5 1 1 5-3c10-1 15-7 16-17-3 2-6 4-10 4 3-1 6-4 8-7z"/></svg>Feather</a>
 <a href=#files><svg viewBox="0 0 30 30"><path d="M3 7h10l3 3h11v15H3z"/></svg>Files</a>
 <a href=#more><svg viewBox="0 0 30 30"><circle cx="7" cy="15" r="3"/><circle cx="15" cy="15" r="3"/><circle cx="23" cy="15" r="3"/></svg>More</a></nav>
-<svg width=0 height=0 style="position:absolute" aria-hidden=true><linearGradient id=tabglow x1=0 y1=0 x2=0 y2=1><stop offset=0 stop-color="#cfe9ff"/><stop offset=.5 stop-color="#5fb4ff"/><stop offset=.51 stop-color="#1d8af2"/><stop offset=1 stop-color="#3fa0ff"/></linearGradient></svg>
+<svg width=0 height=0 style="position:absolute" aria-hidden=true><linearGradient id=taboff x1=0 y1=0 x2=0 y2=1><stop offset=0 stop-color="#9d9d9d"/><stop offset=1 stop-color="#595959"/></linearGradient><linearGradient id=tabglow x1=.37 y1=0 x2=.63 y2=1><stop offset=0 stop-color="#d9e5f9"/><stop offset=.473 stop-color="#77b5eb"/><stop offset=.488 stop-color="#0091e5"/><stop offset=1 stop-color="#0fbff7"/></linearGradient></svg>
 <script>
-function show(){let t=location.hash.slice(1);if(!document.getElementById("t-"+t))t="apps";
- document.querySelectorAll(".page").forEach(p=>p.hidden=p.id!="t-"+t);
+/* tabs keep their place (scroll, and a page pushed on More) and add no history, as in an iOS app; tapping the open tab pops its page, then scrolls to the top */
+let cur=null,pos={},L=null,cache={},STAMP={{ stamp }};
+function go(t){history.replaceState(history.state,"","#"+t);dispatchEvent(new HashChangeEvent("hashchange"))}  // replaceState fires no hashchange of its own
+function show(){let t=location.hash.slice(1);if(!document.getElementById("t-"+t))t="apps";if(cur&&cur!=t)pos[cur]=document.body.scrollTop;
+ document.querySelectorAll("body>.page").forEach(p=>p.hidden=p.id!="t-"+t);
  document.querySelectorAll(".tabs a").forEach(a=>a.getAttribute("href")=="#"+t?a.setAttribute("aria-current","page"):a.removeAttribute("aria-current"));
- navT.textContent=document.getElementById("t-"+t).dataset.title;document.body.scrollTo(0,0);navR()}
+ navT.textContent=document.getElementById("t-"+t).dataset.title;if(cur!=t)document.body.scrollTo(0,pos[t]||0);cur=t;if(L)L.hidden=L.dataset.tab!=t;navR()}
+document.querySelectorAll(".tabs a").forEach(a=>a.addEventListener("click",e=>{e.preventDefault();let t=a.getAttribute("href").slice(1);
+ if(t!=cur)return go(t);if(L)history.back();else document.body.scrollTo({top:0,behavior:"smooth"})}));
+/* a pushed page: fetched and drawn over the tab (its own nav with Back), one history entry, so Back, iOS's edge swipe and forward all work.
+   The server still serves each page whole (a reload, or no JS, gets the old full-page screen); anything unexpected falls back to that. */
+function parsePage(r,h){if(!r.ok||new URL(r.url).pathname=="/")return null;let d=new DOMParser().parseFromString(h,"text/html"),s=d.querySelector("section.page"),n=d.querySelector(".nav h1");return s&&n?{title:n.textContent,body:s.innerHTML,url:r.url}:null}
+function fetchPage(url,init){return fetch(url,Object.assign({credentials:"same-origin"},init)).then(r=>r.text().then(h=>parsePage(r,h))).catch(()=>null)}
+function fill(p){L.url=p.url;L.querySelector("h1").textContent=p.title;L.querySelector(".page").innerHTML=p.body;L.querySelector(".lscroll").scrollTop=0}
+const EASE="cubic-bezier(.36,.66,.04,1)";
+function slide(l,from,to,done){  /* p: 0 the tab alone, 1 the pushed page l in place */
+ let o={duration:350,easing:EASE,fill:"forwards"},base=[document.querySelector("body>.nav"),document.getElementById("t-"+cur)],sh=document.createElement("div");sh.className="shade";l.before(sh);
+ let an=[l.animate([{transform:`translate3d(${(1-from)*100}%,0,0)`},{transform:`translate3d(${(1-to)*100}%,0,0)`}],o),sh.animate([{opacity:.1*from},{opacity:.1*to}],o),
+  ...base.map(b=>b.animate([{transform:`translate3d(${-30*from}%,0,0)`},{transform:`translate3d(${-30*to}%,0,0)`}],o))];
+ an[0].finished.then(()=>{an.forEach(a=>a.cancel());sh.remove();done&&done()})}
+function open(p,from,anim){document.documentElement.style.setProperty("--tabh",document.querySelector(".tabs").offsetHeight+"px");
+ L=document.createElement("div");L.className="layer";L.dataset.tab=cur;
+ L.innerHTML='<header class=nav><button type=button class="bar back"></button><h1></h1><span></span></header><div class=lscroll><section class=page></section></div>';
+ L.querySelector(".back").textContent=navT.textContent;L.querySelector(".back").onclick=()=>history.back();L.sel=from;fill(p);document.body.append(L);
+ if(anim)slide(L,0,1,()=>from&&from.classList.remove("sel"));else if(from)from.classList.remove("sel")}
+function close(anim){let l=L;if(!l)return;L=null;if(!anim||l.hidden)return l.remove();
+ /* the row that opened it fades from blue as the page slides off (a copy over it, so only opacity animates) */
+ let el=l.sel,g=null;if(el&&el.offsetParent){g=el.cloneNode(true);g.removeAttribute("href");g.classList.add("sel","ghost");
+  Object.assign(g.style,{left:el.offsetLeft+"px",top:el.offsetTop+"px",width:el.offsetWidth+"px",height:el.offsetHeight+"px"});el.parentElement.style.position="relative";el.parentElement.append(g);
+  g.animate([{opacity:1},{opacity:0}],{duration:350,easing:EASE,fill:"forwards"})}
+ slide(l,1,0,()=>{l.remove();g&&g.remove()})}
+function push(url,init,from){return fetchPage(url,init).then(p=>{if(!p)return false;let id=Date.now();cache[id]=p;
+ if(L){fill(p);history.replaceState({push:id},"");return true}  // a form on the pushed page: its answer replaces it (the server redirects back to the same page)
+ history.pushState({push:id},"");open(p,from,true);return true})}
+if(history.state&&history.state.push)history.replaceState(null,"");  // a reload forgets pushed pages
+addEventListener("popstate",e=>{let id=e.state&&e.state.push,anim=!e.hasUAVisualTransition;  // iOS's edge swipe animates it already
+ if(id&&!L&&cache[id])open(cache[id],null,anim);else if(!id&&L)close(anim)});
+document.addEventListener("click",e=>{let a=e.target.closest("a[data-push]");if(!a||e.defaultPrevented)return;e.preventDefault();if(L)return;
+ a.classList.add("sel");push(a.href,{},a).then(ok=>{if(!ok)location.href=a.href})});
+document.querySelectorAll("form button").forEach(b=>b.dataset.t=b.textContent);
+/* a form with no action posts to its own page: on a pushed page that's the page's URL, not / */
+document.addEventListener("submit",e=>{let f=e.target;if(e.defaultPrevented||!(f.matches("[data-push]")||f.closest(".layer")))return;e.preventDefault();
+ push(L&&L.contains(f)?new URL(f.getAttribute("action")||"",L.url).href:f.action,{method:"POST",body:new FormData(f)}).then(ok=>{if(!ok)return f.submit();f.querySelectorAll("button[data-t]").forEach(b=>b.textContent=b.dataset.t)})});
+/* Reload: Cydia's reload bar while sources sync, then the lists swap in place (scroll, the open tab and a pushed page stay). Pull down past the top does the same. */
+function reloadData(){let h=document.documentElement;if(h.classList.contains("reloading"))return;h.classList.add("reloading");
+ fetch("/refresh",{method:"POST"}).catch(()=>{}).then(refreshIn).finally(()=>h.classList.remove("reloading"))}
+function refreshIn(){return fetch("/",{credentials:"same-origin"}).then(r=>r.text()).then(t=>{let d=new DOMParser().parseFromString(t,"text/html");
+ if(!d.getElementById("t-apps")||!d.getElementById("reg")!=!document.getElementById("reg"))return location.reload();  // signed out, or registered since: the whole page changes
+ ["t-apps","t-changes","t-feather","t-files"].forEach(i=>document.getElementById(i).innerHTML=d.getElementById(i).innerHTML);STAMP=+d.getElementById("stamp").dataset.v;
+ try{if(localStorage.sdp)sdpDone()}catch(e){}document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());navR()}).catch(()=>{})}
+let held=0,pulled=0;addEventListener("touchstart",()=>{held=1;pulled=0},{passive:true});
+document.body.addEventListener("scroll",()=>{if(held&&!pulled&&document.body.scrollTop<-70){pulled=1;hap()}},{passive:true});  // the tick as it arms, like UIRefreshControl
+addEventListener("touchend",()=>{held=0;if(pulled){pulled=0;reloadData()}},{passive:true});
 /* on Changes with upgrades, the nav is Cydia's: Refresh (reloads data) on the left, Update (n) on the right */
 function navR(){let n=document.querySelectorAll(".cyr.up").length,r=document.querySelector(".nav .bar.r"),l=document.querySelector(".nav .bar:not(.r)"),ch=location.hash=="#changes",c=ch&&n;
  r.textContent=c?"Update ("+n+")":"Reload";r.onclick=c?upgradeAll:reloadData;
@@ -827,8 +900,8 @@ function upgradeAll(){let l=[...document.querySelectorAll(".cyr.up b")].map(b=>b
 /* ponytail: one install link every 3 s; iOS shows one install prompt per link, re-tap UPDATE on any it drops */
 function upgradeGo(){upq.hidden=true;[...document.querySelectorAll(".cyr.up a.get")].map(b=>[b,b.href]).forEach(([b,h],i)=>setTimeout(()=>{mark(b);location.href=h},i*3000))}
 addEventListener("hashchange",show);
-/* check sources in the background (the page no longer waits on it); reload only if a new build got signed */
-{% if enrolled %}badge.classList.add("busy");badge.hidden=false;fetch("/check",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.stamp!={{ stamp }})location.reload()})
+/* check sources in the background (the page no longer waits on it); swap the lists in only if a new build got signed */
+{% if enrolled %}badge.classList.add("busy");badge.hidden=false;fetch("/check",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.stamp!=STAMP)return refreshIn()})
  .catch(()=>{}).finally(()=>{badge.classList.remove("busy");navR()});{% endif %}
 /* web push: iOS offers it only to the Home Screen app (separate storage from Safari, so Safari's "asked" doesn't stop the app asking) */
 const PUSHKEY="{{ vapid }}",pushOK="PushManager" in window&&"serviceWorker" in navigator&&{{ 'true' if enrolled else 'false' }};
@@ -840,7 +913,7 @@ function pushSet(on){if(!pushOK){pushSw.checked=false;pushShow();return}  // Saf
 /* asked once per phone: after the first INSTALL tap or the first visit to Changes */
 /* first INSTALL on this phone: warn that opening the app will ask for Developer Mode; then the notifications ask */
 function devMaybe(){let a=null;try{a=localStorage.devTold}catch(e){}if(a||!window.devAsk)return pushMaybe();try{localStorage.devTold=1}catch(e){}devAsk.hidden=false}
-function devDone(show){devAsk.hidden=true;if(show){location.hash="more";let d=document.getElementById("dev");d.open=true;setTimeout(()=>goTo(d),50)}else setTimeout(pushMaybe,400)}
+function devDone(show){devAsk.hidden=true;if(show){go("more");let d=document.getElementById("dev");d.open=true;setTimeout(()=>goTo(d),50)}else setTimeout(pushMaybe,400)}
 function pushMaybe(){let a=null;try{a=localStorage.pushAsked}catch(e){}if(a||!window.pushAsk||(pushOK&&Notification.permission!="default"))return;
  try{localStorage.pushAsked=1}catch(e){}pushShow()}
 function pushShow(){pushWeb.hidden=pushOK;pushOk.textContent=pushOK?"Allow":"OK";let bs=pushOk.parentNode;bs.style.gridTemplateColumns=pushOK?"":"1fr";bs.firstElementChild.style.display=pushOK?"":"none";
@@ -856,7 +929,7 @@ function steps(b){let open=b.getAttribute("aria-expanded")!="true";b.setAttribut
 function sdpDone(save){let d=document.getElementById("sdp");if(!d)return;d.classList.add("ok");d.open=false;regf.disabled=false;
  if(save){try{localStorage.sdp=1}catch(e){}regf.querySelector("input").focus()}}
 try{if(localStorage.sdp)sdpDone()}catch(e){}
-function nudge(){location.hash="apps";let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
+function nudge(){go("apps");let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();darkSw.checked=document.documentElement.classList.contains("dark")});
 </script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=bool(ADMIN_PASSWORD), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifizbox=ifizbox, third=third, files=files, FILES=FILES, feather=feather, FEATHER_REPO=FEATHER_REPO,
@@ -1023,10 +1096,10 @@ def check():
 
 @app.post("/refresh")
 def refresh():
-    """Reload button: pull new releases from the sources and re-sign now, while the "Reloading Data" HUD shows."""
+    """Reload button: pull new releases from the sources and re-sign now, while the "Reloading Data" bar shows."""
     if not logged_in():
         abort(403)
-    with sync_lock:  # waits out a background sync already running, then does a full one, so the HUD stays up until it's done
+    with sync_lock:  # waits out a background sync already running, then does a full one, so the bar stays up until it's done
         last_sync[0] = time.time()
         try:
             sync_sources()
