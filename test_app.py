@@ -269,6 +269,42 @@ if shutil.which("node"):
         r = subprocess.Popen(["node", "--check", str(tmp / "inline.js")], stderr=subprocess.PIPE, text=True)  # subprocess.run is stubbed above
         assert r.wait() == 0, r.stderr.read()
 
+# F18 themes: the nine palettes in iFizBox's order, each a CSS block on the page with every token its tone's default sets, and a row in Settings > Display
+assert A.THEMES == {"light": ["classic", "sepia", "solarized"], "dark": ["oled", "gunmetal", "midnight", "linen", "nord", "dracula"]}
+toks = lambda css: set(re.findall(r"--([a-z]+):", css))
+for n, (tone, label, color, css) in A.PALETTES.items():
+    assert f"html[data-theme={tone}][data-palette={n}]{{" in html and f"data-v={n} " in html and f"<div>{label}</div>" in html, n
+    assert toks(A.PALETTES[A.THEMES[tone][0]][3]) <= toks(css), (n, toks(A.PALETTES[A.THEMES[tone][0]][3]) - toks(css))
+assert "darkSw" not in html and "data-k=mode" in html and "data-k=lightTheme" in html and "data-k=darkTheme" in html
+assert html.index("data-palette") < html.index("<style>"), "the boot script runs before the CSS, so the first paint has the theme"
+assert ":root,html[data-theme=light][data-palette=classic]{" in html and "html.dark,html[data-theme=dark][data-palette=gunmetal]{" in html
+assert "base64," in A.PALETTES["sepia"][3] and "#c4a77d" in __import__("base64").b64decode(A.PALETTES["sepia"][3].split("base64,")[1].split('"')[0]).decode()
+if shutil.which("node"):  # the boot script itself, in node with a fake localStorage, phone appearance, <html> and theme-color meta
+    (tmp / "boot.js").write_text(re.search(r"<script>(/\* F18 themes.*?)</script>", html, re.S).group(1))
+    (tmp / "boot-run.js").write_text("""const vm=require("vm"),boot=require("fs").readFileSync(process.argv[2],"utf8");
+console.log(JSON.stringify(JSON.parse(process.argv[3]).map(([store,dark])=>{let at={},cls=new Set(),meta={content:""};
+ vm.runInNewContext(boot,{localStorage:store,window:{},matchMedia:()=>({matches:dark,addEventListener(){}}),document:{querySelector:()=>meta,
+  documentElement:{setAttribute:(k,v)=>at[k]=v,classList:{toggle:(c,on)=>(on?cls.add(c):cls.delete(c),on)}}}});
+ return [at["data-theme"],at["data-palette"],cls.has("dark"),meta.content]})))""")
+    cases = [  # (localStorage, phone dark) -> (data-theme, data-palette, .dark, theme-color)
+        ({}, False, "light", "classic", "#4f698b"),  # nothing stored: Automatic, each tone's first theme
+        ({}, True, "dark", "oled", "#000"),
+        ({"dark": "1"}, False, "dark", "oled", "#000"),  # the old Dark Mode switch on: Mode Dark
+        ({"dark": "0"}, True, "light", "classic", "#4f698b"),  # and off: Mode Light, even on a dark phone
+        ({"mode": "dark", "darkTheme": "nord"}, False, "dark", "nord", "#2e3440"),
+        ({"mode": "light", "lightTheme": "sepia", "dark": "1"}, True, "light", "sepia", "#7a5c36"),  # a picked Mode wins over the old key
+        ({"mode": "auto", "lightTheme": "solarized", "darkTheme": "gunmetal"}, True, "dark", "gunmetal", "#5f656f"),
+        ({"mode": "auto", "lightTheme": "solarized", "darkTheme": "gunmetal"}, False, "light", "solarized", "#2a74a8"),
+        ({"mode": "bogus", "darkTheme": "bogus", "dark": "1"}, False, "dark", "oled", "#000"),  # unknown values fall back
+        ({"mode": "light", "lightTheme": "nord"}, False, "light", "classic", "#4f698b"),  # a dark theme's name isn't a light theme
+    ] + [({"mode": t, f"{t}Theme": n}, False, t, n, A.PALETTES[n][2]) for t, ns in A.THEMES.items() for n in ns]
+    import json
+    p = subprocess.Popen(["node", str(tmp / "boot-run.js"), str(tmp / "boot.js"), json.dumps([[s, d] for s, d, *_ in cases])], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    out, err = p.communicate()
+    assert p.returncode == 0, err
+    for (s, d, tone, pal, color), got in zip(cases, json.loads(out)):
+        assert got == [tone, pal, tone == "dark", color], (s, d, got)
+
 # custom signing: upload and URL both give a cookie-less install link
 html = c.get("/").data.decode()
 assert "Sign your own IPA" in html
