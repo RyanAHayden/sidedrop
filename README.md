@@ -39,6 +39,8 @@ apps/*.ipa      unsigned or dev-signed IPAs to share (or list AltStore sources i
 
 Copy `.env.example` to `.env` and fill it in. `BUNDLE_ID` must be a wildcard App ID that already exists in the developer portal, such as `com.you.*`. One profile then covers every app: apps whose bundle ID falls outside it are re-IDed at signing (`com.other.game` becomes `com.you.game`). Apps that need entitlements like push or App Groups won't work this way.
 
+Or set `BUNDLE_ID` to an explicit App ID with Push Notifications (plus App Groups and Associated Domains) turned on, such as `com.you.sideload`. Every app is then signed under that one App ID but keeps its own bundle ID in Info.plist, which iOS doesn't check against the profile and registers for push with, so apps like YouTube get their developer's notifications. Apps signed under a wildcard before install again as separate apps; delete the old copies.
+
 ```
 docker compose up -d --build
 ```

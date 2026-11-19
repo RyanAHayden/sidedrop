@@ -207,14 +207,17 @@ def retarget(src, dst, old_id, new_id, extra={}):
 
 
 def app_entitlements(bid):
-    """The profile's entitlements with the wildcard narrowed to this app, the way Xcode signs.
+    """The profile's entitlements, with a wildcard narrowed to this app, the way Xcode signs.
 
     zsign copies TEAM.com.you.* verbatim, and iOS can then match the app to a development
-    profile on the phone and demand Developer Mode."""
+    profile on the phone and demand Developer Mode. An explicit App ID (with push) is left as is:
+    iOS checks application-identifier against the profile but not Info.plist, so the app keeps its
+    own bundle ID and registers for push under it, and its developer's server can reach it."""
     ents = embedded_plist(PROFILE.read_bytes())["Entitlements"]
-    team = ents["com.apple.developer.team-identifier"]
-    ents["application-identifier"] = f"{team}.{bid}"
-    ents["keychain-access-groups"] = [f"{team}.{bid}"]
+    if BUNDLE_ID.endswith("*"):
+        team = ents["com.apple.developer.team-identifier"]
+        ents["application-identifier"] = f"{team}.{bid}"
+        ents["keychain-access-groups"] = [f"{team}.{bid}"]
     ents["get-task-allow"] = False
     return ents
 
