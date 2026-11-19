@@ -884,8 +884,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
 </section>
-{% if files %}<section class=page id=t-files data-title=Files>
-<h3 class=hdr>Files</h3><div class=g>{% for f in files %}<a class=row href="{{ fdl(f) }}" download><div>{{ f.name }}<small>{{ f.stat().st_size|filesizeformat }}</small></div></a>{% endfor %}</div>
+{% if files %}<section class=page id=t-files data-title=Files>{# target=_blank: in the Home Screen app a file link opened a blank Quick Look page; Safari downloads it #}
+<h3 class=hdr>Files</h3><div class=g>{% for f in files %}<a class=row href="{{ fdl(f) }}" target=_blank download><div>{{ f.name }}<small>{{ f.stat().st_size|filesizeformat }}</small></div></a>{% endfor %}</div>
 <p class=ftr>The links work without signing in for 7 days, so wget and curl can use them.</p>
 </section>{% endif %}
 
