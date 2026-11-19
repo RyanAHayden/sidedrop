@@ -212,8 +212,8 @@ assert html.index("<h3 class=hdr>iFizBox</h3>") < html.index("<h3 class=hdr>Apps
 # its GET opens the iFizBox tab (the install is that page's button); the tab has the install button with the manifest and the benefits
 assert 'href=#ifizbox onclick="go(\'ifizbox\');return false"' in html and 'id=t-ifizbox' in html and 'id=ifzb data-app="com.ryha.ifizbox" data-m="https://x.test/m/com.ryha.ifizbox.plist?e=' in html
 assert "Your certificate, already in it" in html and "10 sources" in html
-# tabs: Apps, Changes, iFizBox, Settings (no Feather, no Files, no More)
-assert re.findall(r"<a href=#(\w+)><svg", html) == ["apps", "changes", "ifizbox", "settings"] and "t-feather" not in html and "t-files" not in html
+# tabs: Apps, Changes, iFizBox, Settings (no Feather, no More, and no Files tab while there are no files: F14)
+assert re.findall(r"<a href=#(\w+)><svg", html) == ["apps", "changes", "ifizbox", "settings"] and "t-feather" not in html and "id=t-files" not in html
 (tmp / "signed" / "com.ryha.ifizbox.ipa").unlink()
 # per-app files sit under that app's Install button, not in Files
 (tmp / "appfiles" / "Demo").mkdir(parents=True); (tmp / "appfiles" / "Demo" / "game.iso").write_bytes(b"iso")
@@ -404,6 +404,10 @@ assert "upAdd(this)" in html and "window.upQ" in html and "upload.onprogress" in
 friend = A.app.test_client(); friend.get("/?password=hunter2-but-longer")
 html = friend.get("/").data.decode()
 assert "notes v2.txt" in html and "href=/admin" not in html, "a friend sees the file and not Manage"
+# F14: a file brings the Files tab back (before Settings), with the file's row there and not on the Apps tab
+assert re.findall(r"<a href=#(\w+)><svg", html) == ["apps", "changes", "ifizbox", "files", "settings"]
+t_apps, t_files = (re.search(rf"<section class=page id=t-{t} .*?</section>", html, re.S).group(0) for t in ("apps", "files"))
+assert "notes v2.txt" in t_files and "notes v2.txt" not in t_apps and "Files</h3>" not in t_apps
 dl = re.search(r'href="(https://x\.test/f/notes%20v2\.txt\?[^"]+)"', html).group(1).replace("&amp;", "&")
 assert A.app.test_client().get(path_qs(dl)).data == b"hello friends"  # no login needed, like the app files
 assert A.app.test_client().get("/f/notes%20v2.txt").status_code == 403
