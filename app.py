@@ -114,7 +114,10 @@ def logged_in():
     "a" admin) and that password's version; a change bumps the version, which signs those sessions out."""
     if session.get("ok") is not True:
         return False
-    kind, ver = session.get("pv") or ("a" if session.get("admin") else "f", 0)  # sessions from before F12: version 0
+    pv = session.get("pv") or ("a" if session.get("admin") else "f", 0)  # sessions from before F12: version 0
+    if pv[0] == "g":  # F16: a guest from a one-iPhone invite
+        return guest_ok(*pv[1:3])
+    kind, ver = pv[0], pv[1]
     return ver == password_ver(kind == "a")
 
 
@@ -179,15 +182,19 @@ def regen_profile():
     PROFILE.write_bytes(base64.b64decode(created["data"]["attributes"]["profileContent"]))
 
 
-def register(udid, name):
+def register(udid, name, invite=None):
+    """invite=(token, sid): through a one-iPhone invite (F16), which the first UDID uses up; a second UDID raises InviteRefused."""
     with lock:
-        if udid in profile_udids():
-            return
-        if not asc("GET", "/devices", params={"filter[udid]": udid})["data"]:
-            asc("POST", "/devices", json={"data": {"type": "devices", "attributes": {
-                "name": name[:50], "udid": udid, "platform": "IOS"}}})
-        regen_profile()
-        resign(force=True)
+        if invite:
+            invite_check(invite[0], udid)
+        if udid not in profile_udids():
+            if not asc("GET", "/devices", params={"filter[udid]": udid})["data"]:
+                asc("POST", "/devices", json={"data": {"type": "devices", "attributes": {
+                    "name": name[:50], "udid": udid, "platform": "IOS"}}})
+            regen_profile()
+            resign(force=True)
+        if invite:
+            invite_use(invite[0], invite[1], udid, name)
 
 
 PRODUCTS, products_lock = DATA / "products.json", threading.Lock()  # {udid: "iPhone15,2"}: each iPhone's PRODUCT from registration (F15)
@@ -2025,7 +2032,8 @@ MANAGE_MENU = """{% if cert %}<a class="cw{{ ' bad' if cert[0][0] == 'error' }}"
 <div class=g>
 <a class="row mrow" href=/admin/iphones data-push>{{ icon('device') }}<div>iPhones</div><span class=val>{{ n_dev }}</span></a>
 <a class="row mrow" href=/admin/signing data-push>{{ icon('syncCert') }}<div>Signing</div><span class=val>{{ expiry }}</span></a>
-<a class="row mrow" href=/admin/passwords data-push>{{ icon('signInKey') }}<div>Passwords</div></a></div>
+<a class="row mrow" href=/admin/passwords data-push>{{ icon('signInKey') }}<div>Passwords</div></a>
+<a class="row mrow" href=/admin/invites data-push>{{ icon('share') }}<div>Invite Friends</div></a></div>
 <div class="g gap">
 <a class="row mrow" href=/admin/files data-push>{{ icon('fromFile') }}<div>Files for Friends</div><span class=val>{{ n_files }}</span></a>
 <a class="row mrow" href=/admin/sources data-push>{{ icon('sources') }}<div>App Sources</div><span class=val>{{ n_sources }}</span></a>
@@ -2268,7 +2276,181 @@ def admin_passwords():
                       ask=PW_ASK, go=PW_GO)
 
 
-FILE_ROW = """<div class=row data-file="{{ f.name }}"><div>{{ f.name }}<small>{{ f.stat().st_size|filesizeformat }}</small></div>
+# --- F16: invite links (Manage → Invite Friends). 'Anyone with the link' (/join/<token>) signs in like the friends' password without
+# holding it (only its hash is kept): an HMAC of the friends' password version and a generation that Make New Link bumps, so Sign Out
+# Everyone (which bumps the version) or Make New Link kills old links. A 'One iPhone' invite (/invite/<token>, a random token in
+# invites.json) signs a browser in as a guest who can register one iPhone: the first UDID uses it up (register() refuses a second), and
+# from then on only that iPhone gets in: its device cookie, or the session that downloaded the registering profile (the Home Screen
+# app is a copy of Safari's cookies when it was added, so it has one or the other, as a friend's does). ---
+
+INVITES, invites_lock = DATA / "invites.json", threading.Lock()  # {token: {name, made, exp; once used: udid, device, used, sid}}
+INVITE_TTL = 7 * 86400  # an unused one-iPhone invite expires after this
+INVITE_USED = "This invite already registered an iPhone. Ask for a new one."
+ROW_ICONS["share"] = ("#3f80e0", [("s", "M8.2 9.6H5.8v11h12.4v-11h-2.4", 2.4), ("s", "M12 15V5", 2.6), ("f", "M12 1.8l4.6 4.8H7.4z")])  # rowicons.js share
+DONE.update(newlink="Made a new link. The old one no longer works.", revoked="Revoked.")
+
+
+class InviteRefused(Exception):
+    pass
+
+
+def load_invites():
+    return load_json(INVITES)
+
+
+def is_guest():
+    return session.get("ok") is True and (session.get("pv") or ("",))[0] == "g"
+
+
+def guest_ok(tok="", sid=""):
+    """A guest session still gets in: its invite exists (not revoked) and is unused and unexpired, or was used and this is the iPhone
+    it registered (device cookie) or the session that registered it."""
+    inv = load_invites().get(tok) if tok else None
+    if not inv:
+        return False
+    if inv.get("udid"):
+        return token_udid(request.cookies.get("device", "")) == inv["udid"] or bool(sid) and hmac.compare_digest(sid.encode(), inv.get("sid", "").encode())
+    return time.time() < inv.get("exp", 0)
+
+
+def invite_check(tok, udid):
+    """Raises InviteRefused unless this UDID may register through the invite (register() calls it under its lock)."""
+    inv = load_invites().get(tok)
+    if not inv:
+        raise InviteRefused("This invite link doesn't work any more. Ask for a new one.")
+    if inv.get("udid"):
+        if inv["udid"] != udid:
+            raise InviteRefused(INVITE_USED)
+    elif time.time() >= inv.get("exp", 0):
+        raise InviteRefused("This invite has expired. Ask for a new one.")
+
+
+def invite_use(tok, sid, udid, device):
+    with invites_lock:
+        invs = load_invites()
+        if tok in invs and not invs[tok].get("udid"):
+            invs[tok].update(udid=udid, device=device, used=int(time.time()), sid=sid)
+            save_json(INVITES, invs)
+
+
+def join_token():
+    return hmac.new(SECRET, f"join:{password_ver()}:{load_json(SETUP).get('join_gen', 0)}".encode(), hashlib.sha256).hexdigest()[:32]
+
+
+@app.before_request
+def guests_stay_out():
+    if (request.path == "/admin" or request.path.startswith("/admin/")) and is_guest():
+        abort(403)
+
+
+INVITE_NO = """<div class="c"><p class=err>{{ msg }}</p></div>"""
+
+
+@app.get("/join/<tok>")
+def join(tok):
+    if logged_in() and not is_guest():
+        return redirect("/")  # a friend or the admin trying the link stays who they are
+    if needs_setup() or not hmac.compare_digest(tok.encode(), join_token().encode()):
+        return page(INVITE_NO, title="Invite", msg="This link doesn't work any more. Ask for a new one."), 403
+    session.pop("admin", None)
+    session.permanent, session["ok"], session["pv"] = True, True, ["f", password_ver()]
+    return redirect("/")
+
+
+@app.get("/invite/<tok>")
+def invite_link(tok):
+    if logged_in() and not is_guest():
+        return redirect("/")
+    inv = load_invites().get(tok)
+    if inv and (inv["udid"] == token_udid(request.cookies.get("device", "")) if inv.get("udid") else time.time() < inv.get("exp", 0)):
+        if not (is_guest() and session["pv"][1:2] == [tok] and logged_in()):  # a guest session already made with it keeps its id
+            session.pop("admin", None)
+            session.pop("csrf", None)
+            session.permanent, session["ok"], session["pv"] = True, True, ["g", tok, secrets.token_urlsafe(12)]
+        return redirect("/")
+    try:
+        invite_check(tok, None)
+        msg = INVITE_USED
+    except InviteRefused as e:
+        msg = str(e)
+    return page(INVITE_NO, title="Invite", msg=msg), 403
+
+
+LINK_BTNS = """<div class=lbtn><button type=button class="{{ cls }}" onclick="lnkCopy(this)">{{ copy }}</button><button type=button class="{{ cls }} grey shr" onclick="lnkShare(this)">{{ share }}</button></div>"""
+INVITES_PAGE = """<style>.lnk{font:13px/1.4 ui-monospace,Menlo,monospace;width:100%;box-sizing:border-box} .lbtn{display:flex;gap:8px} .lbtn button{flex:1}
+.lbtn button[hidden]{display:none} .irow>div:first-child{flex:1;min-width:0} .irow .lbtn{flex:none;gap:4px} .irow form{flex:none;margin-left:4px} .irow b{font-weight:700}</style>
+<h3 class=hdr>Anyone with the Link</h3>
+<div class="c mg" data-link="{{ join }}"><input class=lnk readonly value="{{ join }}" aria-label=Link onfocus="this.select()">
+""" + LINK_BTNS.replace("{{ cls }}", "").replace("{{ copy }}", "Copy Link").replace("{{ share }}", "Share") + """
+<small>Signs in like the friends' password, without typing it. <b>Sign Out Everyone</b> on Passwords stops it, and so does Make New Link.</small></div>
+<form class="c mg" method=post action=/admin/invites onsubmit="if(!confirm('Make a new link? The old one stops working.'))return false">
+<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=do value=rotate><button class=grey>Make New Link</button></form>
+<h3 class=hdr>One iPhone</h3>
+{% if new %}<div class="c mg" data-link="{{ new.url }}"><p class=done>New link{{ ' for ' + new.name if new.name }}:</p><input class=lnk readonly value="{{ new.url }}" aria-label=Link onfocus="this.select()">
+""" + LINK_BTNS.replace("{{ cls }}", "").replace("{{ copy }}", "Copy Link").replace("{{ share }}", "Share") + """</div>{% endif %}
+<form class="c mg" method=post action=/admin/invites><input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=do value=new>
+<input name=name maxlength=30 placeholder="Name (optional), like Sam" aria-label=Name autocomplete=off>
+<button>New One-iPhone Link</button><small>Each link registers one iPhone, then signs in again only on that iPhone. Unused links expire after 7 days. Guests install apps like friends but never see these links or the friends' password.</small></form>
+{% if invites %}<div class=g>{% for i in invites %}<div class="row irow"{% if i.state == 'unused' %} data-link="{{ i.url }}"{% endif %}>
+<div><b>{{ i.name or 'No name' }}</b><small>Made {{ fmt_day(i.made) }} · {{ i.status }}</small></div>
+{% if i.state == 'unused' %}""" + LINK_BTNS.replace("{{ cls }}", "act").replace("{{ copy }}", "COPY").replace("{{ share }}", "SHARE") + """{% endif %}
+<form method=post action=/admin/invites data-name="{{ i.name or 'this link' }}" onsubmit="if(!confirm('Revoke the link for '+this.dataset.name+'?'))return false">
+<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=do value=revoke><input type=hidden name=tok value="{{ i.tok }}"><button class="act red">REVOKE</button></form></div>{% endfor %}</div>
+<p class=ftr>Revoking a used link signs its guest out and leaves the iPhone registered: turn it off on iPhones.</p>{% endif %}
+<script>/* F16: Copy Link writes the clipboard in the tap; without the API (or refused) it selects the link's text, and tries execCommand */
+window.lnkCopy=function(b){let w=b.closest("[data-link]"),u=w.dataset.link,t=b.textContent,ok=()=>{b.textContent=b.classList.contains("act")?"COPIED":"Copied";setTimeout(()=>b.textContent=t,1500)};
+ let sel=()=>{let i=w.querySelector(".lnk"),tmp=!i;if(tmp){i=document.createElement("textarea");i.value=u;i.className="vh";document.body.append(i)}
+  i.focus();i.select();i.setSelectionRange(0,u.length);let c=false;try{c=document.execCommand("copy")}catch(e){}if(tmp)i.remove();if(c)ok()};
+ if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(u).then(ok,sel);else sel()};
+window.lnkShare=function(b){navigator.share({url:b.closest("[data-link]").dataset.link}).catch(()=>{})};
+document.querySelectorAll(".shr").forEach(b=>b.hidden=!navigator.share)</script>"""
+
+
+def invite_rows():
+    out, now = [], time.time()
+    for tok, inv in sorted(load_invites().items(), key=lambda kv: -kv[1].get("made", 0)):
+        made = datetime.datetime.fromtimestamp(inv.get("made", 0))
+        if inv.get("udid"):
+            state, status = "used", f"Used by {inv.get('device') or 'an iPhone'} on {fmt_day(datetime.datetime.fromtimestamp(inv.get('used', 0)))}"
+        elif now >= inv.get("exp", 0):
+            state, status = "expired", "Expired"
+        else:
+            state, status = "unused", "Not used"
+        out.append(dict(tok=tok, name=inv.get("name", ""), made=made, state=state, status=status, url=f"{PUBLIC_URL}/invite/{tok}"))
+    return out
+
+
+@app.route("/admin/invites", methods=["GET", "POST"])
+def admin_invites():
+    if r := admin_gate():
+        return r
+    if request.method == "POST":
+        admin_check()
+        do = request.form.get("do")
+        if do == "rotate":
+            s = load_json(SETUP)
+            s["join_gen"] = s.get("join_gen", 0) + 1
+            save_json(SETUP, s)
+            return redirect("/admin/invites?done=newlink")
+        if do == "new":
+            tok, now = secrets.token_urlsafe(16), int(time.time())
+            name = re.sub(r"[^\w .'-]", "", request.form.get("name", "")).strip()[:30]
+            with invites_lock:
+                save_json(INVITES, {**load_invites(), tok: {"name": name, "made": now, "exp": now + INVITE_TTL}})
+            return redirect(f"/admin/invites?new={tok}")
+        if do == "revoke":
+            with invites_lock:
+                invs = load_invites()
+                if invs.pop(request.form.get("tok", ""), None) is not None:
+                    save_json(INVITES, invs)
+            return redirect("/admin/invites?done=revoked")
+        abort(400)
+    rows = invite_rows()
+    new = next((i for i in rows if i["tok"] == request.args.get("new") and i["state"] == "unused"), None)
+    return admin_page(ADMIN_CSS + INVITES_PAGE, "Invite Friends", join=f"{PUBLIC_URL}/join/{join_token()}", invites=rows, new=new)
+
+
+FILE_ROW ="""<div class=row data-file="{{ f.name }}"><div>{{ f.name }}<small>{{ f.stat().st_size|filesizeformat }}</small></div>
 <form method=post action=/admin/files/delete data-name="{{ f.name }}" onsubmit="if(!confirm('Delete '+this.dataset.name+'?'))return false">
 <input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=name value="{{ f.name }}"><button class="act red">DELETE</button></form></div>"""
 # F13: picking files uploads them at once, one XMLHttpRequest each (upload.onprogress gives the bytes), as iFizBox's asynchronous
@@ -2523,8 +2705,10 @@ def logout():
 def enroll():
     if not logged_in():
         abort(403)
-    name = re.sub(r"[^\w .'-]", "", request.form.get("name", ""))[:30] or "friend"
-    url = signed_url(f"/udid/{name}", ttl=1800)
+    pv = session.get("pv") or ()
+    guest = len(pv) > 2 and pv[0] == "g"
+    name = re.sub(r"[^\w .'-]", "", request.form.get("name", "") or (guest and load_invites().get(pv[1], {}).get("name")) or "")[:30] or "friend"
+    url = signed_url(f"/udid/{name}/g/{pv[1]}/{pv[2]}" if guest else f"/udid/{name}", ttl=1800)  # F16: a guest's goes through its invite
     profile = plistlib.dumps({
         "PayloadContent": {"URL": url, "DeviceAttributes": ["UDID", "PRODUCT"]},
         "PayloadOrganization": "sidedrop", "PayloadDisplayName": "sidedrop device registration",
@@ -2542,6 +2726,20 @@ def udid(name):
     save_product(attrs["UDID"], attrs.get("PRODUCT", ""))
     register(attrs["UDID"], f"{name} {attrs.get('PRODUCT', '')}".strip())
     return redirect(f"{PUBLIC_URL}/?enrolled={device_token(attrs['UDID'])}", 301)  # iOS requires a 301 here, then opens it in Safari
+
+
+@app.post("/udid/<name>/g/<tok>/<sid>")
+def udid_guest(name, tok, sid):
+    """F16: a guest's registration, through its one-iPhone invite. A second UDID (or a revoked or expired invite) is refused:
+    iOS opens the 301 in Safari, where /invite/<tok> says why."""
+    check_sig()
+    attrs = embedded_plist(request.get_data())
+    try:
+        register(attrs["UDID"], f"{name} {attrs.get('PRODUCT', '')}".strip(), invite=(tok, sid))
+    except InviteRefused:
+        return redirect(f"{PUBLIC_URL}/invite/{tok}", 301)
+    save_product(attrs["UDID"], attrs.get("PRODUCT", ""))
+    return redirect(f"{PUBLIC_URL}/?enrolled={device_token(attrs['UDID'])}", 301)
 
 
 @app.post("/sign")

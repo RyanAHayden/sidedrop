@@ -30,7 +30,7 @@ def fake_run(cmd, **kw):
     Path(cmd[cmd.index("-o") + 1]).write_bytes((tmp / "apps" / "Demo.ipa").read_bytes())
 A.regen_profile, A.asc, A.subprocess.run = fake_regen, fake_asc, fake_run
 orig_register = A.register
-A.register = lambda u, n: (calls.append((u, n)), orig_register(u, n))
+A.register = lambda u, n, **kw: (calls.append((u, n)), orig_register(u, n, **kw))
 
 c = A.app.test_client()
 path_qs = lambda url: (lambda s: f"{s.path}?{s.query}")(urlsplit(url))
@@ -305,9 +305,9 @@ down = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("App Store Connect GET
 A.asc = slow_asc
 t0 = time.monotonic(); html = c.get("/admin").data.decode()
 assert time.monotonic() - t0 < 1, "Manage waited on Apple"
-for p in ("iphones", "signing", "passwords", "files", "sources", "ifizbox"):
+for p in ("iphones", "signing", "passwords", "invites", "files", "sources", "ifizbox"):
     assert f"href=/admin/{p} data-push" in html, p
-assert html.count("<img class=rico src=\"data:image/svg+xml,%3Csvg") == 6 and "Files for Friends" in html and "App Sources" in html
+assert html.count("<img class=rico src=\"data:image/svg+xml,%3Csvg") == 7 and "Files for Friends" in html and "App Sources" in html
 assert A.tile_svg("general").startswith('<svg xmlns="http://www.w3.org/2000/svg" width="29" height="29"') and 'fill="#8c9097"' in A.tile_svg("general")
 t0 = time.monotonic(); html = c.get("/admin/iphones").data.decode()  # nothing saved yet: the loading row, and the refresh's script
 assert time.monotonic() - t0 < 1 and "Loading from Apple…" in html and "/admin/devices.json" in html and "No iPhones" not in html
@@ -796,4 +796,76 @@ assert rj.status_code == 500 and "can't write to the data folder" in rj.json["er
 # the manual certificate steps are on the page, not a link out
 html = boss.get("/admin/signing").data.decode()
 assert "openssl pkcs12 -export" in html and "Apple Distribution" in html and "docs/developer-account.md" not in html
+
+# F16 invite links: 'Anyone with the link' signs in like the friends' password; 'One iPhone' invites register exactly one iPhone
+idir = tmp / "invites"; (idir / "apps").mkdir(parents=True)
+I = boot(idir, PASSWORD="friends-pass-16", ADMIN_PASSWORD="admin-pass-16", SECRET_KEY="i" * 32)
+iudids = []
+I.asc = lambda m, path, **kw: (m == "POST" and iudids.append(kw["json"]["data"]["attributes"]["udid"]), {"data": []})[1]
+I.regen_profile = lambda: I.PROFILE.write_bytes(plistlib.dumps({"ProvisionedDevices": iudids}))
+boss = I.app.test_client(); assert boss.get("/?password=admin-pass-16").location == "/"
+assert "href=/admin/invites" in boss.get("/admin").data.decode()
+html = boss.get("/admin/invites").data.decode(); csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
+assert "friends-pass-16" not in html and "Copy Link" in html and "navigator.clipboard.writeText" in html and "navigator.share" in html
+join_link = lambda: re.search(r'data-link="https://x.test(/join/[0-9a-f]{32})"', boss.get("/admin/invites").data.decode()).group(1)
+inv = lambda **f: boss.post("/admin/invites", data=dict(f, csrf=csrf))
+signed_in = lambda cl: b"action=/login" not in cl.get("/").data
+# the anyone link signs in as a friend; a made-up one refuses
+anyone, j = I.app.test_client(), join_link()
+assert anyone.get(j).location == "/" and b"Register iPhone" in anyone.get("/").data
+assert I.app.test_client().get("/join/" + "0" * 32).status_code == 403 and I.app.test_client().get("/join/x").status_code == 403
+# Make New Link: the old link stops, sessions made with it stay; the new one works
+assert inv(do="rotate").location == "/admin/invites?done=newlink"
+assert I.app.test_client().get(j).status_code == 403 and signed_in(anyone)
+j = join_link(); assert I.app.test_client().get(j).location == "/"
+# changing the friends' password with Sign Out Everyone kills the link too
+assert boss.post("/admin/passwords", data={"csrf": csrf, "password": "friends-pass-17", "replace_env": "1", "signout": "1"}).location == "/admin/passwords?done=passwords"
+assert I.app.test_client().get(j).status_code == 403 and not signed_in(anyone)
+assert I.app.test_client().get(join_link()).location == "/"
+# a one-iPhone invite: the guest it signs in can register; Manage is 403 to them
+tok = re.search(r"new=([\w-]+)$", inv(do="new", name="Sam <x>").location).group(1)
+html = boss.get(f"/admin/invites?new={tok}").data.decode()
+assert f'data-link="https://x.test/invite/{tok}"' in html and "New link for Sam x" in html and "Not used" in html
+guest, early = I.app.test_client(), I.app.test_client()
+assert guest.get(f"/invite/{tok}").location == "/" and b"Register iPhone" in guest.get("/").data
+assert early.get(f"/invite/{tok}").location == "/" and signed_in(early)  # someone else opening the shared link before it's used
+for p in ("/admin", "/admin/invites", "/admin/passwords", "/admin/iphones", "/admin/devices.json", "/admin/files"):
+    assert guest.get(p).status_code == 403, p
+assert guest.post("/admin/invites", data={"do": "new"}).status_code == 403 and guest.post("/admin", data={"password": "admin-pass-16"}).status_code == 403
+assert boss.get(f"/invite/{tok}").location == "/" and boss.get("/admin/invites").status_code == 200  # the admin trying it stays admin
+# the first UDID through it uses it up; a second UDID is refused, the same one again is fine
+iurl = plistlib.loads(guest.post("/enroll", data={"name": ""}).data)["PayloadContent"]["URL"]
+assert "/udid/Sam%20x/g/" + tok + "/" in iurl, iurl
+ipost = lambda udid: I.app.test_client().post(path_qs(iurl), data=b"\x30\x80" + plistlib.dumps({"UDID": udid, "PRODUCT": "iPhone14,2"}) + b"\x00")
+r = ipost("GUEST-1"); assert r.status_code == 301 and r.location.endswith("/?enrolled=" + I.device_token("GUEST-1")) and iudids == ["GUEST-1"]
+r = ipost("GUEST-2"); assert r.status_code == 301 and r.location == f"https://x.test/invite/{tok}" and iudids == ["GUEST-1"]
+try:
+    I.register("GUEST-3", "x", invite=(tok, "")); raise AssertionError("second UDID registered")
+except I.InviteRefused as e:
+    assert str(e) == I.INVITE_USED == "This invite already registered an iPhone. Ask for a new one."
+assert ipost("GUEST-1").status_code == 301 and I.profile_udids() == {"GUEST-1"}
+assert "Used by Sam x iPhone14,2 on" in boss.get("/admin/invites").data.decode()
+# after use: the session that registered stays in (the Home Screen app copies its cookies), other sessions are out, the link
+# opens again only with that iPhone's device cookie
+assert signed_in(guest) and not signed_in(early)
+r = I.app.test_client().get(f"/invite/{tok}"); assert r.status_code == 403 and I.INVITE_USED.encode() in r.data
+hs = I.app.test_client(); hs.set_cookie("device", I.device_token("GUEST-1"))
+assert hs.get(f"/invite/{tok}").location == "/" and signed_in(hs)
+other = I.app.test_client(); other.set_cookie("device", I.device_token("GUEST-2"))
+assert other.get(f"/invite/{tok}").status_code == 403
+# expired: refused, sessions from it out, its profile can't register
+etok = re.search(r"new=([\w-]+)$", inv(do="new").location).group(1)
+eg = I.app.test_client(); assert eg.get(f"/invite/{etok}").location == "/"
+eurl = plistlib.loads(eg.post("/enroll").data)["PayloadContent"]["URL"]
+invs = I.load_invites(); invs[etok]["exp"] = time.time() - 1; I.save_json(I.INVITES, invs)
+assert not signed_in(eg) and b"expired" in I.app.test_client().get(f"/invite/{etok}").data and I.app.test_client().get(f"/invite/{etok}").status_code == 403
+assert I.app.test_client().post(path_qs(eurl), data=plistlib.dumps({"UDID": "GUEST-E"})).location == f"https://x.test/invite/{etok}" and "GUEST-E" not in iudids
+assert "Expired" in boss.get("/admin/invites").data.decode()
+# revoked: refused and its guest signed out; revoking the used one leaves its iPhone registered
+rtok = re.search(r"new=([\w-]+)$", inv(do="new", name="Kim").location).group(1)
+rg = I.app.test_client(); assert rg.get(f"/invite/{rtok}").location == "/"
+assert inv(do="revoke", tok=rtok).location == "/admin/invites?done=revoked"
+assert not signed_in(rg) and I.app.test_client().get(f"/invite/{rtok}").status_code == 403 and "Kim" not in boss.get("/admin/invites").data.decode()
+inv(do="revoke", tok=tok)
+assert not signed_in(guest) and not signed_in(hs) and I.profile_udids() == {"GUEST-1"}
 print("ok")
