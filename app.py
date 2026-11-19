@@ -1248,6 +1248,8 @@ def take_signing_files(f, uploads, s):
         if p12_pw is None:
             err = "The P12_PASSWORD in .env doesn't open this cert.p12." if "P12_PASSWORD" in ENV_SET else \
                 "The certificate's password didn't open cert.p12. Type it in P12 Password."
+        elif bad := [t for lvl, t in cert_problems(got["p12"], p12_pw) if lvl == "error"]:
+            err = " ".join(bad)  # kept out: a certificate that can't sign would break every app on the next re-sign
         else:
             P12.write_bytes(got["p12"])
             s["p12_password"] = p12_pw
@@ -1266,6 +1268,138 @@ def take_signing_files(f, uploads, s):
         if k.upper() not in ENV_SET and (v := f.get(k, "").strip() or guess):
             s[k] = v
     return err
+
+
+# --- certificate checks, the ones iFizBox makes: errors stop an upload, Manage shows a banner, startup logs them ---
+
+CERT_WARN_DAYS = 30  # warn this long before the certificate expires
+DIST_NAMES = ("Apple Distribution:", "iPhone Distribution:")  # the common name of a distribution certificate, new and old
+cert_cache = {}  # {"key": (p12 mtime, password, BUNDLE_ID), "at": time, "problems": [...]}: Manage asks Apple once an hour
+
+
+def cert_problems(blob, pw, now=None):
+    """What's wrong with a .p12 by itself, no network: [(level, text)], level "error" (it can't sign) or "warning"."""
+    try:
+        key, cert, extra = pkcs12.load_key_and_certificates(blob, pw.encode() or None)
+    except Exception:
+        return [("error", "The password doesn't open cert.p12.")]
+    if cert is None and not extra:
+        return [("error", "cert.p12 has no certificate in it.")]
+    if key is None:  # a .p12 of only the certificate loads it among the extras
+        return [("error", "cert.p12 has the certificate but not its private key. Export it again from Keychain Access "
+                          "with the private key under it selected too.")]
+    if cert is None:  # a key, and certificates none of which it pairs with
+        return [("error", "cert.p12's private key doesn't belong to its certificate.")]
+    out = []
+    spki = lambda k: k.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+    if spki(key.public_key()) != spki(cert.public_key()):
+        out.append(("error", "cert.p12's private key doesn't belong to its certificate."))
+    cn = ", ".join(a.value for a in cert.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME))
+    if not cn.startswith(DIST_NAMES):
+        kind = "a development certificate" if cn.startswith(("Apple Development", "iPhone Developer")) else "not an Apple Distribution certificate"
+        out.append(("error", f"cert.p12 is {kind} ({cn or 'no name'}). Ad hoc signing needs an Apple Distribution certificate."))
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    ends, day = cert.not_valid_after_utc, lambda t: f"{t:%b} {t.day}, {t.year}"
+    left = ends - now
+    if left.total_seconds() <= 0:
+        out.append(("error", f"The certificate expired on {day(ends)}. Make a new Apple Distribution certificate."))
+    elif left.days < CERT_WARN_DAYS:
+        n = "less than a day" if left.days < 1 else f"{left.days} day{'s' * (left.days != 1)}"
+        out.append(("warning", f"The certificate expires in {n} ({day(ends)}); apps signed with it stop opening then. "
+                               "Make a new one and upload it on Manage before that."))
+    return out
+
+
+def ocsp_revoked(cert, extra=()):
+    """Ask the certificate's OCSP responder (Apple's) about it: when it was revoked, or None (good, unknown, no responder)."""
+    from cryptography.x509 import ocsp
+    try:
+        aia = cert.extensions.get_extension_for_class(x509.AuthorityInformationAccess).value
+    except x509.ExtensionNotFound:
+        return None
+    where = lambda m: next((d.access_location.value for d in aia if d.access_method == m), None)
+    responder, issuer_url = where(x509.oid.AuthorityInformationAccessOID.OCSP), where(x509.oid.AuthorityInformationAccessOID.CA_ISSUERS)
+    if not responder:
+        return None
+    issuer = next((c for c in extra or () if c.subject == cert.issuer), None)  # most .p12s don't carry the WWDR intermediate
+    if issuer is None and issuer_url:
+        data = requests.get(issuer_url, timeout=15).content
+        issuer = x509.load_pem_x509_certificate(data) if data.startswith(b"-----") else x509.load_der_x509_certificate(data)
+    if issuer is None:
+        return None
+    req = ocsp.OCSPRequestBuilder().add_certificate(cert, issuer, hashes.SHA1()).build()
+    r = requests.post(responder, data=req.public_bytes(serialization.Encoding.DER),
+                      headers={"Content-Type": "application/ocsp-request"}, timeout=15)
+    resp = ocsp.load_der_ocsp_response(r.content)
+    if resp.response_status == ocsp.OCSPResponseStatus.SUCCESSFUL and resp.certificate_status == ocsp.OCSPCertStatus.REVOKED:
+        return resp.revocation_time_utc
+    return None
+
+
+def cert_account_problems():
+    """The checks that need Apple: the certificate not revoked and in the account, the ad hoc profile made for it, the App ID
+    there and, when explicit, with Push Notifications. [(level, text)] like cert_problems."""
+    try:
+        key, cert, extra = pkcs12.load_key_and_certificates(P12.read_bytes(), P12_PASSWORD.encode() or None)
+    except Exception:
+        return []  # cert_problems says why
+    if key is None or cert is None:
+        return []
+    out = []
+    try:
+        if at := ocsp_revoked(cert, extra):
+            out.append(("error", f"Apple revoked this certificate on {at:%b} {at.day}, {at.year}. Apps signed with it won't open; "
+                                 "make a new Apple Distribution certificate."))
+    except Exception as e:
+        print("certificate revocation check failed:", e, flush=True)  # Apple's OCSP down: say nothing rather than guess
+    if PROFILE.exists():
+        made_for = embedded_plist(PROFILE.read_bytes()).get("DeveloperCertificates")
+        if made_for and cert.public_bytes(serialization.Encoding.DER) not in made_for:
+            out.append(("error", "The ad hoc profile was made for another certificate, so apps signed now won't install. "
+                                 "Save the signing files on Manage again to make a new profile."))
+    try:
+        serial = f"{cert.serial_number:X}".lstrip("0")
+        if not any(c["attributes"]["serialNumber"].upper().lstrip("0") == serial
+                   for c in asc("GET", "/certificates", params={"limit": 200})["data"]):
+            if not any("revoked" in t for _, t in out):
+                out.append(("error", "cert.p12 isn't in your developer account: it was revoked, or the API key is another team's. "
+                                     "Make a new Apple Distribution certificate, or use that team's API key."))
+        if BUNDLE_ID:
+            found = [b for b in asc("GET", "/bundleIds", params={"filter[identifier]": BUNDLE_ID, "limit": 200})["data"]
+                     if b["attributes"]["identifier"] == BUNDLE_ID]  # the filter is a prefix match
+            if not found:
+                out.append(("error", f"The App ID {BUNDLE_ID} isn't in your developer account. Add it at developer.apple.com → "
+                                     f"Identifiers{' as a wildcard App ID' if BUNDLE_ID.endswith('*') else ''}, or change BUNDLE_ID."))
+            elif not BUNDLE_ID.endswith("*"):
+                caps = asc("GET", f"/bundleIds/{found[0]['id']}/bundleIdCapabilities")["data"]
+                if not any(c["attributes"].get("capabilityType") == "PUSH_NOTIFICATIONS" for c in caps):
+                    out.append(("warning", f"The App ID {BUNDLE_ID} doesn't have Push Notifications, so apps signed with it get no "
+                                           "notifications. Turn it on at developer.apple.com → Identifiers."))
+    except Exception as e:
+        out.append(("warning", f"Couldn't ask Apple about the certificate and App ID: {str(e)[:160]}"))
+    return out
+
+
+def cert_status(max_age=3600):
+    """Every certificate problem, Apple's answers kept for max_age seconds or until the signing files change."""
+    if not P12.exists():
+        return []
+    key = (P12.stat().st_mtime, P12_PASSWORD, BUNDLE_ID)
+    if cert_cache.get("key") != key or time.time() - cert_cache.get("at", 0) > max_age:
+        local = cert_problems(P12.read_bytes(), P12_PASSWORD)
+        ok = not any(lvl == "error" and ("password" in t or "private key" in t) for lvl, t in local)
+        cert_cache.update(key=key, at=time.time(), problems=local + (cert_account_problems() if ok else []))
+    return cert_cache["problems"]
+
+
+def log_cert_problems(problems):
+    for lvl, text in problems:
+        print(f"certificate {lvl}: {text}", flush=True)
+
+
+if P12.exists() and not needs_setup():  # ponytail: once per worker; Apple's checks in the background so startup isn't held up
+    log_cert_problems(cert_problems(P12.read_bytes(), P12_PASSWORD))
+    threading.Thread(target=lambda: log_cert_problems(cert_account_problems()), daemon=True).start()
 
 
 @app.route("/setup", methods=["GET", "POST"])
@@ -1413,6 +1547,7 @@ def manage_page(err=None):
     configs = [dict(name=n, label=lbl, text=conf(n).read_text() if conf(n).exists() else "", custom=(CONFIG / n).exists()) for n, lbl in EDITABLE.items()]
     return page(ADMIN_CSS + """<style>.mg label{display:flex;flex-direction:column;gap:4px;font-weight:700} .mg small{font-weight:400} .mg textarea{min-height:96px}
 .done{color:#2f7d32;font-weight:700}</style>
+{% for lvl, t in cert %}<p class="c {{ 'err' if lvl == 'error' else 'warn' }}" style="font-weight:700{{ '' if lvl == 'error' else ';color:#a35a00' }}">{{ t }}</p>{% endfor %}
 {% if done %}<p class="c done">{{ done }}</p>{% endif %}{% if err %}<p class="c err">{{ err }}</p>{% endif %}
 <h3 class=hdr>iPhones</h3>
 {% if asc_err %}<p class="c err">Apple's developer service didn't answer. Try again in a few minutes.<small>{{ asc_err }}</small></p>{% else %}
@@ -1455,7 +1590,7 @@ iFizBox settings: a JSON object it imports on first launch. Lines that aren't UR
 {% if 'BUNDLE_ID' not in env %}<label>App ID (BUNDLE_ID)<input name=bundle_id value="{{ s.bundle_id or '' }}" placeholder="com.you.*" autocapitalize=none autocomplete=off></label>{% endif %}
 <button>Save</button><small>A new certificate makes a new profile and signs every app again; installed apps keep working until it does.</small></form>""",
                 back=MORE, title="Manage", devices=devices, asc_err=asc_err, csrf=session["csrf"], files=shared_files(), configs=configs,
-                env=ENV_SET, s=load_json(SETUP), err=err, done=DONE.get(request.args.get("done", "")))
+                env=ENV_SET, s=load_json(SETUP), err=err, done=DONE.get(request.args.get("done", "")), cert=cert_status())
 
 
 def resign_all():

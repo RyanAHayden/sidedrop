@@ -330,7 +330,81 @@ assert boss.post("/admin/files/delete", data={"csrf": csrf, "name": "../secret.k
 assert boss.post("/admin/files/delete", data={"csrf": csrf, "name": "hidden"}).location == "/admin?done=deleted" and not (tmp / "files" / "hidden").exists()
 # new signing files, the same upload as the setup screen; a new certificate means a new profile and every app signed again
 from cryptography.hazmat.primitives.serialization import pkcs12 as P12x
-p12_new = P12x.serialize_key_and_certificates(b"sd", k, crt, None, S.BestAvailableEncryption(b"new-p12-pw"))
+def dist_cert(cn="Apple Distribution: Sam Test (TEAM123456)", days=365, key=k):
+    """A self-made certificate named like Apple's, valid for days from now (negative: already expired)."""
+    nm, now = X.Name([X.NameAttribute(X.oid.NameOID.COMMON_NAME, cn)]), datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
+    start = now +datetime.timedelta(days=min(days, 0) - 400)
+    return X.CertificateBuilder().subject_name(nm).issuer_name(nm).public_key(key.public_key()).serial_number(X.random_serial_number()) \
+        .not_valid_before(start).not_valid_after(now + datetime.timedelta(days=days)).sign(k, H.SHA256())
+dcrt = dist_cert()
+# certificate checks (F4): each bad .p12 is refused at upload with its own message and the saved one stays
+p12_of = lambda crt_, pw=b"pw", key=k: P12x.serialize_key_and_certificates(b"sd", key, crt_, None, S.BestAvailableEncryption(pw))
+assert A.cert_problems(p12_of(dcrt), "pw") == []
+assert A.cert_problems(p12_of(dcrt), "nope") == [("error", "The password doesn't open cert.p12.")]
+assert "expired on" in A.cert_problems(p12_of(dist_cert(days=-3)), "pw")[0][1]
+assert [l for l, _ in A.cert_problems(p12_of(dist_cert(days=12)), "pw")] == ["warning"] and "12 days" in A.cert_problems(p12_of(dist_cert(days=12)), "pw")[0][1]
+assert "development certificate" in A.cert_problems(p12_of(dist_cert("Apple Development: Sam Test (X)")), "pw")[0][1]
+assert "not an Apple Distribution" in A.cert_problems(p12_of(crt), "pw")[0][1]
+assert "not its private key" in A.cert_problems(p12_of(dcrt, key=None), "pw")[0][1]
+before = A.P12.read_bytes()
+for blob, pw, says in ((p12_of(dcrt), "wrong", b"didn&#39;t open"), (p12_of(dist_cert(days=-3)), "pw", b"The certificate expired on"),
+                       (p12_of(crt), "pw", b"not an Apple Distribution certificate")):
+    r = boss.post("/admin/signing", data={"csrf": csrf, "p12_password": pw, "files": [(io.BytesIO(blob), "cert.p12")]}, content_type="multipart/form-data")
+    assert says in r.data and A.P12.read_bytes() == before, says
+# Apple's side: not in the account, the App ID missing, an explicit App ID without Push; a profile for another certificate
+A.P12.write_bytes(p12_of(dist_cert(days=10))); A.P12_PASSWORD = "pw"
+apple = {"/certificates": [], "/bundleIds": []}
+A.asc = lambda m, path, **kw: {"data": apple.get(path, [])}
+html = boss.get("/admin").data.decode()
+assert "expires in 10 days" in html and "isn&#39;t in your developer account" in html and "The App ID com.me.* isn&#39;t" in html, html
+_, mine, _ = P12x.load_key_and_certificates(A.P12.read_bytes(), b"pw")
+apple["/certificates"] = [{"id": "C1", "attributes": {"serialNumber": f"{mine.serial_number:X}"}}]
+apple["/bundleIds"] = [{"id": "B1", "attributes": {"identifier": "com.me.*"}}]
+assert A.cert_account_problems() == []
+A.BUNDLE_ID, apple["/bundleIds"] = "com.me.app", [{"id": "B2", "attributes": {"identifier": "com.me.app"}}]
+assert [l for l, t in A.cert_account_problems() if "Push" in t] == ["warning"]
+apple["/bundleIds/B2/bundleIdCapabilities"] = [{"attributes": {"capabilityType": "PUSH_NOTIFICATIONS"}}]
+assert A.cert_account_problems() == []
+prof_before = A.PROFILE.read_bytes() if A.PROFILE.exists() else None
+A.PROFILE.write_bytes(plistlib.dumps({"DeveloperCertificates": [crt.public_bytes(S.Encoding.DER)]}))
+assert "another certificate" in A.cert_account_problems()[0][1]
+A.PROFILE.write_bytes(plistlib.dumps({"DeveloperCertificates": [mine.public_bytes(S.Encoding.DER)]}))
+assert A.cert_account_problems() == []
+A.PROFILE.write_bytes(prof_before) if prof_before is not None else A.PROFILE.unlink()
+# revoked: Apple's OCSP responder (stubbed) says so, from the issuer fetched off the certificate's AIA
+from cryptography.x509 import ocsp as O
+ca_k = ec.generate_private_key(ec.SECP256R1()); ca_n = X.Name([X.NameAttribute(X.oid.NameOID.COMMON_NAME, "Fake WWDR")])
+ca = X.CertificateBuilder().subject_name(ca_n).issuer_name(ca_n).public_key(ca_k.public_key()).serial_number(7) \
+    .not_valid_before(now - datetime.timedelta(days=1)).not_valid_after(now + datetime.timedelta(days=900)).sign(ca_k, H.SHA256())
+AIA = X.oid.AuthorityInformationAccessOID
+leaf = X.CertificateBuilder().subject_name(mine.subject).issuer_name(ca_n).public_key(k.public_key()).serial_number(mine.serial_number) \
+    .not_valid_before(now - datetime.timedelta(days=1)).not_valid_after(now + datetime.timedelta(days=200)) \
+    .add_extension(X.AuthorityInformationAccess([X.AccessDescription(AIA.OCSP, X.UniformResourceIdentifier("http://ocsp.test/o")),
+                                                 X.AccessDescription(AIA.CA_ISSUERS, X.UniformResourceIdentifier("http://certs.test/ca.der"))]), False) \
+    .sign(ca_k, H.SHA256())
+A.P12.write_bytes(p12_of(leaf))
+gone_at = now - datetime.timedelta(days=2)
+def fake_post(url, data=None, **kw):
+    req = O.load_der_ocsp_request(data); assert url == "http://ocsp.test/o" and req.serial_number == leaf.serial_number
+    resp = O.OCSPResponseBuilder().add_response(leaf, ca, H.SHA1(), O.OCSPCertStatus.REVOKED, now, None, gone_at, None) \
+        .responder_id(O.OCSPResponderEncoding.HASH, ca).sign(ca_k, H.SHA256())
+    return type("R", (), {"content": resp.public_bytes(S.Encoding.DER)})()
+real_get, real_post = A.requests.get, A.requests.post
+A.requests.get = lambda url, **kw: type("R", (), {"content": ca.public_bytes(S.Encoding.DER)})() if url == "http://certs.test/ca.der" else real_get(url, **kw)
+A.requests.post = fake_post
+apple["/certificates"] = []  # revoked certificates drop out of the account too; one message, the revoked one
+assert [t for _, t in A.cert_account_problems()] == [f"Apple revoked this certificate on {gone_at:%b} {gone_at.day}, {gone_at.year}. Apps signed with it won't open; make a new Apple Distribution certificate."]
+A.requests.get, A.requests.post = real_get, real_post  # the source sync's fake_get: OCSP now fails, which is only logged
+A.asc = lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("App Store Connect GET /certificates: 500"))
+assert [l for l, _ in A.cert_account_problems()] == ["warning"]
+A.asc, A.BUNDLE_ID = fake_asc, "com.me.*"
+import contextlib
+log = io.StringIO()
+with contextlib.redirect_stdout(log):
+    A.log_cert_problems(A.cert_problems(p12_of(dist_cert(days=-3)), "pw"))
+assert log.getvalue().startswith("certificate error: The certificate expired on"), log.getvalue()
+A.P12.write_bytes(before)
+p12_new = P12x.serialize_key_and_certificates(b"sd", k, dcrt, None, S.BestAvailableEncryption(b"new-p12-pw"))
 resign_all_orig, resigns, A.resign_all = A.resign_all, [], lambda: resigns.append(1)
 r = boss.post("/admin/signing", data={"csrf": csrf, "p12_password": "wrong", "files": [(io.BytesIO(p12_new), "cert.p12")]}, content_type="multipart/form-data")
 assert b"didn&#39;t open" in r.data and A.P12.read_bytes() != p12_new and resigns == []
@@ -388,7 +462,7 @@ def boot(data, **env):
     spec.loader.exec_module(m)
     threading.Thread.start = start
     return m
-p12 = P12.serialize_key_and_certificates(b"sd", k, crt, None, S.BestAvailableEncryption(b"p12-secret"))
+p12 = P12.serialize_key_and_certificates(b"sd", k, dcrt, None, S.BestAvailableEncryption(b"p12-secret"))
 p8 = ec.generate_private_key(ec.SECP256R1()).private_bytes(S.Encoding.PEM, S.PrivateFormat.PKCS8, S.NoEncryption())
 bundle = io.BytesIO()
 with zipfile.ZipFile(bundle, "w") as z:

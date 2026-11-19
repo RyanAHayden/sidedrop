@@ -66,6 +66,9 @@ With an admin password (from the setup screen or `ADMIN_PASSWORD`), sign in with
 - upload **Files for friends**, listed under **Files** on everyone's Apps tab (kept in `files/` in the data folder; signed links like the app files).
 - edit `mirror-sources.txt`, `third-party-sources.txt`, iFizBox's starting sources and its settings (a JSON object it imports on first launch). Edits are saved in `config/` in the data folder and win over the repo's files, which stay the defaults; **Use Default** goes back to them.
 - replace the signing certificate or API key, with the same **Choose Signing Files** as the setup screen. A new certificate gets a new profile and every app is signed again.
+- warn about the certificate at the top of the page: expiring within 30 days, revoked (Apple's OCSP), not in the account the API key belongs to, the ad hoc profile made for another certificate, `BUNDLE_ID` missing from the account or, if explicit, without Push Notifications. Apple's answers are kept for an hour. The same problems are logged at startup.
+
+The setup screen and Manage refuse a `cert.p12` that can't sign: a wrong password, no private key in it, not an Apple Distribution certificate (a development one, say), or already expired.
 
 ## Limits
 
