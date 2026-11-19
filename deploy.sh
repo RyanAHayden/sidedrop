@@ -1,5 +1,5 @@
 #!/bin/sh
-# Pull-deploy, run by a TrueNAS cron job every 5 minutes from the clone at /mnt/SSD/sidedrop/repo.
+# Pull-deploy for a TrueNAS custom app named sidedrop, run by cron every few minutes from a clone of this repo.
 # Rebuilds and redeploys only when origin/main moved; -f forces it.
 set -e
 cd "$(dirname "$0")"

@@ -76,7 +76,7 @@ capabilities the App ID had when it was made.
 
 ## 5. Put it on the server
 
-In the data folder (`/mnt/SSD/sidedrop`, owned by UID 568):
+In the data folder (owned by UID 568):
 
 ```
 asc.p8      from step 3
@@ -92,7 +92,7 @@ ASC_KEY_ID=...
 ASC_ISSUER_ID=...
 ```
 
-Then redeploy (`ssh truenas sudo /mnt/SSD/sidedrop/repo/deploy.sh -f`).
+Then restart sidedrop (`docker compose up -d`, or `deploy.sh -f`).
 
 ## 6. iPhones and the profile
 
@@ -110,7 +110,7 @@ frees up only at renewal.
 Check the profile has Push:
 
 ```sh
-openssl smime -inform der -verify -noverify -in /mnt/SSD/sidedrop/adhoc.mobileprovision | grep -A1 aps-environment
+openssl smime -inform der -verify -noverify -in data/adhoc.mobileprovision | grep -A1 aps-environment
 ```
 
 It should say `production`.

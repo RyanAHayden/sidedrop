@@ -16,20 +16,20 @@ The **Changes** tab lists apps by release date, Cydia style. Tapping INSTALL rec
 
 ## Editing on GitHub
 
-These files can be edited on github.com. The NAS picks up changes within 5 minutes:
+These files can be edited on github.com; a server running `deploy.sh` picks up changes within 5 minutes:
 
 - `ifizbox-sources.txt`: the sources iFizBox starts with, one URL per line
 - `mirror-sources.txt`: AltStore sources whose apps are downloaded, signed and listed
 - `third-party-sources.txt`: the same for other people's apps, listed under **Third-party apps**; a URL, then the bundle IDs to take from it (none = all)
 - `app.py`: everything else, including page text
 
-`deploy.sh` runs from a TrueNAS cron job every 5 minutes, in a clone at `/mnt/SSD/sidedrop/repo` that uses a read-only deploy key. It rebuilds and redeploys only when `main` has changed. To deploy right away: `ssh truenas sudo /mnt/SSD/sidedrop/repo/deploy.sh -f`.
+`deploy.sh` is a pull-deploy for a TrueNAS custom app named `sidedrop`: run it from cron every few minutes in a clone of this repo. It rebuilds the `sidedrop:latest` image and redeploys only when `main` has changed; `deploy.sh -f` deploys right away.
 
 ## Setup
 
 New to the developer account? [docs/developer-account.md](docs/developer-account.md) walks through the certificate, the API key and an App ID with Push, step by step.
 
-Everything lives in one data folder (`/mnt/SSD/sidedrop` in `compose.yaml`), which must be owned by UID 568:
+Everything lives in one data folder (`./data`, or `DATA_DIR`, in `compose.yaml`), which must be owned by UID 568:
 
 ```
 asc.p8          App Store Connect API key (Users and Access → Integrations → Keys, role Admin or App Manager)
@@ -68,17 +68,13 @@ python test_app.py
 
 List AltStore source URLs in `mirror-sources.txt`. sidedrop checks them hourly and on page load (at most once a minute), and downloads any new version into `apps/`. Point it at each repo's release asset, not a GitHub Pages copy: release assets update the moment a release is published, while Pages adds build time and a 10-minute CDN cache.
 
-To have new releases downloaded and signed before anyone opens the page, set `SYNC_TOKEN` and have CI call `POST /sync` after a release. For the FIZL0 apps, add this as the last step of `FIZL0/apps` `.github/workflows/source.yml`, which the apps' release scripts already trigger:
+To have new releases downloaded and signed before anyone opens the page, set `SYNC_TOKEN` and have CI call `POST /sync` after a release. For example, as the last step of the workflow that publishes your AltStore source:
 
 ```yaml
       - run: curl -fsS -X POST -H "Authorization: Bearer $T" https://sidedrop.example.com/sync || echo "sidedrop unreachable, it'll catch up on its own"
         env: { T: "${{ secrets.SIDEDROP_SYNC_TOKEN }}" }
 ```
 
-Then store the token as a repo secret. The token is in `/mnt/SSD/sidedrop/.env` on the NAS:
-
-```
-ssh truenas sudo grep ^SYNC_TOKEN= /mnt/SSD/sidedrop/.env | cut -d= -f2 | gh secret set SIDEDROP_SYNC_TOKEN -R FIZL0/apps
-```
+Then store `SYNC_TOKEN` from the server's `.env` as that repo's `SIDEDROP_SYNC_TOKEN` secret (`gh secret set SIDEDROP_SYNC_TOKEN`).
 
 `/sync` returns 202 right away and does the work in the background. It returns 403 without the token.

@@ -1,3 +1,11 @@
 .env
 __pycache__/
 .venv/
+.pytest_cache/
+.runner/
+/data/
+*.p12
+*.p8
+*.pem
+*.mobileprovision
+*.ipa
