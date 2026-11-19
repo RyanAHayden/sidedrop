@@ -1463,12 +1463,137 @@ if P12.exists() and not needs_setup():  # ponytail: once per worker; Apple's che
     threading.Thread(target=lambda: log_cert_problems(cert_account_problems()), daemon=True).start()
 
 
+# --- setup with just the API key: sidedrop makes the Apple Distribution certificate and the App ID through the API ---
+
+DIST_TYPES = ("DISTRIBUTION", "IOS_DISTRIBUTION")  # Apple Distribution, and the older iOS Distribution, which share the limit
+APP_ID_CAPS = ("PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS")  # as docs/developer-account.md ticks them; Push must work
+MANUAL_DOCS = "https://github.com/RyanAHayden/sidedrop/blob/main/docs/developer-account.md#manual-setup"
+KEY_ROLE_ERR = ("Apple refused: making certificates needs an API key with the Admin role (App Manager keys can register iPhones "
+                "but not make certificates). Make an Admin key in App Store Connect → Users and Access → Integrations, or use "
+                "Manual setup with your own cert.p12.")
+LIMIT_ERR = ("Your account already has as many Apple Distribution certificates as Apple allows. Pick one to revoke and sidedrop "
+             "makes a new one in its place. Apps signed with the revoked one stop opening, on every iPhone, wherever they were "
+             "signed (another signing service, Xcode ad hoc builds); App Store and TestFlight apps aren't affected.")
+
+
+def asc_status(e):
+    """The HTTP status in asc()'s error, or 0 (network error)."""
+    m = re.match(r"App Store Connect \w+ \S+: (\d{3})", str(e))
+    return int(m.group(1)) if m else 0
+
+
+def ensure_app_id(bid):
+    """Make the App ID if the account lacks it: an explicit one with Push (and App Groups and Associated Domains, which many
+    apps ask for); a wildcard gets none, Apple gives wildcards no Push. Returns True when it made one."""
+    found = [b for b in asc("GET", "/bundleIds", params={"filter[identifier]": bid, "limit": 200})["data"]
+             if b["attributes"]["identifier"] == bid]  # the filter is a prefix match
+    if found:
+        return False
+    made = asc("POST", "/bundleIds", json={"data": {"type": "bundleIds", "attributes": {
+        "identifier": bid, "name": "sidedrop", "platform": "IOS"}}})["data"]
+    if not bid.endswith("*"):
+        for cap in APP_ID_CAPS:
+            try:
+                asc("POST", "/bundleIdCapabilities", json={"data": {"type": "bundleIdCapabilities", "attributes": {"capabilityType": cap},
+                    "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": made["id"]}}}}})
+            except RuntimeError as e:
+                if cap == "PUSH_NOTIFICATIONS":
+                    raise
+                print(f"App ID {bid}: couldn't turn on {cap}:", e, flush=True)
+    return True
+
+
+def dist_certs():
+    """The account's distribution certificates for the revoke picker, newest first: [{id, name, kind, created, expires, ours}]."""
+    day = lambda t: f"{t:%b} {t.day}, {t.year}" if t else "?"
+    try:
+        _, mine, _ = pkcs12.load_key_and_certificates(P12.read_bytes(), P12_PASSWORD.encode() or None)
+        ours = f"{mine.serial_number:X}".lstrip("0")
+    except Exception:
+        ours = None
+    out = []
+    for c in asc("GET", "/certificates", params={"filter[certificateType]": ",".join(DIST_TYPES), "limit": 200})["data"]:
+        a = c["attributes"]
+        if a.get("certificateType", "DISTRIBUTION") not in DIST_TYPES:
+            continue
+        try:  # Apple lists no creation date; the certificate itself has it
+            created = x509.load_der_x509_certificate(base64.b64decode(a["certificateContent"])).not_valid_before_utc
+        except Exception:
+            created = None
+        try:
+            expires = datetime.datetime.fromisoformat(a["expirationDate"])
+        except (KeyError, TypeError, ValueError):
+            expires = None
+        out.append(dict(id=c["id"], name=a.get("displayName") or a.get("name") or c["id"], created=day(created), expires=day(expires),
+                        kind="iOS Distribution" if a.get("certificateType") == "IOS_DISTRIBUTION" else "Apple Distribution",
+                        ours=bool(ours) and a.get("serialNumber", "").upper().lstrip("0") == ours,
+                        at=created.timestamp() if created else 0))
+    return sorted(out, key=lambda c: -c["at"])
+
+
+def make_certificate(s, revoke=""):
+    """A new Apple Distribution certificate through the API: a private key and CSR made here, POST /certificates, then cert.p12
+    saved with a random password (into s, which the caller saves). revoke: the id of a certificate the admin picked to revoke
+    first, never chosen here. Returns (error or None, the certificates to pick from when the account is full)."""
+    if revoke:
+        listed = dist_certs()
+        if revoke not in [c["id"] for c in listed]:
+            return "That certificate isn't in your account any more. Pick another.", listed
+        asc("DELETE", f"/certificates/{revoke}")
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)  # Apple signs only RSA 2048 requests
+    csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
+        x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, "sidedrop")])).sign(key, hashes.SHA256())  # Apple sets its own subject
+    try:
+        made = asc("POST", "/certificates", json={"data": {"type": "certificates", "attributes": {
+            "certificateType": "DISTRIBUTION", "csrContent": csr.public_bytes(serialization.Encoding.PEM).decode()}}})
+    except RuntimeError as e:
+        status = asc_status(e)
+        if status == 403:
+            return KEY_ROLE_ERR, []
+        if status == 401:
+            return "Apple didn't accept the API key: check the Key ID and Issuer ID belong to this .p8.", []
+        if status == 409 and (listed := dist_certs()):
+            return LIMIT_ERR, listed
+        return f"Apple didn't make the certificate: {str(e)[:200]}", []
+    cert = x509.load_der_x509_certificate(base64.b64decode(made["data"]["attributes"]["certificateContent"]))
+    pw = P12_PASSWORD if "P12_PASSWORD" in ENV_SET else secrets.token_urlsafe(18)
+    enc = serialization.PrivateFormat.PKCS12.encryption_builder().kdf_rounds(50000).hmac_hash(hashes.SHA1()) \
+        .key_cert_algorithm(pkcs12.PBES.PBESv1SHA1And3KeyTripleDESCBC).build(pw.encode())  # openssl -legacy: every iOS opens it (iFizBox carries it)
+    P12.write_bytes(pkcs12.serialize_key_and_certificates(b"sidedrop", key, cert, None, enc))
+    P12.chmod(0o600)
+    s["p12_password"] = pw
+    print(f"made Apple Distribution certificate {made['data'].get('id')} through the API", flush=True)
+    return None, []
+
+
+def api_signing(s, revoke=""):
+    """The API-key path of the setup splash and Manage: the App ID if missing, then a certificate. (error, certificates to pick)."""
+    try:
+        if ensure_app_id(BUNDLE_ID):
+            print(f"made App ID {BUNDLE_ID} through the API", flush=True)
+    except Exception as e:
+        if asc_status(e) == 403:
+            return f"Apple refused to make the App ID {BUNDLE_ID}: the API key needs the Admin role. {str(e)[:160]}", []
+        return f"Couldn't make the App ID {BUNDLE_ID}: {str(e)[:200]}", []
+    try:
+        return make_certificate(s, revoke)
+    except Exception as e:
+        return f"Couldn't make the certificate: {str(e)[:200]}", []
+
+
+CERT_PICKER = """{% if certs %}<div class=g>{% for c in certs %}<label class=row style="flex-direction:row;align-items:center;font-weight:400">
+<input type=radio name=revoke value="{{ c.id }}" data-name="{{ c.name }}" style="flex:none;width:22px;height:22px;margin:0;padding:0;box-shadow:none;accent-color:#d43a3a"><div style="flex:1;min-width:0"><b>{{ c.name }}</b>{% if c.ours %} · sidedrop's certificate{% endif %}
+<small>{{ c.kind }} · made {{ c.created }} · expires {{ c.expires }}</small></div></label>{% endfor %}</div>{% endif %}"""
+REVOKE_CONFIRM = "var r=this.querySelector('input[name=revoke]:checked');if(r&&!confirm('Revoke '+r.dataset.name+'? Apps signed with it stop opening, wherever they were signed.'))return false;"
+
+
 @app.route("/setup", methods=["GET", "POST"])
 def setup():
     """The first-run splash: only after signing in with DEFAULT_PASSWORD, only until it's saved."""
     if not needs_setup() or not session.get("setup"):
         return redirect("/")
-    s, err = load_json(SETUP), None
+    s, err, certs = load_json(SETUP), None, []
     if request.method == "POST":
         f = request.form
         pw, admin_pw = f.get("password", ""), f.get("admin_password", "")
@@ -1482,14 +1607,16 @@ def setup():
             err = "Passwords need at least 8 characters."
         elif pw == DEFAULT_PASSWORD or admin_pw == DEFAULT_PASSWORD or pw == admin_pw:
             err = "Choose new passwords, and different ones for friends and for the admin."
-        elif not P12.exists() or (need("P12_PASSWORD") and "p12_password" not in s):
-            err = "Add the certificate (cert.p12) and its password."
+        elif P12.exists() and need("P12_PASSWORD") and "p12_password" not in s:
+            err = "Add the certificate's password (Manual setup → P12 Password)."
         elif not ASC_KEY.exists():
-            err = "Add the App Store Connect API key (.p8)."
+            err = "Add the App Store Connect API key (AuthKey_….p8)."
         elif need("ASC_KEY_ID") or need("ASC_ISSUER_ID"):
             err = "Fill in the API key's Key ID and Issuer ID."
         elif need("BUNDLE_ID") or "BUNDLE_ID" not in ENV_SET and not re.fullmatch(r"[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(\.\*)?", BUNDLE_ID):
             err = "Fill in the App ID (BUNDLE_ID), such as com.you.* or com.you.sideload."
+        elif not P12.exists() and (got := api_signing(s, f.get("revoke", "")))[0]:  # no cert.p12 uploaded: make one, and the App ID
+            err, certs = got
         else:
             s["password"] = hash_password(pw)
             if not ADMIN_PASSWORD:
@@ -1499,21 +1626,30 @@ def setup():
             session.pop("setup")
             session.permanent, session["ok"] = True, True
             return redirect("/")
-    return page("""<style>.setup label{display:flex;flex-direction:column;gap:4px;font-weight:700} .setup small{font-weight:400}</style>
-<p class=ftr>Welcome to sidedrop. Set the passwords and add your Apple signing files once; they're kept on the server.</p>
-<form class="c setup" method=post action=/setup enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Saving…'">
-{% if err %}<p class=err>{{ err }}</p>{% endif %}
+    return page("""<style>.setup label{display:flex;flex-direction:column;gap:4px;font-weight:700} .setup small{font-weight:400}
+.setup summary{color:var(--acc);font-weight:700} .setup details[open]{display:flex;flex-direction:column;gap:10px}</style>
+<p class=ftr>Welcome to sidedrop. Set the passwords and add your App Store Connect API key; sidedrop makes the certificate and App ID with it. Everything is kept on the server.</p>
+<form class="c setup" method=post action=/setup enctype=multipart/form-data onsubmit="{{ confirm }}this.querySelector('button').textContent='Saving…'">
+{% if err %}<p class=err>{{ err }}</p>{% endif %}""" + CERT_PICKER + """
 {% if 'PASSWORD' not in env %}<label>Password for friends<input type=password name=password autocomplete=new-password minlength=8 required></label>{% endif %}
 {% if 'ADMIN_PASSWORD' not in env %}<label>Admin password<input type=password name=admin_password autocomplete=new-password minlength=8 required>
 <small>Unlocks Settings → Manage. Keep it different from the friends' one.</small></label>{% endif %}
-<input type=file name=files id=sigf multiple class=vh onchange="sigl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Signing Files'">
-<label class="b grey" for=sigf id=sigl>Choose Signing Files</label>
-<small>cert.p12, AuthKey_….p8 and a password.txt, loose or in a .zip.{% if p12 %} cert.p12 is saved.{% endif %}{% if p8 %} The .p8 is saved.{% endif %}</small>
-{% if 'P12_PASSWORD' not in env %}<label>P12 Password<input type=password name=p12_password autocomplete=off><small>Leave empty to try a password.txt, or none.</small></label>{% endif %}
+<input type=file name=files id=keyf multiple class=vh onchange="keyl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose API Key'">
+<label class="b grey" for=keyf id=keyl>Choose API Key</label>
+<small>AuthKey_….p8 from App Store Connect → Users and Access → Integrations, role Admin, loose or in a .zip with a text file holding the Issuer ID.{% if p8 %} The .p8 is saved.{% endif %}</small>
 {% if 'ASC_KEY_ID' not in env %}<label>Key ID<input name=asc_key_id value="{{ s.asc_key_id or '' }}" autocapitalize=characters autocomplete=off><small>Read from AuthKey_&lt;Key ID&gt;.p8 if empty.</small></label>{% endif %}
 {% if 'ASC_ISSUER_ID' not in env %}<label>Issuer ID<input name=asc_issuer_id value="{{ s.asc_issuer_id or '' }}" autocapitalize=none autocomplete=off></label>{% endif %}
-{% if 'BUNDLE_ID' not in env %}<label>App ID (BUNDLE_ID)<input name=bundle_id value="{{ s.bundle_id or '' }}" placeholder="com.you.*" autocapitalize=none autocomplete=off></label>{% endif %}
-<button>Save</button></form>""", title="Set Up sidedrop", err=err, s=s, env=ENV_SET, p12=P12.exists(), p8=ASC_KEY.exists())
+{% if 'BUNDLE_ID' not in env %}<label>App ID (BUNDLE_ID)<input name=bundle_id value="{{ s.bundle_id or '' }}" placeholder="com.you.sideload" autocapitalize=none autocomplete=off>
+<small>Made with Push if your account doesn't have it yet.</small></label>{% endif %}
+<details{% if p12 %} open{% endif %}><summary>Manual setup</summary>
+<small>Rather not give sidedrop a key that can make certificates? Make the certificate yourself (<a href="{{ docs }}">the manual steps</a>) and pick cert.p12 and a password.txt here; the API key then only registers iPhones.</small>
+<input type=file name=files id=sigf multiple class=vh onchange="sigl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Signing Files'">
+<label class="b grey" for=sigf id=sigl>Choose Signing Files</label>
+<small>cert.p12 and a password.txt, loose or in a .zip.{% if p12 %} cert.p12 is saved.{% endif %}</small>
+{% if 'P12_PASSWORD' not in env %}<label>P12 Password<input type=password name=p12_password autocomplete=off><small>Leave empty to try a password.txt, or none.</small></label>{% endif %}
+</details>
+<button>Save</button></form>""", title="Set Up sidedrop", err=err, s=s, env=ENV_SET, p12=P12.exists(), p8=ASC_KEY.exists(),
+                certs=certs, confirm=REVOKE_CONFIRM, docs=MANUAL_DOCS)
 
 
 # --- admin: list the developer account's iPhones, disable the ones that shouldn't have apps any more ---
@@ -1587,7 +1723,7 @@ def admin_check():
         abort(403)
 
 
-def manage_page(err=None):
+def manage_page(err=None, certs=None):
     seen, me = load_json(SEEN), token_udid(request.cookies.get("device", ""))
     now = time.time()
     def ago(t):
@@ -1639,19 +1775,26 @@ Apple still counts it toward the 100 until your membership renews, when you can 
 <p class=ftr>Sources: an AltStore source URL per line, then the bundle IDs to take from it (none = all). iFizBox's sources: a URL per line.
 iFizBox settings: a JSON object it imports on first launch. Lines that aren't URLs are ignored.</p>
 
-<h3 class=hdr>Signing</h3>
-<form class="c mg" method=post action=/admin/signing enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Saving…'">
-<input type=hidden name=csrf value="{{ csrf }}">
-<input type=file name=files id=sigf multiple class=vh onchange="sigl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Signing Files'">
-<label class="b grey" for=sigf id=sigl>Choose Signing Files</label>
-<small>Replace the certificate or the API key: cert.p12, AuthKey_….p8 and a password.txt, loose or in a .zip.</small>
-{% if 'P12_PASSWORD' not in env %}<label>P12 Password<input type=password name=p12_password autocomplete=off><small>Leave empty to try a password.txt, or none.</small></label>{% endif %}
+<h3 class=hdr id=signing>Signing</h3>
+<form class="c mg" method=post action=/admin/signing enctype=multipart/form-data onsubmit="{{ confirm }}this.querySelector('button').textContent='Saving…'">
+<input type=hidden name=csrf value="{{ csrf }}">{% if certs %}<p class=err>{{ err }}</p>{% endif %}""" + CERT_PICKER + """
+<input type=file name=files id=keyf multiple class=vh onchange="keyl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose API Key'">
+<label class="b grey" for=keyf id=keyl>Choose API Key</label>
+<small>Replace the API key: AuthKey_….p8, role Admin to make certificates, loose or in a .zip.</small>
 {% if 'ASC_KEY_ID' not in env %}<label>Key ID<input name=asc_key_id value="{{ s.asc_key_id or '' }}" autocapitalize=characters autocomplete=off><small>Read from AuthKey_&lt;Key ID&gt;.p8 if empty.</small></label>{% endif %}
 {% if 'ASC_ISSUER_ID' not in env %}<label>Issuer ID<input name=asc_issuer_id value="{{ s.asc_issuer_id or '' }}" autocapitalize=none autocomplete=off></label>{% endif %}
-{% if 'BUNDLE_ID' not in env %}<label>App ID (BUNDLE_ID)<input name=bundle_id value="{{ s.bundle_id or '' }}" placeholder="com.you.*" autocapitalize=none autocomplete=off></label>{% endif %}
-<button>Save</button><small>A new certificate makes a new profile and signs every app again; installed apps keep working until it does.</small></form>""",
+{% if 'BUNDLE_ID' not in env %}<label>App ID (BUNDLE_ID)<input name=bundle_id value="{{ s.bundle_id or '' }}" placeholder="com.you.sideload" autocapitalize=none autocomplete=off></label>{% endif %}
+<button>Save</button><button class=grey name=make value=1>Make New Certificate</button>
+<small>Make New Certificate has Apple make an Apple Distribution certificate with the API key (and the App ID, if missing). A new certificate makes a new profile and signs every app again; installed apps keep working until it does.</small>
+<details><summary style="color:var(--acc);font-weight:700">Manual setup</summary>
+<small>Upload a certificate you made yourself (<a href="{{ docs }}">the manual steps</a>): cert.p12 and a password.txt, loose or in a .zip.</small>
+<input type=file name=files id=sigf multiple class=vh onchange="sigl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Signing Files'">
+<label class="b grey" for=sigf id=sigl>Choose Signing Files</label>
+{% if 'P12_PASSWORD' not in env %}<label>P12 Password<input type=password name=p12_password autocomplete=off><small>Leave empty to try a password.txt, or none.</small></label>{% endif %}
+</details></form>""",
                 back=MORE, title="Manage", devices=devices, asc_err=asc_err, csrf=session["csrf"], files=shared_files(), configs=configs,
-                env=ENV_SET, s=load_json(SETUP), err=err, done=DONE.get(request.args.get("done", "")), cert=cert_status())
+                env=ENV_SET, s=load_json(SETUP), err=err, done=DONE.get(request.args.get("done", "")), cert=cert_status(),
+                certs=certs or [], confirm=REVOKE_CONFIRM, docs=MANUAL_DOCS)
 
 
 def resign_all():
@@ -1672,11 +1815,26 @@ def admin_signing():
     bid = f.get("bundle_id", "").strip()
     if bid and "BUNDLE_ID" not in ENV_SET and not re.fullmatch(r"[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(\.\*)?", bid):
         return manage_page("That App ID doesn't look right: com.you.* or com.you.sideload.")
+    old_bid = BUNDLE_ID
     err = take_signing_files(f, request.files.getlist("files"), s)
     save_json(SETUP, s)
     apply_setup()
     if err:
         return manage_page(err)
+    if BUNDLE_ID != old_bid and not f.get("make"):  # a new App ID: made if missing; the banner says so if Apple refused
+        try:
+            ensure_app_id(BUNDLE_ID)
+        except Exception as e:
+            print(f"couldn't make App ID {BUNDLE_ID}:", e, flush=True)
+    if f.get("make") or f.get("revoke") or not P12.exists():  # Make New Certificate, or a pick from its revoke list
+        if not ASC_KEY.exists() or not BUNDLE_ID or not (os.environ.get("ASC_KEY_ID") and os.environ.get("ASC_ISSUER_ID")):
+            return manage_page("Add the API key, its Key ID and Issuer ID, and the App ID first.")
+        err, certs = api_signing(s, f.get("revoke", ""))
+        if err:
+            return manage_page(err, certs)
+        save_json(SETUP, s)
+        apply_setup()
+        cert_cache.clear()
     threading.Thread(target=resign_all, daemon=True).start()
     return redirect("/admin?done=signing")
 

@@ -523,4 +523,86 @@ v = E.app.test_client()
 assert not E.needs_setup() and b"default password" not in v.get("/").data and "err=1" in v.post("/login", data={"password": "sidedrop"}).location
 assert v.post("/login", data={"password": "env-pass-long"}).location == "/" and b"Register iPhone" in v.get("/").data and E.app.test_client().get("/setup").location == "/"
 assert not E.admin_enabled() and v.get("/admin").status_code == 404
+
+# F9 setup with just the API key: a stubbed App Store Connect makes the App ID (with Push) and signs our CSR; at Apple's
+# certificate limit the admin picks one to revoke, and nothing is revoked without that pick
+class FakeApple:
+    def __init__(s):
+        s.calls, s.bundles, s.caps, s.certs, s.forbid, s.limit = [], {}, [], {}, False, 3
+    def add_cert(s, crt_, name):
+        cid = f"C{len(s.certs) + len(s.calls)}"
+        s.certs[cid] = {"type": "certificates", "id": cid, "attributes": {
+            "name": name, "displayName": name, "certificateType": "DISTRIBUTION", "serialNumber": f"{crt_.serial_number:X}",
+            "expirationDate": crt_.not_valid_after_utc.isoformat(), "certificateContent": base64.b64encode(crt_.public_bytes(S.Encoding.DER)).decode()}}
+        return cid
+    def __call__(s, method, path, **kw):
+        s.calls.append((method, path, kw))
+        if (method, path) == ("GET", "/bundleIds"):
+            return {"data": [b for b in s.bundles.values() if b["attributes"]["identifier"].startswith(kw["params"]["filter[identifier]"])]}
+        if (method, path) == ("POST", "/bundleIds"):
+            b = dict(kw["json"]["data"], id=f"B{len(s.bundles)}"); s.bundles[b["id"]] = b; return {"data": b}
+        if (method, path) == ("POST", "/bundleIdCapabilities"):
+            d = kw["json"]["data"]; s.caps.append((d["relationships"]["bundleId"]["data"]["id"], d["attributes"]["capabilityType"])); return {"data": d}
+        if (method, path) == ("GET", "/certificates"):
+            return {"data": list(s.certs.values())}
+        if (method, path) == ("POST", "/certificates"):
+            if s.forbid:
+                raise RuntimeError('App Store Connect POST /certificates: 403 {"errors":[{"code":"FORBIDDEN_ERROR"}]}')
+            if len(s.certs) >= s.limit:
+                raise RuntimeError('App Store Connect POST /certificates: 409 {"errors":[{"code":"ENTITY_ERROR"}]}')
+            attrs = kw["json"]["data"]["attributes"]
+            assert attrs["certificateType"] == "DISTRIBUTION" and attrs["csrContent"].startswith("-----BEGIN CERTIFICATE REQUEST")
+            csr = X.load_pem_x509_csr(attrs["csrContent"].encode())
+            nm, now = X.Name([X.NameAttribute(X.oid.NameOID.COMMON_NAME, "Apple Distribution: Sam Test (TEAM123456)")]), datetime.datetime.now(datetime.timezone.utc)
+            made = X.CertificateBuilder().subject_name(nm).issuer_name(nm).public_key(csr.public_key()).serial_number(X.random_serial_number()) \
+                .not_valid_before(now - datetime.timedelta(hours=1)).not_valid_after(now + datetime.timedelta(days=365)).sign(k, H.SHA256())
+            return {"data": s.certs[s.add_cert(made, "Sam Test")]}
+        if method == "DELETE" and path.startswith("/certificates/"):
+            del s.certs[path.rsplit("/", 1)[1]]; return {}
+        return {"data": []}
+import base64
+G = boot(tmp / "apikey")
+G.asc = apple = FakeApple()
+g = G.app.test_client()
+assert g.post("/login", data={"password": "sidedrop"}).location == "/setup"
+html = g.get("/setup").data.decode()
+assert "Choose API Key" in html and "Manual setup" in html and "developer-account.md#manual-setup" in html and "Choose Signing Files" in html
+key_only = lambda **f: g.post("/setup", data=dict({"password": "friends-pass", "admin_password": "admin-pass-x", "bundle_id": "com.me.sideload",
+    "asc_issuer_id": "69a6de7e-1111-47e3-e053-5b8c7c11a4d1"}, **f, files=[(io.BytesIO(p8), "AuthKey_KEYID12345.p8")]), content_type="multipart/form-data")
+apple.forbid = True  # an App Manager key: Apple refuses the certificate, and the error says which role it needs
+r = key_only()
+assert b"Admin role" in r.data and not (tmp / "apikey" / "cert.p12").exists() and G.needs_setup()
+assert [b["attributes"] for b in apple.bundles.values()] == [{"identifier": "com.me.sideload", "name": "sidedrop", "platform": "IOS"}]
+assert apple.caps == [("B0", "PUSH_NOTIFICATIONS"), ("B0", "APP_GROUPS"), ("B0", "ASSOCIATED_DOMAINS")]
+apple.forbid = False
+r = key_only()
+assert r.location == "/" and not G.needs_setup(), re.findall(rb"class=err>[^<]*", r.data)
+made_p12 = (tmp / "apikey" / "cert.p12").read_bytes()
+assert G.cert_problems(made_p12, G.P12_PASSWORD) == [] and len(G.P12_PASSWORD) >= 20  # signs: our key, Apple's Distribution cert
+assert G.load_json(G.SETUP)["p12_password"] == G.P12_PASSWORD and os.environ["ASC_KEY_ID"] == "KEYID12345"
+assert len(apple.bundles) == 1 and len(apple.caps) == 3 and len(apple.certs) == 1  # the App ID made once, not again on the retry
+assert [m for m, p, _ in apple.calls].count("DELETE") == 0
+assert G.ensure_app_id("com.me.*") and len(apple.caps) == 3 and not G.ensure_app_id("com.me.*")  # a wildcard gets no capabilities
+# Manage: Make New Certificate with the account full lists the certificates and revokes nothing; the pick is revoked, then a new one made
+apple.add_cert(dist_cert("Apple Distribution: Old Mac (TEAM123456)"), "Old Mac"); apple.add_cert(dist_cert(days=40), "Elsewhere")
+ga = G.app.test_client(); assert ga.get("/?password=admin-pass-x").location == "/"
+html = ga.get("/admin").data.decode(); csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
+assert "Make New Certificate" in html and "Choose API Key" in html and "Manual setup" in html
+r = ga.post("/admin/signing", data={"csrf": csrf, "make": "1"}).data.decode()
+assert "as many Apple Distribution certificates" in r and "stop opening" in r and r.count('name=revoke value=') == 3
+assert "Old Mac" in r and "Elsewhere" in r and r.count("sidedrop's certificate") == 1 and "expires" in r and "made " in r
+assert [m for m, p, _ in apple.calls].count("DELETE") == 0 and (tmp / "apikey" / "cert.p12").read_bytes() == made_p12
+assert "isn&#39;t in your account" in ga.post("/admin/signing", data={"csrf": csrf, "make": "1", "revoke": "nope"}).data.decode()
+old = next(i for i, c in apple.certs.items() if c["attributes"]["name"] == "Old Mac")
+r = ga.post("/admin/signing", data={"csrf": csrf, "make": "1", "revoke": old})
+assert r.location == "/admin?done=signing" and [p for m, p, _ in apple.calls if m == "DELETE"] == [f"/certificates/{old}"]
+assert old not in apple.certs and len(apple.certs) == 3 and (tmp / "apikey" / "cert.p12").read_bytes() != made_p12
+assert G.cert_problems((tmp / "apikey" / "cert.p12").read_bytes(), G.P12_PASSWORD) == [] and len(apple.bundles) == 2  # App ID kept
+# the manual path still takes an uploaded cert.p12 on Manage, and asks Apple for nothing
+before = len(apple.calls)
+r = ga.post("/admin/signing", data={"csrf": csrf, "p12_password": "p12-secret", "files": [(io.BytesIO(p12), "cert.p12")]}, content_type="multipart/form-data")
+assert r.location == "/admin?done=signing" and (tmp / "apikey" / "cert.p12").read_bytes() == p12 and G.P12_PASSWORD == "p12-secret"
+assert all(m == "GET" for m, _, _ in apple.calls[before:])
+assert ga.post("/admin/signing", data={"csrf": csrf, "bundle_id": "com.me.other"}).location == "/admin?done=signing"  # a new App ID is made
+assert [b["attributes"]["identifier"] for b in apple.bundles.values()] == ["com.me.sideload", "com.me.*", "com.me.other"]
 print("ok")

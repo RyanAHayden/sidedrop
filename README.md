@@ -29,13 +29,13 @@ These files can be edited on github.com; a server running `deploy.sh` picks up c
 
 Running sidedrop for your own friends for the first time? [docs/become-a-distributor.md](docs/become-a-distributor.md) goes from the Apple account through Docker Compose and HTTPS to the setup screen on your iPhone.
 
-New to the developer account? [docs/developer-account.md](docs/developer-account.md) walks through the certificate, the API key and an App ID with Push, step by step.
+New to the developer account? [docs/developer-account.md](docs/developer-account.md): join the program, make one App Store Connect API key (role Admin) and upload it; sidedrop makes the certificate and the App ID with Push itself. Its **Manual setup** section makes them by hand instead, for a key that can't make certificates.
 
 Everything lives in one data folder (`./data`, or `DATA_DIR`, in `compose.yaml`), which must be owned by UID 568:
 
 ```
-asc.p8          App Store Connect API key (Users and Access → Integrations → Keys, role Admin or App Manager)
-cert.p12        Apple Distribution certificate + private key (export from Keychain, or openssl)
+asc.p8          App Store Connect API key (Users and Access → Integrations → Keys, role Admin; App Manager on the manual path)
+cert.p12        Apple Distribution certificate + private key: made by sidedrop through the API, or yours (Keychain, openssl)
 apps/*.ipa      unsigned or dev-signed IPAs to share (or list AltStore sources in mirror-sources.txt)
 ```
 
@@ -45,12 +45,14 @@ Copy `.env.example` to `.env` and set `PUBLIC_URL`. The rest can stay empty and 
 
 1. Start the server and open the site. While no password is set, sign in with the default password, **`sidedrop`**. It opens only the setup screen.
 2. Set the password for friends and the admin password (they're saved hashed in `setup.json` in the data folder).
-3. Tap **Choose Signing Files** and pick `cert.p12`, `AuthKey_<Key ID>.p8` and a `password.txt` with the certificate's password, loose or in one `.zip`. The files are sorted by type, the `.p12`'s password is tried from the text file (or type it), and the Key ID comes from the `.p8`'s name and the Issuer ID from a UUID in the text file; check or fill in both, and the App ID (`BUNDLE_ID`).
-4. **Save**. The files go into the data folder, so everything survives restarts, and the default password stops working.
+3. Tap **Choose API Key** and pick `AuthKey_<Key ID>.p8`, loose or in a `.zip` with a text file holding the Issuer ID. The Key ID comes from the `.p8`'s name and the Issuer ID from a UUID in the text file; check or fill in both, and the App ID (`BUNDLE_ID`).
+4. **Save**. sidedrop makes the App ID if the account lacks it (explicit: with Push, App Groups and Associated Domains), makes a private key and CSR, has Apple issue an Apple Distribution certificate (`POST /v1/certificates`) and saves `cert.p12` with a random password in `setup.json`. If the account already has the most distribution certificates Apple allows, it lists them (name, made, expires) and the admin picks one to revoke, warned that apps signed with it anywhere stop opening; it never revokes one itself. Apple refuses certificates to keys without the Admin role, and the screen says so. Everything goes into the data folder, so it survives restarts, and the default password stops working.
+
+**Manual setup** on the same screen takes today's files instead: `cert.p12` and a `password.txt` with its password (or type it), loose or in a `.zip`; the `.p12`'s password is tried from the text file. sidedrop then makes nothing with the key.
 
 Anything set in `.env` wins over the setup screen, and with `PASSWORD` set there is no setup screen, so a server can be configured without an iPhone: put `asc.p8` and `cert.p12` in the data folder and fill in `.env`. An empty `SECRET_KEY` is made once and kept in `secret.key` in the data folder.
 
-`BUNDLE_ID` must be a wildcard App ID that already exists in the developer portal, such as `com.you.*`. One profile then covers every app: apps whose bundle ID falls outside it are re-IDed at signing (`com.other.game` becomes `com.you.game`). Apps that need entitlements like push or App Groups won't work this way.
+`BUNDLE_ID` can be a wildcard App ID, such as `com.you.*` (sidedrop makes it when it makes the certificate; on the manual path it must already exist in the developer portal). One profile then covers every app: apps whose bundle ID falls outside it are re-IDed at signing (`com.other.game` becomes `com.you.game`). Apps that need entitlements like push or App Groups won't work this way.
 
 Or set `BUNDLE_ID` to an explicit App ID with Push Notifications (plus App Groups and Associated Domains) turned on, such as `com.you.sideload`. Every app is then signed under that one App ID but keeps its own bundle ID in Info.plist, which iOS doesn't check against the profile and registers for push with, so apps like YouTube get their developer's notifications. Apps signed under a wildcard before install again as separate apps; delete the old copies.
 
@@ -65,7 +67,7 @@ With an admin password (from the setup screen or `ADMIN_PASSWORD`), sign in with
 - list the account's iPhones with when each was added and last used, and disable or re-enable them. Apple has no API to delete a device: disabling takes it out of the profile so its apps stop opening, but its slot only frees up at renewal.
 - upload **Files for friends**, listed under **Files** on everyone's Apps tab (kept in `files/` in the data folder; signed links like the app files).
 - edit `mirror-sources.txt`, `third-party-sources.txt`, iFizBox's starting sources and its settings (a JSON object it imports on first launch). Edits are saved in `config/` in the data folder and win over the repo's files, which stay the defaults; **Use Default** goes back to them.
-- replace the signing certificate or API key, with the same **Choose Signing Files** as the setup screen. A new certificate gets a new profile and every app is signed again.
+- replace the API key (**Choose API Key**), have Apple make a new certificate (**Make New Certificate**, with the same revoke list when the account is full), or upload your own under **Manual setup**. A new certificate gets a new profile and every app is signed again. A changed App ID is made if the account lacks it.
 - warn about the certificate at the top of the page: expiring within 30 days, revoked (Apple's OCSP), not in the account the API key belongs to, the ad hoc profile made for another certificate, `BUNDLE_ID` missing from the account or, if explicit, without Push Notifications. Apple's answers are kept for an hour. The same problems are logged at startup.
 
 The setup screen and Manage refuse a `cert.p12` that can't sign: a wrong password, no private key in it, not an Apple Distribution certificate (a development one, say), or already expired.

@@ -12,25 +12,31 @@ You need:
 
 ## 1. Get an Apple Developer account
 
-Follow [developer-account.md](developer-account.md) steps 1 to 4. When you're done you have:
+Two things, both in [developer-account.md](developer-account.md):
+
+1. Join the Apple Developer Program (its step 1).
+2. Make one App Store Connect API key with the **Admin** role (its step 2).
+
+That's all you make by hand. When you're done you have:
 
 | File or value | What it is |
 | --- | --- |
-| `cert.p12` and its password | the Apple Distribution certificate that signs every app |
-| `AuthKey_<Key ID>.p8` | the App Store Connect API key that lets sidedrop register iPhones |
+| `AuthKey_<Key ID>.p8` | the App Store Connect API key; sidedrop uses it to make the certificate and App ID and to register iPhones |
 | Issuer ID | shown above the list of API keys |
-| App ID | e.g. `com.yourname.sideload` (explicit, with Push) or `com.yourname.*` |
+| App ID | the one you want, e.g. `com.yourname.sideload` (sidedrop makes it with Push) or `com.yourname.*` |
 
-Skip that guide's step 5 (putting the files on the server): the phone setup below does it for you. Put the files
-somewhere your iPhone can reach them, such as iCloud Drive, ideally in one `.zip` with a `password.txt` that holds
-the `.p12` password and the Issuer ID:
+Put the key somewhere your iPhone can reach it, such as iCloud Drive, ideally in one `.zip` with a text file that
+holds the Issuer ID:
 
 ```
-signing.zip
-├── cert.p12
+apikey.zip
 ├── AuthKey_ABC123DEFG.p8
-└── password.txt     the .p12 password on one line, the Issuer ID (a UUID) on another
+└── issuer.txt       the Issuer ID (a UUID)
 ```
+
+Rather not give sidedrop an Admin key? Follow that guide's [Manual setup](developer-account.md#manual-setup)
+instead: you make the certificate and App ID yourself, and add `cert.p12` and a `password.txt` with its password
+under **Manual setup** in step 4 below.
 
 ## 2. Deploy with Docker Compose
 
@@ -99,13 +105,17 @@ Do this right after deploying. Until it's done, anyone who finds the site can se
    screen.
 2. Choose a **password for friends** and a different **admin password** (8 characters or more; long passphrases are
    better). Both are saved hashed in `data/setup.json`.
-3. Tap **Choose Signing Files** and pick `signing.zip` (or the three files one by one). The `.p12` password and the
-   Issuer ID are read from `password.txt`, and the Key ID from the `.p8`'s name. Check them, or type them in.
+3. Tap **Choose API Key** and pick `apikey.zip` (or the `.p8` alone). The Key ID is read from the `.p8`'s name and
+   the Issuer ID from the text file. Check them, or type them in.
 4. Fill in the **App ID** from step 1, e.g. `com.yourname.sideload`.
-5. Tap **Save**. The files go into `data/`, the default password stops working, and you're signed in.
+5. Tap **Save**. sidedrop makes the App ID (with Push) if your account lacks it, has Apple make an Apple
+   Distribution certificate, and saves it as `data/cert.p12` with a random password. The default password stops
+   working, and you're signed in.
 
-If something is wrong (a bad `.p12` password, a missing App ID), the screen says so. Files that were fine are
-kept, so you don't need to pick them again.
+If something is wrong (a key without the Admin role, a missing App ID), the screen says so. Files that were fine are
+kept, so you don't need to pick them again. If your account already has as many distribution certificates as Apple
+allows, the screen lists them: pick one you no longer use to revoke, and Save again. Apps signed with it stop opening
+wherever they were signed, so sidedrop never picks one for you.
 
 ## 5. Register your own iPhone first
 
@@ -127,8 +137,9 @@ With the admin password, **Settings → Manage** lists every registered iPhone a
 - `git pull && docker compose up -d --build` updates sidedrop. `deploy.sh` does this from cron, but it is written for
   a TrueNAS custom app; on plain Docker, a cron job running those two commands does the same.
 - Back up `data/`: it holds your certificate, the API key, the passwords and the list of registered iPhones.
-- Each year: renew the membership, then make a new certificate (and update `cert.p12` in `data/`) before the old one
-  expires. Apps stop opening when it does. iPhone slots (100 a year) free up at renewal.
+- Each year: renew the membership, then tap **Settings → Manage → Make New Certificate** before the old certificate
+  expires (on the manual path, make one yourself and upload it there). Apps stop opening when it does. iPhone slots
+  (100 a year) free up at renewal.
 - To change the passwords or signing files after setup, edit `.env` (it wins over the setup screen) and recreate the container as above, or
   delete `data/setup.json` to see the setup screen again. That also brings back the default password until you save,
   so do it right away.
@@ -139,6 +150,8 @@ With the admin password, **Settings → Manage** lists every registered iPhone a
   trusted, or `PUBLIC_URL` doesn't match the address you opened.
 - **The container keeps restarting, or setup won't save**: `data/` isn't owned by UID 568
   (`sudo chown -R 568:568 data`). `docker compose logs sidedrop` shows the error.
-- **Register iPhone fails**: the API key's role must be Admin or App Manager, and the Key ID and Issuer ID must belong
-  to it.
+- **Setup says the key needs the Admin role**: Apple refuses certificates to App Manager keys. Make an Admin key, or
+  use the manual setup.
+- **Register iPhone fails**: the API key's role must be Admin (or App Manager on the manual path), and the Key ID and
+  Issuer ID must belong to it.
 - Signing, installing and notifications: see [developer-account.md](developer-account.md#when-it-doesnt-work).
