@@ -110,7 +110,12 @@ def check_sig():
 
 
 def logged_in():
-    return session.get("ok") is True
+    """Signed in, with a password that hasn't been changed since (F12): the session keeps which password it used ("f" friends',
+    "a" admin) and that password's version; a change bumps the version, which signs those sessions out."""
+    if session.get("ok") is not True:
+        return False
+    kind, ver = session.get("pv") or ("a" if session.get("admin") else "f", 0)  # sessions from before F12: version 0
+    return ver == password_ver(kind == "a")
 
 
 # --- Apple bits ---
@@ -1124,10 +1129,11 @@ def login():
         session.permanent, session["setup"] = True, True
         return redirect("/setup")
     if password_ok(pw):
-        session.permanent, session["ok"] = True, True
+        session.permanent, session["ok"], session["pv"] = True, True, ["f", password_ver()]
         session.pop("admin", None)  # a friend's login on a shared browser drops an earlier admin one
     elif not needs_setup() and admin_enabled() and password_ok(pw, admin=True):  # the same form and ?password= link sign the admin in
         session.permanent, session["ok"], session["admin"], session["csrf"] = True, True, time.time(), secrets.token_urlsafe(32)
+        session["pv"] = ["a", password_ver(True)]
     else:
         time.sleep(2)  # ponytail: slows guessing per request, add per-IP lockout if this ever gets hammered
         return redirect("/?err=1")
@@ -1211,17 +1217,42 @@ def hash_password(pw, salt=None, n=200_000):
     return f"pbkdf2_sha256${n}${salt}${hashlib.pbkdf2_hmac('sha256', pw.encode(), bytes.fromhex(salt), n).hex()}"
 
 
-def password_ok(pw, admin=False):
-    """The .env password if set, else the hash the splash saved."""
-    env = ADMIN_PASSWORD if admin else PASSWORD
-    if env:
-        return hmac.compare_digest(pw.encode(), env.encode())
-    saved = load_json(SETUP).get("admin_password" if admin else "password", "")
+def hash_ok(pw, saved):
     try:
         _, n, salt, _ = saved.split("$")
         return bool(pw) and hmac.compare_digest(hash_password(pw, salt, int(n)), saved)
     except ValueError:
         return False
+
+
+def password_ok(pw, admin=False):
+    """The password Manage set over .env's (F12: an override, while .env still holds the value it replaced), else the .env
+    password if set, else the hash the splash or Manage saved."""
+    env, p = (ADMIN_PASSWORD, "admin_") if admin else (PASSWORD, "")
+    s = load_json(SETUP)
+    if env and not s.get(f"{p}password_override"):
+        return hmac.compare_digest(pw.encode(), env.encode())
+    return hash_ok(pw, s.get(f"{p}password_override" if env else f"{p}password", ""))
+
+
+def password_ver(admin=False):
+    """Bumped by each change of that password; logged_in() signs out sessions made before it."""
+    return load_json(SETUP).get("admin_password_ver" if admin else "password_ver", 0)
+
+
+def env_overridden(admin=False):
+    return bool((ADMIN_PASSWORD if admin else PASSWORD) and load_json(SETUP).get(("admin_" if admin else "") + "password_override"))
+
+
+def drop_stale_overrides():
+    """An override replaced one .env value: once .env holds a different one, .env wins again and the override goes."""
+    s, changed = load_json(SETUP), False
+    for p, env in (("", PASSWORD), ("admin_", ADMIN_PASSWORD)):
+        if f"{p}password_override" in s and not (env and hash_ok(env, s.get(f"{p}password_env", ""))):
+            s.pop(f"{p}password_override"), s.pop(f"{p}password_env", None)
+            changed = True
+    if changed:
+        save_json(SETUP, s)
 
 
 def needs_setup():
@@ -1246,6 +1277,7 @@ def apply_setup():
 
 
 apply_setup()
+drop_stale_overrides()
 
 
 def p12_opens(blob, pw):
@@ -1626,7 +1658,7 @@ def setup():
             save_json(SETUP, s)
             apply_setup()
             session.pop("setup")
-            session.permanent, session["ok"] = True, True
+            session.permanent, session["ok"], session["pv"] = True, True, ["f", password_ver()]
             return redirect("/")
     return page("""<style>.setup label{display:flex;flex-direction:column;gap:4px;font-weight:700} .setup small{font-weight:400}
 .setup summary{color:var(--acc);font-weight:700} .setup details[open]{display:flex;flex-direction:column;gap:10px}</style>
@@ -1680,7 +1712,7 @@ def admin():
         if len(admin_fails) >= 5:  # ponytail: global lockout, not per IP; friends could lock the admin out for 15 min at worst
             err = "Too many wrong passwords. Try again in 15 minutes."
         elif password_ok(request.form.get("password", ""), admin=True):
-            session["admin"], session["csrf"] = time.time(), secrets.token_urlsafe(32)
+            session["admin"], session["csrf"], session["pv"] = time.time(), secrets.token_urlsafe(32), ["a", password_ver(True)]
             return redirect("/admin")
         else:
             admin_fails.append(time.time())
@@ -1721,7 +1753,8 @@ def admin_device():
 EDITABLE = {"mirror-sources.txt": "Sources", "third-party-sources.txt": "Third-party sources",
             IFIZBOX_SOURCES: "iFizBox's starting sources", IFIZBOX_SETTINGS: "iFizBox settings"}
 DONE = {"signing": "Saved. Apps are being signed with the new files.", "sources": "Saved.", "default": "Back to the default.",
-        "files": "Uploaded.", "deleted": "Deleted.", "renamed": "Renamed.", "passwords": "Saved."}
+        "files": "Uploaded.", "deleted": "Deleted.", "renamed": "Renamed.", "passwords": "Saved.",
+        "env": "The password from .env works again."}
 
 
 def shared_files():
@@ -2076,28 +2109,53 @@ def admin_signing_page():
     return signing_page()
 
 
-PASSWORDS = """{% if both_env %}<p class="c m">Both passwords are set in .env on the server; change them there.</p>{% else %}
-<form class="c mg" method=post action=/admin/passwords onsubmit="this.querySelector('button').textContent='Saving…'">
-<input type=hidden name=csrf value="{{ csrf }}">
-{% if 'PASSWORD' not in env %}<label>Friends' Password<input type=password name=password autocomplete=new-password minlength=8>
-<small>What friends type to sign in. Friends already signed in stay signed in.</small></label>{% endif %}
-{% if 'ADMIN_PASSWORD' not in env %}<label>Admin Password<input type=password name=admin_password autocomplete=new-password minlength=8>
-<small>Unlocks Manage. Keep it different from the friends' one.</small></label>{% endif %}
+PW_ASK = """if(this.replace_env.value!='1'&&(this.dataset.ask||[...this.querySelectorAll('[data-env]')].some(i=>i.value))){let a=this.parentNode.querySelector('.ask-'+(this.dataset.ask||'env'));a.f=this;a.hidden=false;return false}this.querySelector('button').textContent='Saving…'"""
+PW_GO = "let s=this.closest('.scrim'),f=s.f;s.hidden=true;f.replace_env.value='1';f.requestSubmit?f.requestSubmit():f.submit()"
+# F12: both fields always show; one whose password comes from .env says so, and saving over it asks first (an iOS 6 alert in the page,
+# not window.confirm) and stores an override in setup.json; 'Use .env Password' drops it
+PASSWORDS = """{% macro note(k) %}{% if k in env %}<b>{{ 'Changed here, over the one in .env' if k in ov else 'Set in .env' }}</b>. {% endif %}{% endmacro %}
+<form class="c mg" method=post action=/admin/passwords onsubmit="{{ ask }}">
+<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=replace_env>
+<label>Friends' Password<input type=password name=password autocomplete=new-password minlength=8{{ ' data-env=1' if 'PASSWORD' in env }}>
+<small>{{ note('PASSWORD') }}What friends type to sign in. Changing it signs out every iPhone signed in with the old one, and old <span class=nw>?password=</span> links stop working.</small></label>
+<label>Admin Password<input type=password name=admin_password autocomplete=new-password minlength=8{{ ' data-env=1' if 'ADMIN_PASSWORD' in env }}>
+<small>{{ note('ADMIN_PASSWORD') }}Unlocks Manage. Keep it different from the friends' one. Changing it signs out the other iPhones signed in as admin; this one stays.</small></label>
 <button>Save</button><small>Leave one empty to keep it. At least 8 characters.</small></form>
-{% if env %}<p class=ftr>{{ "The friends'" if 'PASSWORD' in env else 'The admin' }} password is set in .env on the server.</p>{% endif %}{% endif %}"""
+{% for k, who in (('PASSWORD', "Friends'"), ('ADMIN_PASSWORD', 'Admin')) if k in ov %}
+<form class="c mg" method=post action=/admin/passwords data-ask=use onsubmit="{{ ask }}"><input type=hidden name=csrf value="{{ csrf }}">
+<input type=hidden name=replace_env><input type=hidden name=use_env value={{ k }}>
+<button class=grey>Use .env Password</button><small>{{ who }} password: drop the one set here and go back to the one in .env.</small></form>{% endfor %}
+<div class="scrim ask-env" hidden><div class=alert role=alertdialog aria-modal=true><h3>Replace the .env Password?</h3>
+<p>This replaces the password from .env on the server. Every iPhone signed in with it is signed out and needs the new password, and old ?password= links stop working.</p>
+<div class=abtns><button type=button onclick="this.closest('.scrim').hidden=true">Cancel</button><button type=button class=ok onclick="{{ go }}">Replace</button></div></div></div>
+<div class="scrim ask-use" hidden><div class=alert role=alertdialog aria-modal=true><h3>Use the .env Password?</h3>
+<p>The password in .env works again and the one set here stops. Every iPhone signed in with the one set here is signed out.</p>
+<div class=abtns><button type=button onclick="this.closest('.scrim').hidden=true">Cancel</button><button type=button class=ok onclick="{{ go }}">Use .env</button></div></div></div>"""
 
 
 @app.route("/admin/passwords", methods=["GET", "POST"])
 def admin_passwords():
-    """Change the friends' and the admin password, the ones the setup splash saved (hashed); .env's stay as they are."""
+    """Change the friends' and the admin password (hashed in setup.json). One set in .env gets an override (F12) that password_ok()
+    checks first, with a hash of the .env value it replaced, so a later edit of .env wins again. Each change bumps that password's
+    version, which signs out the sessions made with the old one; the admin making it stays signed in."""
     if r := admin_gate():
         return r
     env = {k for k in ("PASSWORD", "ADMIN_PASSWORD") if k in ENV_SET}
     err = None
     if request.method == "POST":
         admin_check()
-        pw = "" if "PASSWORD" in env else request.form.get("password", "")
-        admin_pw = "" if "ADMIN_PASSWORD" in env else request.form.get("admin_password", "")
+        f, s = request.form, load_json(SETUP)
+        bump = lambda p: s.__setitem__(f"{p}password_ver", s.get(f"{p}password_ver", 0) + 1)
+        if f.get("use_env") in env:  # 'Use .env Password': drop the override
+            p = "admin_" if f["use_env"] == "ADMIN_PASSWORD" else ""
+            if s.pop(f"{p}password_override", None):
+                s.pop(f"{p}password_env", None)
+                bump(p)
+                save_json(SETUP, s)
+                if p:
+                    session["pv"] = ["a", s["admin_password_ver"]]
+            return redirect("/admin/passwords?done=env")
+        pw, admin_pw = f.get("password", ""), f.get("admin_password", "")
         if not pw and not admin_pw:
             err = "Type a new password."
         elif any(0 < len(p) < 8 for p in (pw, admin_pw)):
@@ -2105,15 +2163,23 @@ def admin_passwords():
         elif DEFAULT_PASSWORD in (pw, admin_pw) or (pw and pw == admin_pw) or (pw and password_ok(pw, admin=True)) or \
                 (admin_pw and password_ok(admin_pw)):
             err = "Choose new passwords, and different ones for friends and for the admin."
+        elif f.get("replace_env") != "1" and (pw and "PASSWORD" in env or admin_pw and "ADMIN_PASSWORD" in env):
+            err = "Confirm replacing the password from .env."  # the page's alert sets replace_env; a post without it changes nothing
         else:
-            s = load_json(SETUP)
-            if pw:
-                s["password"] = hash_password(pw)
-            if admin_pw:
-                s["admin_password"] = hash_password(admin_pw)
+            for new, p, env_val in ((pw, "", PASSWORD), (admin_pw, "admin_", ADMIN_PASSWORD)):
+                if not new:
+                    continue
+                if env_val:
+                    s[f"{p}password_override"], s[f"{p}password_env"] = hash_password(new), hash_password(env_val)
+                else:
+                    s[f"{p}password"] = hash_password(new)
+                bump(p)
             save_json(SETUP, s)
+            if admin_pw:
+                session["pv"] = ["a", s["admin_password_ver"]]
             return redirect("/admin/passwords?done=passwords")
-    return admin_page(PASSWORDS, "Passwords", err=err, env=env, both_env=len(env) == 2)
+    return admin_page(PASSWORDS, "Passwords", err=err, env=env, ov={k for k in env if env_overridden(k == "ADMIN_PASSWORD")},
+                      ask=PW_ASK, go=PW_GO)
 
 
 FILES_PAGE = """{% if files %}<div class=g>{% for f in files %}<div class=row><div>{{ f.name }}<small>{{ f.stat().st_size|filesizeformat }}</small></div>
