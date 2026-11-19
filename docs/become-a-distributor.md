@@ -1,6 +1,7 @@
-# Run your own sidedrop for friends
+# Run your own SideDrop for friends
 
-This guide is for someone who wants to share apps with their own friends from their own server. It takes an
+SideDrop shares your Apple developer account so your friends can sideload apps. This guide is for someone who
+wants to run it for their own friends on their own server. It takes an
 evening: most of it is Apple's paperwork, then a few minutes with Docker and a few on your iPhone.
 
 You need:
@@ -21,9 +22,9 @@ That's all you make by hand. When you're done you have:
 
 | File or value | What it is |
 | --- | --- |
-| `AuthKey_<Key ID>.p8` | the App Store Connect API key; sidedrop uses it to make the certificate and App ID and to register iPhones |
+| `AuthKey_<Key ID>.p8` | the App Store Connect API key; SideDrop uses it to make the certificate and App ID and to register iPhones |
 | Issuer ID | shown above the list of API keys |
-| App ID | the one you want, e.g. `com.yourname.sideload` (sidedrop makes it with Push) or `com.yourname.*` |
+| App ID | the one you want, e.g. `com.yourname.sideload` (SideDrop makes it with Push) or `com.yourname.*` |
 
 Put the key somewhere your iPhone can reach it, such as iCloud Drive, ideally in one `.zip` with a text file that
 holds the Issuer ID:
@@ -34,7 +35,7 @@ apikey.zip
 └── issuer.txt       the Issuer ID (a UUID)
 ```
 
-Rather not give sidedrop an Admin key? Follow that guide's [Manual setup](developer-account.md#manual-setup)
+Rather not give SideDrop an Admin key? Follow that guide's [Manual setup](developer-account.md#manual-setup)
 instead: you make the certificate and App ID yourself, and add `cert.p12` and a `password.txt` with its password
 under **Manual setup** in step 4 below.
 
@@ -50,7 +51,7 @@ mkdir -p data
 sudo chown 568:568 data
 ```
 
-The container runs as UID 568. If Docker creates `data/` itself it is owned by root, and sidedrop can't save
+The container runs as UID 568. If Docker creates `data/` itself it is owned by root, and SideDrop can't save
 anything, so make it and `chown` it first.
 
 Edit `.env` and set only `PUBLIC_URL` to the HTTPS address friends will open, e.g.
@@ -60,7 +61,7 @@ Edit `.env` and set only `PUBLIC_URL` to the HTTPS address friends will open, e.
 docker compose up -d --build
 ```
 
-sidedrop now listens on port 8080 on the server, over plain HTTP.
+SideDrop now listens on port 8080 on the server, over plain HTTP.
 
 ## 3. Put it behind HTTPS
 
@@ -94,7 +95,7 @@ go into `data/apps/` or come from a source rather than through **Sign your own I
 address that anyone can open.
 
 Whichever you pick, `PUBLIC_URL` in `.env` must be exactly that address. If you change it, run
-`docker compose up -d --force-recreate sidedrop` so the container picks it up. Open it in a browser: you should see the sidedrop sign-in page with
+`docker compose up -d --force-recreate sidedrop` so the container picks it up. Open it in a browser: you should see the SideDrop sign-in page with
 a padlock.
 
 ## 4. First-run setup on your iPhone
@@ -108,20 +109,20 @@ Do this right after deploying. Until it's done, anyone who finds the site can se
 3. Tap **Choose API Key** and pick `apikey.zip` (or the `.p8` alone). The Key ID is read from the `.p8`'s name and
    the Issuer ID from the text file. Check them, or type them in.
 4. Fill in the **App ID** from step 1, e.g. `com.yourname.sideload`.
-5. Tap **Save**. sidedrop makes the App ID (with Push) if your account lacks it, has Apple make an Apple
+5. Tap **Save**. SideDrop makes the App ID (with Push) if your account lacks it, has Apple make an Apple
    Distribution certificate, and saves it as `data/cert.p12` with a random password. The default password stops
    working, and you're signed in.
 
 If something is wrong (a key without the Admin role, a missing App ID), the screen says so. Files that were fine are
 kept, so you don't need to pick them again. If your account already has as many distribution certificates as Apple
 allows, the screen lists them: pick one you no longer use to revoke, and Save again. Apps signed with it stop opening
-wherever they were signed, so sidedrop never picks one for you.
+wherever they were signed, so SideDrop never picks one for you.
 
 ## 5. Register your own iPhone first
 
 Before you invite anyone, go through it yourself as a friend would. Sign in with the friends' password, turn off
 Stolen Device Protection, tap **Register iPhone**, install the profile, then install an app. Turn on Developer
-Mode when iOS asks for it. If the app opens, sidedrop is working.
+Mode when iOS asks for it. If the app opens, SideDrop is working.
 
 With the admin password, **Settings → Manage** lists every registered iPhone and can turn one off.
 
@@ -134,7 +135,7 @@ With the admin password, **Settings → Manage** lists every registered iPhone a
 
 ## Keeping it running
 
-- `git pull && docker compose up -d --build` updates sidedrop. `deploy.sh` does this from cron, but it is written for
+- `git pull && docker compose up -d --build` updates SideDrop. `deploy.sh` does this from cron, but it is written for
   a TrueNAS custom app; on plain Docker, a cron job running those two commands does the same.
 - Back up `data/`: it holds your certificate, the API key, the passwords and the list of registered iPhones.
 - Each year: renew the membership, then tap **Settings → Manage → Make New Certificate** before the old certificate

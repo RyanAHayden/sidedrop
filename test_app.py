@@ -36,7 +36,7 @@ c = A.app.test_client()
 path_qs = lambda url: (lambda s: f"{s.path}?{s.query}")(urlsplit(url))
 
 # login gate
-assert b"Password" in c.get("/").data
+assert b"Password" in c.get("/").data and b"The friend who sent you the link has the password." in c.get("/").data
 assert c.post("/enroll").status_code == 403
 A.time.sleep = lambda s: None
 assert "err=1" in c.post("/login", data={"password": "nope"}).location
@@ -53,6 +53,8 @@ assert "err=1" in A.app.test_client().get("/?password=wrong").location
 prof = plistlib.loads(c.post("/enroll", data={"name": "Sam <script>"}).data)
 url = prof["PayloadContent"]["URL"]
 assert "/udid/Sam%20script?" in url, url
+# F17: what the Settings app shows says SideDrop; the identifier installed phones carry stays sidedrop.udid
+assert (prof["PayloadDisplayName"], prof["PayloadOrganization"], prof["PayloadIdentifier"]) == ("SideDrop device registration", "SideDrop", "sidedrop.udid")
 
 # with a cert dir set, the profile comes back CMS-signed with the whole chain attached
 import datetime
@@ -82,7 +84,12 @@ assert calls == [("00008130-AAAA", "Sam script iPhone16,1")]
 html = c.get("/").data
 assert b"Set up this iPhone" in html and b"/static/sdp1.jpg" in html and b'href="itms-services' not in html and b"id=ifzb " not in html  # apps locked until registered
 # Apps header: welcome, GitHub | iFizBox, then Help + Sign IPA and the setup tile, which folds the SDP + Register steps behind it
-assert b"Welcome to sidedrop" in html and b"Ryan Hayden (Fizlo)</a>" in html and b"go('ifizbox')" in html and b"id=setupT" in html and b"<div id=setup hidden>" in html
+assert b"Welcome to SideDrop" in html and b"<title>SideDrop</title>" in html and b"<h1 id=navT>SideDrop</h1>" in html and b"About SideDrop" in html and b"Ryan Hayden (Fizlo)</a>" in html and b"go('ifizbox')" in html and b"id=setupT" in html and b"<div id=setup hidden>" in html
+# F17: the SideDrop name and what it's for, in the head, the header, About, the register step and Help; no lowercase name a person sees
+assert html.count(b"Share an Apple developer account with friends and sideload apps.") == 2 and b"og:site_name content=SideDrop" in html
+assert b"with a friend's Apple developer account.</p>" in html and b"shares one Apple developer account with friends" in html
+assert b"adds your iPhone to the shared developer account" in html and b"id=helpNote>" in html
+assert b"sidedrop" not in re.sub(rb"sidedrop\.udid|/static/[\w.]+", b"", html), re.findall(rb".{40}sidedrop.{40}", html)
 assert b">Help</a>" in html and b"getElementById('sign')" in html and b'class="tile reg"' not in html and b"go('changes')" not in html
 assert b'href="itms-services' not in c.get("/?enrolled=1").data and b'href="itms-services' not in c.get("/?enrolled=00008130-AAAA.x").data
 html = c.get(r.location.replace("https://x.test", ""), base_url="https://localhost").data
@@ -95,7 +102,7 @@ assert A.profile_udids() == {"00008130-AAAA"} and (tmp / "signed" / "Demo.ipa").
 os.environ["SIDEDROP_COMMIT"] = "9dc9923"; assert A.read_commit() == "9dc9923"; del os.environ["SIDEDROP_COMMIT"]
 A.COMMIT = "9dc9923"
 html = c.get("/", base_url="https://localhost").data.decode()
-assert html.count('<p class=ver data-m="iPhone16,1">iPhone16,1, sidedrop</p><p class="ver vc">9dc9923</p>') == 3, html.count("class=ver")
+assert html.count('<p class=ver data-m="iPhone16,1">iPhone16,1, SideDrop</p><p class="ver vc">9dc9923</p>') == 3, html.count("class=ver")
 apps_tab = html[html.index("id=t-apps"):]; apps_tab = apps_tab[:apps_tab.index("</section>")]
 settings_tab = html[html.index("id=t-settings"):]; settings_tab = settings_tab[:settings_tab.index("</section>")]
 assert "9dc9923" in apps_tab and "9dc9923" in settings_tab and "9dc9923" in html[html.index("id=aboutT"):]
@@ -104,7 +111,7 @@ html = A.app.test_client().get("/?enrolled=" + A.device_token("00008130-AAAA")).
 assert 'data-m="iPhone16,1"' in html and "9dc9923" in html
 anon = A.app.test_client(); anon.post("/login", data={"password": "hunter2-but-longer"})
 html = anon.get("/").data.decode()
-assert html.count('<p class=ver data-m="iPhone">iPhone, sidedrop</p>') == 3 and "iPhone16,1" not in html
+assert html.count('<p class=ver data-m="iPhone">iPhone, SideDrop</p>') == 3 and "iPhone16,1" not in html
 (tmp / "products.json").unlink()  # registered before F15: the PRODUCT in Apple's device name, else its model
 A.save_json(A.DEVICES, {"at": 1, "data": [{"attributes": {"udid": "00008130-AAAA", "name": "Sam iPhone15,2", "model": "iPhone 14 Pro"}}]})
 assert A.device_model("00008130-AAAA") == "iPhone15,2"
@@ -277,7 +284,7 @@ assert "Pick an .ipa" in c.post("/sign", data={"url": "file:///etc/passwd"}).dat
 assert not list((tmp / "signed" / "custom").glob(".*"))  # temp files cleaned up
 # Changes tab: installs are recorded per phone, and a newer version then shows as an upgrade with a badge
 html = c.get("/").data
-assert b"id=t-changes" in html and b"Available Updates" not in html and b"from sidedrop" in html
+assert b"id=t-changes" in html and b"Available Updates" not in html and b"from SideDrop" in html
 assert A.app.test_client().post("/installed", data={"name": "Demo"}).status_code == 403
 assert c.post("/installed", data={"name": "../x"}).status_code == 403
 assert c.post("/installed", data={"name": "Demo"}).status_code == 204 and b"Available Updates" not in c.get("/").data
@@ -552,6 +559,7 @@ sent = []
 A.webpush = lambda sub, data, **kw: sent.append((sub["endpoint"], json.loads(data)))
 assert len(A.vapid_public()) == 87 and A.vapid_public() in c.get("/").data.decode()
 assert c.get("/sw.js").status_code == 200 and c.get("/manifest.webmanifest").json["display"] == "standalone"
+mf = c.get("/manifest.webmanifest").json; assert (mf["name"], mf["short_name"]) == ("SideDrop", "SideDrop") and "sideload apps" in mf["description"]
 sub = {"endpoint": "https://push.example/1", "keys": {"p256dh": "x", "auth": "y"}}
 assert A.app.test_client().post("/push", json=sub).status_code == 403
 assert c.post("/push", json={"endpoint": "http://x", "keys": {}}).status_code == 400
@@ -697,7 +705,7 @@ key_only = lambda **f: g.post("/setup", data=dict({"password": "friends-pass", "
 apple.forbid = True  # an App Manager key: Apple refuses the certificate, and the error says which role it needs
 r = key_only()
 assert b"Admin role" in r.data and not (tmp / "apikey" / "cert.p12").exists() and G.needs_setup()
-assert [b["attributes"] for b in apple.bundles.values()] == [{"identifier": "com.me.sideload", "name": "sidedrop", "platform": "IOS"}]
+assert [b["attributes"] for b in apple.bundles.values()] == [{"identifier": "com.me.sideload", "name": "SideDrop", "platform": "IOS"}]
 assert apple.caps == [("B0", "PUSH_NOTIFICATIONS"), ("B0", "APP_GROUPS"), ("B0", "ASSOCIATED_DOMAINS")]
 apple.forbid = False
 r = key_only()
@@ -716,7 +724,7 @@ assert "Make New Certificate" in html and "Choose API Key" in html and "Upload c
 assert re.search(r"Role</div><span class=val>Admin<", html), "the key made a certificate at setup: Admin"
 r = ga.post("/admin/signing", data={"csrf": csrf, "make": "1"}).data.decode()
 assert "as many Apple Distribution certificates" in r and "stop opening" in r and r.count('name=revoke value=') == 3
-assert "Old Mac" in r and "Elsewhere" in r and r.count("sidedrop's certificate") == 1 and "expires" in r and "made " in r
+assert "Old Mac" in r and "Elsewhere" in r and r.count("SideDrop's certificate") == 1 and "expires" in r and "made " in r
 assert [m for m, p, _ in apple.calls].count("DELETE") == 0 and (tmp / "apikey" / "cert.p12").read_bytes() == made_p12
 assert "isn&#39;t in your account" in ga.post("/admin/signing", data={"csrf": csrf, "make": "1", "revoke": "nope"}).data.decode()
 old = next(i for i, c in apple.certs.items() if c["attributes"]["name"] == "Old Mac")

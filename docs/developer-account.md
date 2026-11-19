@@ -1,15 +1,15 @@
 # Setting up your Apple Developer account
 
-How to set up a developer account so sidedrop signs apps the way paid signing services do: each app keeps its own
+How to set up a developer account so SideDrop signs apps the way paid signing services do: each app keeps its own
 bundle ID (so it replaces the original, not a copy beside it) and gets its own notifications. iOS checks the
 entitlements' `application-identifier` against the profile, but never the app's Info.plist bundle ID, and registers
 the app for push under the Info.plist one. iFizBox confirmed it on a stock iPhone 15 Pro.
 
-sidedrop needs three things from the account: an App Store Connect API key (`asc.p8`), an Apple Distribution
-certificate (`cert.p12` and its password) and an App ID. You make only the API key: sidedrop makes the certificate and
+SideDrop needs three things from the account: an App Store Connect API key (`asc.p8`), an Apple Distribution
+certificate (`cert.p12` and its password) and an App ID. You make only the API key: SideDrop makes the certificate and
 the App ID with it, then registers iPhones and makes the Ad Hoc profile itself.
 
-If you'd rather not give sidedrop a key that can make and revoke certificates, see [Manual setup](#manual-setup)
+If you'd rather not give SideDrop a key that can make and revoke certificates, see [Manual setup](#manual-setup)
 below: you make the certificate and App ID yourself, and the key only registers iPhones.
 
 ## 1. Join the Apple Developer Program
@@ -28,16 +28,16 @@ App Store Connect API > Team Keys > **+**. Any name, role **Admin**, Generate.
 Why Admin: Apple's [roles table](https://developer.apple.com/help/account/access/roles/) lets the Account Holder and
 Admins create and revoke distribution certificates; App Managers only with "Access to Certificates, Identifiers &
 Profiles", which a team API key can't be given. An **App Manager** key registers iPhones, makes profiles and App IDs,
-but Apple refuses it a certificate (sidedrop then says it needs an Admin key). App Manager is enough for the manual
+but Apple refuses it a certificate (SideDrop then says it needs an Admin key). App Manager is enough for the manual
 path.
 
 ## 3. Upload it
 
-On sidedrop's setup screen (or later **Settings > Manage > Signing**), tap **Choose API Key** and pick the `.p8`
+On SideDrop's setup screen (or later **Settings > Manage > Signing**), tap **Choose API Key** and pick the `.p8`
 (loose, or in a `.zip` with a text file that holds the Issuer ID). The Key ID is read from the file's name; check it
 and fill in the Issuer ID and the **App ID** you want, such as `com.yourname.sideload`, then **Save**.
 
-sidedrop then:
+SideDrop then:
 
 1. makes the App ID if the account doesn't have it: an explicit one gets **Push Notifications**, **App Groups** and
    **Associated Domains** (a wildcard such as `com.yourname.*` gets none; Apple gives wildcards no Push);
@@ -51,20 +51,20 @@ Certificate** makes another, a new profile, and signs every app again.
 
 ### When the account already has the most certificates
 
-Apple allows only a few Apple Distribution certificates per account. When it refuses another, sidedrop lists the
-account's distribution certificates (name, when made, when it expires, and which one sidedrop uses) and asks you to
+Apple allows only a few Apple Distribution certificates per account. When it refuses another, SideDrop lists the
+account's distribution certificates (name, when made, when it expires, and which one SideDrop uses) and asks you to
 pick one to revoke. It never revokes one by itself. Revoking a certificate stops every app signed with it from
-opening, on every iPhone, wherever it was signed: another signing service, Xcode ad hoc builds, an older sidedrop.
-App Store and TestFlight apps aren't affected. Pick one you no longer use, confirm, and sidedrop revokes it and makes
+opening, on every iPhone, wherever it was signed: another signing service, Xcode ad hoc builds, an older SideDrop.
+App Store and TestFlight apps aren't affected. Pick one you no longer use, confirm, and SideDrop revokes it and makes
 the new one in its place.
 
 ## 4. iPhones and the profile
 
-You don't register iPhones or make profiles on developer.apple.com. When a friend taps **Register iPhone**, sidedrop
+You don't register iPhones or make profiles on developer.apple.com. When a friend taps **Register iPhone**, SideDrop
 adds the UDID to the account through the API, makes a new Ad Hoc profile for `BUNDLE_ID` with every enabled iPhone
 and your certificate, and re-signs every app.
 
-sidedrop makes the profile again only when an iPhone registers or is turned on or off, or the signing files change.
+SideDrop makes the profile again only when an iPhone registers or is turned on or off, or the signing files change.
 After changing the App ID's capabilities, make it happen yourself: **Settings > Manage** (needs the admin
 password), turn any iPhone off, then on again. A profile holds the capabilities the App ID had when it was made.
 
@@ -79,7 +79,7 @@ openssl smime -inform der -verify -noverify -in data/adhoc.mobileprovision | gre
 
 It should say `production`.
 
-Every app sidedrop signs uses the one App ID, so they share a keychain: an app could see another's saved sign-ins.
+Every app SideDrop signs uses the one App ID, so they share a keychain: an app could see another's saved sign-ins.
 Fine among friends' own phones; iFizBox makes one App ID per app instead. A wildcard `BUNDLE_ID` still works (the old
 way: apps renamed to `com.yourname.<app>`, no push), and so does an explicit one without Push (bundle IDs kept, no
 notifications).
@@ -87,13 +87,13 @@ notifications).
 ## 5. Switching from a wildcard
 
 Apps signed under a wildcard were renamed (`com.yourname.youtube`); with an explicit App ID they keep their real IDs,
-so iOS sees them as different apps. Friends install them again from sidedrop and delete the old copies (their data
+so iOS sees them as different apps. Friends install them again from SideDrop and delete the old copies (their data
 doesn't carry over). If the App Store copy of an app is on the phone, delete it first: iOS won't put a signed app
 over it.
 
 ## Manual setup
 
-For when you don't want sidedrop's API key to make certificates. The key can then be **App Manager** (step 2), and you
+For when you don't want SideDrop's API key to make certificates. The key can then be **App Manager** (step 2), and you
 make the certificate and the App ID yourself.
 
 ### M1. Make an Apple Distribution certificate
@@ -141,7 +141,7 @@ Turn it into `cert.p12`:
 
 On the setup screen or **Settings > Manage > Signing**, open **Manual setup**, tap **Choose Signing Files** and pick
 `cert.p12` and a `password.txt` with its password (or type it in **P12 Password**), alongside the API key and the App
-ID as in step 3. sidedrop then uses your certificate and asks Apple to make nothing.
+ID as in step 3. SideDrop then uses your certificate and asks Apple to make nothing.
 
 Or put them on the server without an iPhone. In the data folder (owned by UID 568):
 
@@ -159,7 +159,7 @@ ASC_KEY_ID=...
 ASC_ISSUER_ID=...
 ```
 
-Then restart sidedrop (`docker compose up -d`, or `deploy.sh -f`).
+Then restart SideDrop (`docker compose up -d`, or `deploy.sh -f`).
 
 ## When it doesn't work
 
