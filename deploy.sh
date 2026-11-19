@@ -6,6 +6,6 @@ cd "$(dirname "$0")"
 git fetch -q origin main
 [ "$1" != -f ] && [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] && exit 0
 git reset -q --hard origin/main
-docker build -q -t sidedrop:latest .
+docker build -q --build-arg COMMIT="$(git rev-parse --short HEAD)" -t sidedrop:latest .
 midclt call -j app.redeploy sidedrop >/dev/null
 echo "deployed $(git log --oneline -1)"

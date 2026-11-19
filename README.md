@@ -60,6 +60,8 @@ Or set `BUNDLE_ID` to an explicit App ID with Push Notifications (plus App Group
 docker compose up -d --build
 ```
 
+The grey version line at the bottom of Apps and Settings shows the commit when the image was built with it (the image has no `.git`): `SIDEDROP_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build`. `deploy.sh` passes it itself.
+
 **HTTPS with a real certificate is required.** iOS won't install profiles or apps over plain HTTP or with a self-signed cert. Put the site behind a reverse proxy, Cloudflare Tunnel or `tailscale funnel 8080`, and set `PUBLIC_URL` to match.
 
 With an admin password (from the setup screen or `ADMIN_PASSWORD`), sign in with it instead of the friends' password, on the sign-in screen or as `?password=<admin password>`, and **Settings → Manage** appears. Friends never see it. It can:
