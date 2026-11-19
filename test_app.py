@@ -80,10 +80,14 @@ assert r.status_code == 301 and r.location.endswith("/?enrolled=" + A.device_tok
 assert calls == [("00008130-AAAA", "Sam script iPhone16,1")]
 # landing back in Safari sets a device cookie (checked against the profile, survives sign-out); forged tokens do nothing
 html = c.get("/").data
-assert b"First, set up this iPhone" in html and b"/static/sdp1.jpg" in html and b'href="itms-services' not in html and b"id=ifzb " not in html  # apps locked until registered
+assert b"Set up this iPhone" in html and b"/static/sdp1.jpg" in html and b'href="itms-services' not in html and b"id=ifzb " not in html  # apps locked until registered
+# Apps header: welcome, GitHub | iFizBox, then Help + Sign IPA and the setup tile, which folds the SDP + Register steps behind it
+assert b"Welcome to sidedrop" in html and b"Ryan Hayden (Fizlo)</a>" in html and b"go('ifizbox')" in html and b"id=setupT" in html and b"<div id=setup hidden>" in html
+assert b">Help</a>" in html and b"getElementById('sign')" in html and b'class="tile reg"' not in html and b"go('changes')" not in html
 assert b'href="itms-services' not in c.get("/?enrolled=1").data and b'href="itms-services' not in c.get("/?enrolled=00008130-AAAA.x").data
 html = c.get(r.location.replace("https://x.test", ""), base_url="https://localhost").data
 assert b"This iPhone is registered" in html and b"href=/admin" in html and b"/static/sdp1.jpg" in html
+assert b'class="tile reg"' in html and b"go('changes')" in html and b"id=setupT" not in html and b"id=setup " not in html  # registered: Changes and the green tile
 c.get("/logout", base_url="https://localhost"); c.post("/login", data={"password": "hunter2-but-longer"}, base_url="https://localhost")
 assert b"This iPhone is registered" in c.get("/", base_url="https://localhost").data
 assert A.profile_udids() == {"00008130-AAAA"} and (tmp / "signed" / "Demo.ipa").exists()
