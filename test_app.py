@@ -343,8 +343,9 @@ A.resign_all = resign_all_real
 for p in ("/admin/iphones", "/admin/iphone/D1", "/admin/signing", "/admin/passwords", "/admin/files", "/admin/sources", "/admin/ifizbox"):
     assert plain.get(p).location == "/" and A.app.test_client().get(p).status_code == 302
 assert plain.get("/admin/devices.json").status_code == 403
-# passwords set in .env aren't changed here
-assert b"set in .env" in c.get("/admin/passwords").data and b"Type a new password" in c.post("/admin/passwords", data={"csrf": csrf, "password": "x" * 9}).data
+# passwords set in .env are changed here only after the page's confirm (F12, tested in full at the end)
+assert b"Set in .env" in c.get("/admin/passwords").data and b"Confirm replacing" in c.post("/admin/passwords", data={"csrf": csrf, "password": "x" * 9}).data
+assert A.password_ok("hunter2-but-longer") and not A.password_ok("x" * 9)
 A.asc = fake_asc
 locked = A.app.test_client(); locked.post("/login", data={"password": "hunter2-but-longer"})
 for _ in range(5): locked.post("/admin", data={"password": "nope"})
@@ -694,4 +695,48 @@ assert r.location == "/admin/signing?done=signing" and (tmp / "apikey" / "cert.p
 assert all(m == "GET" for m, _, _ in apple.calls[before:])
 assert ga.post("/admin/signing", data={"csrf": csrf, "bundle_id": "com.me.other"}).location == "/admin/signing?done=signing"  # a new App ID is made
 assert [b["attributes"]["identifier"] for b in apple.bundles.values()] == ["com.me.sideload", "com.me.*", "com.me.other"]
+
+# F12: Manage changes a password .env sets: an override in setup.json that signs out the old password's sessions (not the admin
+# making it), that .env wins over again once .env holds a different value, and that 'Use .env Password' drops
+envd = tmp / "f12"; envd.mkdir()
+ENV12 = dict(PASSWORD="env-friends-pass", ADMIN_PASSWORD="env-admin-pass", SECRET_KEY="f" * 32)
+J = boot(envd, **ENV12)
+friend, boss, other = J.app.test_client(), J.app.test_client(), J.app.test_client()
+assert friend.post("/login", data={"password": "env-friends-pass"}).location == "/" and b"Register iPhone" in friend.get("/").data
+assert boss.get("/?password=env-admin-pass").location == "/" and other.get("/?password=env-admin-pass").location == "/"
+html = boss.get("/admin/passwords").data.decode(); csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
+assert html.count("Set in .env") == 2 and "name=password " in html and "name=admin_password " in html and "data-env=1" in html
+assert "Replace the .env Password?" in html and "old ?password= links stop working" in html and "Use .env Password" not in html
+assert "stay signed in" not in html and "window.confirm" not in html
+p12post = lambda cl, **f: cl.post("/admin/passwords", data=dict(f, csrf=csrf))
+assert b"Confirm replacing" in p12post(boss, password="new-friends-pass").data and J.password_ok("env-friends-pass")  # no confirm: nothing changes
+assert b"different ones" in p12post(boss, password="env-admin-pass", replace_env="1").data
+assert p12post(boss, password="new-friends-pass", replace_env="1").location == "/admin/passwords?done=passwords"
+saved = (envd / "setup.json").read_text()
+assert "new-friends-pass" not in saved and "env-friends-pass" not in saved and "password_override" in saved
+assert "err=1" in J.app.test_client().post("/login", data={"password": "env-friends-pass"}).location  # old one refused
+assert "err=1" in J.app.test_client().get("/?password=env-friends-pass").location  # and old links
+assert J.app.test_client().post("/login", data={"password": "new-friends-pass"}).location == "/"  # new one works
+assert b"Register iPhone" not in friend.get("/").data and friend.post("/check").status_code == 403  # the friend signed in with the old one is out
+assert b"Changed here, over the one in .env" in boss.get("/admin/passwords").data  # the admin stays in
+html = boss.get("/admin/passwords").data.decode()
+assert html.count("Use .env Password") == 1 and "Use the .env Password?" in html
+# the admin password too: other admin iPhones are signed out, the one making the change stays
+assert p12post(boss, admin_password="new-admin-pass", replace_env="1").location == "/admin/passwords?done=passwords"
+assert boss.get("/admin/passwords").status_code == 200 and other.get("/admin/passwords").location == "/"
+assert J.password_ok("new-admin-pass", admin=True) and not J.password_ok("env-admin-pass", admin=True)
+# a restart with the same .env keeps the overrides
+J2 = boot(envd, **ENV12)
+assert J2.password_ok("new-friends-pass") and not J2.password_ok("env-friends-pass") and J2.password_ok("new-admin-pass", admin=True)
+# 'Use .env Password' drops the friends' override: .env's works again, sessions made with the override are signed out
+friend = J2.app.test_client(); boss = J2.app.test_client()
+assert friend.post("/login", data={"password": "new-friends-pass"}).location == "/" and boss.get("/?password=new-admin-pass").location == "/"
+html = boss.get("/admin/passwords").data.decode(); csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
+assert boss.post("/admin/passwords", data={"csrf": csrf, "use_env": "PASSWORD"}).location == "/admin/passwords?done=env"
+assert J2.password_ok("env-friends-pass") and not J2.password_ok("new-friends-pass") and J2.password_ok("new-admin-pass", admin=True)
+assert b"Register iPhone" not in friend.get("/").data and b"works again" in boss.get("/admin/passwords?done=env").data
+# .env edited to a different admin password: .env wins and the override is dropped
+J3 = boot(envd, PASSWORD="env-friends-pass", ADMIN_PASSWORD="edited-admin-pass", SECRET_KEY="f" * 32)
+assert J3.password_ok("edited-admin-pass", admin=True) and not J3.password_ok("new-admin-pass", admin=True)
+assert "password_override" not in (envd / "setup.json").read_text() and J3.password_ok("env-friends-pass")
 print("ok")
