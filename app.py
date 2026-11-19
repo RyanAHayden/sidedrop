@@ -642,6 +642,21 @@ def home():
 .splash{display:flex;align-items:center;gap:14px;padding:2px 6px 4px} .splash img{width:76px;height:76px;flex:none;border-radius:15px;box-shadow:0 3px 6px rgba(0,0,0,.45)}
 .splash h2{font-size:23px;font-weight:400;letter-spacing:-.3px;line-height:1.15;text-shadow:var(--emboss)} .splash p{margin:3px 0 0;font-size:16px;text-shadow:var(--emboss)}
 .splash p a{font-weight:700}
+/* Apps header, as iFizBox's Home: icon and welcome, then 43px tiles (row 1 an outlined pair over the pinstripes, row 2 two white tiles, row 3 one status tile) */
+.hd{display:flex;align-items:center;padding:4px 0 0 16px} .hd img{width:57px;height:57px;flex:none;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.45)}
+.hd>div{flex:1;display:flex;justify-content:center;min-width:0} .hd h2{font-size:21px;font-weight:400;line-height:26px;text-shadow:var(--emboss)}
+.hd p{margin:0;font-size:17px;line-height:22px;text-shadow:var(--emboss)} .hd p a{font-weight:700;color:#586c90;text-shadow:0 1px 0 #fff}
+.hx{display:flex;flex-direction:column;gap:10px;margin:14px 0 0} .hx .tile{min-height:43px;padding:0 10px;gap:9px;font-size:17px;line-height:1.2;border:1px solid #999;border-radius:8px}
+.hx .hp,.hx .hw{display:grid;grid-template-columns:1fr 1fr} .hx .hw{gap:9px}
+.hx .hp{border:1px solid #999;border-radius:8px;overflow:hidden} .hx .hp .tile{background:none;border:0;border-radius:0} .hx .hp .tile+.tile{border-left:1px solid #999}
+.hx .hw .tile{background:#fff} .hx .tile.reg{background:#eefff0} .hx .tile.todo{background:#fff8e1;border-color:#c9a74a}
+.hx .tile small{display:block;font-size:13px;font-weight:400} .hx .hdt{margin-left:auto;font-weight:400;color:#7f7f7f} .hx .tile:has(.hdt):after{margin-left:8px}
+.hx .tile:after{transition:transform .2s} .hx .tile[aria-expanded=true]:after{transform:rotate(90deg)}
+.hx .tic{width:29px;height:29px;border-radius:6.5px} .hx .tic svg{width:19px;height:19px}
+#setup{margin-top:12px} #setup[hidden]{display:none}
+.dark .hd p a{color:var(--acc);text-shadow:var(--emboss)} .dark .hx .hp{border-color:#0d0e10;box-shadow:0 1px 0 rgba(255,255,255,.06)} .dark .hx .hp .tile+.tile{border-left-color:#0d0e10}
+.dark .hx .tile,.dark .hx .hw .tile,.dark .hx .tile.reg,.dark .hx .tile.todo{background:linear-gradient(#34373d,#2a2d32);border-color:#0d0e10;color:#e6e8eb} .dark .hx .hp .tile{background:none}
+.hx .tile.is-pressed,.dark .hx .tile.is-pressed{background:linear-gradient(#058cf5,#015fe6);color:#fff} .hx .tile.is-pressed small,.hx .tile.is-pressed .hdt{color:#fff}
 /* iOS 5 App Store price button: grey GET, a tap turns it into a green INSTALL, a second tap installs */
 .get{flex:none;display:inline-block;width:auto;min-width:62px;box-sizing:border-box;text-align:center;font-size:12px;font-weight:700;letter-spacing:.02em;line-height:1.2;font-family:inherit;padding:5px 10px;
  border-radius:4px;cursor:pointer;white-space:nowrap;color:#4e5866;text-shadow:var(--emboss);border:1px solid #9aa3ae;background:var(--greybtn);box-shadow:inset 0 1px 0 #fff,0 1px 1px rgba(0,0,0,.12)}
@@ -794,13 +809,21 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div id=scr><!-- only the pages scroll; the bars and alerts sit outside, above it, as in iFizBox: iOS 26 blurs a scroller's top edge, which the
      opaque nav bar then hides, instead of blurring the nav bar itself -->
 <section class=page id=t-apps data-title=sidedrop>
-<div class=splash><img src=/apple-touch-icon.png alt=""><div><h2>Welcome to sidedrop</h2><p>by <a href="https://github.com/RyanAHayden">Ryan Hayden</a></p></div></div>
-{% if not enrolled %}<h3 class=hdr>First, set up this iPhone</h3>
+<div class=hd><img src=/apple-touch-icon.png alt=""><div><div><h2>Welcome to sidedrop</h2><p>by <a href="https://github.com/RyanAHayden">Ryan Hayden (Fizlo)</a></p></div></div></div>
+<div class=hx><div class=hp>
+<a class=tile href="https://github.com/RyanAHayden"><span class=tic style="background:#333"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/></svg></span>GitHub</a>
+<a class=tile href=#ifizbox onclick="go('ifizbox');return false"><span class=tic style="background:#1a82fb"><svg viewBox="0 0 30 30" fill="#fff"><path d="M15 3l11 5.5-11 5.5L4 8.5zM4 10.7l10 5v11.1l-10-5zM16 15.7l10-5v11.1l-10 5z"/></svg></span>iFizBox</a></div>
+<div class=hw>{% if enrolled %}<a class=tile href=#changes onclick="go('changes');return false"><span class=tic style="background:#e0322f"><svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zm0 2.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 1 1 0-13z" fill="#fff"/><path d="M11 7.5h2.2v4.4l3 2-1.2 1.8-4-2.7z" fill="#fff"/></svg></span>Changes</a>
+{% else %}<a class=tile href=#settings onclick="go('settings');goTo(document.getElementById('help'));return false"><span class=tic style="background:#8a929c"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M8.8 9a3.3 3.3 0 1 1 4.6 3c-.9.4-1.4 1.1-1.4 2.2"/><path d="M12 18.3v.2"/></svg></span>Help</a>{% endif %}
+<a class=tile href=#sign onclick="go('settings');goTo(document.getElementById('sign'));return false"><span class=tic style="background:#8e44c9"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</a></div>
+{% if enrolled %}<a class="tile reg" href=#settings onclick="go('settings');return false"><span class=tic style="background:#34a84a"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.5 4.5 8.5-10"/></svg></span>Registered{% if stats and stats[1] %}<span class=hdt>until {{ stats[1].strftime('%b %-d, %Y') }}</span>{% endif %}</a>
+{% else %}<button type=button class="tile todo" id=setupT aria-expanded=false aria-controls=setup onclick="setupOpen(setup.hidden)"><span class=tic style="background:#f08a12"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#f08a12"/></svg></span><div>Set up this iPhone<small>2 steps, then every app unlocks</small></div></button>{% endif %}</div>
+{% if not enrolled %}<div id=setup hidden>
 <details class=c id=sdp open><summary><span class=num>1</span><div>Turn off Stolen Device Protection</div></summary>
 {{ sdp_steps }}
 <button type=button class=gbtn onclick="sdpDone(true)">I turned it off</button></details>
 <div class=c id=reg><div class=sh><span class=num>2</span><div>Register this iPhone<small>In Safari on this iPhone</small></div></div>
-<fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>Registered before but the apps are locked? Register again, it's instant.</small></div>{% endif %}
+<fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>Registered before but the apps are locked? Register again, it's instant.</small></div></div>{% endif %}
 {% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class=row>{{ ifz_icon(ifz) }}
 <div>{{ ifz.title }}<small>Version {{ ifz.short }} · your certificate inside</small></div>
 {% if enrolled %}<a class="get{{ ' done' if mine.get(ifz.name) == ifz.vkey }}" data-app="{{ ifz.name }}" aria-label="{{ ifz.title }}: why and install" href=#ifizbox onclick="go('ifizbox');return false">{{ 'GET' if ifz.name not in mine else 'INSTALLED' if mine[ifz.name] == ifz.vkey else 'UPDATE' }}</a>
@@ -854,7 +877,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% if enrolled %}<h3 class=hdr>Notifications</h3><div class=g><div class=row><div>Update Alerts</div><label class=sw><input type=checkbox id=pushSw aria-label="Update Alerts"
  onchange="pushSet(this.checked)"><i></i><span class=k></span></label></div></div>
 <p class=ftr id=pushNote>Tells you when an app you installed has a new version.</p>{% endif %}
-<h3 class=hdr>Help</h3><div class=g>
+<h3 class=hdr id=help>Help</h3><div class=g>
 {% if enrolled %}<details><summary>Turn off Stolen Device Protection</summary>{{ sdp_steps }}</details>{% endif %}
 <details id=dev><summary>Turn on Developer Mode</summary>
 <figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Privacy &amp; Security</b></span></figcaption>
@@ -1016,7 +1039,8 @@ function steps(b){let open=b.getAttribute("aria-expanded")!="true";b.setAttribut
 function sdpDone(save){let d=document.getElementById("sdp");if(!d)return;d.classList.add("ok");d.open=false;regf.disabled=false;
  if(save){try{localStorage.sdp=1}catch(e){}regf.querySelector("input").focus()}}
 try{if(localStorage.sdp)sdpDone()}catch(e){}
-function nudge(){go("apps");let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
+function setupOpen(on){let s=document.getElementById("setup");if(!s)return;s.hidden=!on;setupT.setAttribute("aria-expanded",on)}  // the Apps header's 'Set up this iPhone' tile unfolds the steps
+function nudge(){go("apps");setupOpen(true);let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();darkSw.checked=document.documentElement.classList.contains("dark")});
 </script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=admin_enabled(), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
