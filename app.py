@@ -439,6 +439,7 @@ theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",the
  --pin:repeating-linear-gradient(90deg,#cbd0da 0 2.5px,#ced3dc 2.5px 8px);--gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
  --tabh:calc(49px + env(safe-area-inset-bottom));--navbg:linear-gradient(#bdcbdc,#597498);--statbg:linear-gradient(#4f698b,#3f5b7f);--navhi:#eff2f7;--navedge:#2d3642;--table:#f7f7f7;--div:#c9c9c9;--divhi:#fff;--barbtn:linear-gradient(#99aac2,#41618e);  /* iOS 6 UIKit nav art: smooth, no gloss split */
  --bluebtn:linear-gradient(#7aa5ef,#3b72d4 50%,#2861c9 51%,#3a73da);--greenbtn:linear-gradient(#8fd96b,#4caa2b 50%,#3c9a1d 51%,#4cae2a);
+ --select:linear-gradient(#85a7e9,#2765db);--sub:#7f7f7f;  /* as iFizBox: a held row's blue (the kit's "Button (Matte Blue)") and a row's subtitle grey */
  --greybtn:linear-gradient(#fdfdfd,#e3e6ea);--emboss:0 1px 0 rgba(255,255,255,.75);--chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17.5 26.4'%3E%3Cpath fill='%237f7f7f' d='M.07 4.23 9.12 13.27 0 22.26 4.12 26.38 17.47 13.03 4.43 0Z'/%3E%3C/svg%3E");background:#c8cfd6}
 /* fixed backdrop: stays put while iOS rubber-bands the page, so the bounce shows pinstripes instead of a flat color */
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
@@ -446,7 +447,7 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
 #scr{scrollbar-width:none} #scr::-webkit-scrollbar{display:none} .page{min-height:calc(100% + 1px)}
 /* scroll indicator, drawn by us between the nav and tab bar (iOS doesn't show one for a scrolling body) */
 /* UIKit's UIScrollerIndicatorDefault: 5pt black at 50% with a 1pt 15% white ring, fully rounded (7pt overall) */
-#sb{position:fixed;right:2px;z-index:6;width:5px;border-radius:3px;background:rgba(0,0,0,.5);box-shadow:0 0 0 1px rgba(255,255,255,.15);opacity:0;transition:opacity .3s;pointer-events:none}
+#sb{position:fixed;right:2px;z-index:6;width:5px;border-radius:3px;background:rgba(0,0,0,.5);box-shadow:0 0 0 1px rgba(255,255,255,.15);opacity:0;transition:opacity .3s,width .1s;pointer-events:none;will-change:transform}
 /* the pages scroll in #scr, a fixed full-screen box, as iFizBox's screens do; <html> and <body> never scroll, and the bars and alerts are outside
    it, above. iOS 26 blurs the top edge of a scroller in the home-screen app, with no switch for it: over a nav bar inside the scroller, or the
    whole page, that washed the bar out; under an opaque bar on top it doesn't show. A fixed box also follows the screen through a rotation, where
@@ -457,21 +458,25 @@ body{font:17px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;-webk
  padding:calc(56px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right),(100% - 30rem)/2) calc(72px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left),(100% - 30rem)/2)}
 a{color:var(--acc);text-decoration:none} small,.m{color:var(--mute)} small{font-size:13px} .err{color:#d70015} h2{font-size:19px;margin:0}
 html{touch-action:manipulation} /* no double-tap zoom; pinch is blocked by the viewport and gesturestart */
-button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #f5c542;outline-offset:2px}
+:focus,:focus-visible{outline:none}  /* as iFizBox: a tapped button kept a ring, which iOS 6 never draws */
+a,img{-webkit-user-drag:none}  /* iFizBox's B24: holding a link row or an image lifted WebKit's skewed drag preview */
 .nav{position:fixed;top:0;left:0;right:0;z-index:5;height:44px;padding:env(safe-area-inset-top) max(7px,env(safe-area-inset-right)) 0 max(7px,env(safe-area-inset-left));
  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
  background:linear-gradient(var(--navedge),var(--navedge)) bottom/100% 1px no-repeat,linear-gradient(var(--navhi),var(--navhi)) 0 env(safe-area-inset-top)/100% 1px no-repeat,var(--navbg) bottom/100% 44px no-repeat,var(--statbg)}
 /* the kit's nav shadow: 2.5px of black at 18% fading down over the page */
 .nav:after{content:"";position:absolute;left:0;right:0;top:100%;height:2.5px;pointer-events:none;background:linear-gradient(rgba(0,0,0,.18),rgba(0,0,0,0))}
-.nav h1{margin:0;font-size:20px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45)}
-.nav .bar{justify-self:start;width:auto;font-size:12px;font-weight:700;line-height:1.2;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45);background:var(--barbtn);border:1px solid #2f4769;border-top-color:#343a42;
- border-radius:5px;padding:6px 10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 0 rgba(255,255,255,.25)} .nav .bar.r{justify-self:end}
+.nav h1{margin:0;font-size:20px;font-weight:700;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);max-width:calc(100vw - 180px);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+/* bar buttons as iFizBox's: 29pt high, a long label ends in "…", and background-origin:border-box, without which the gradient tiles into the
+   1px border and its light top shows as a line along the bottom */
+.nav .bar{justify-self:start;width:auto;height:29px;min-width:50px;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:12px;font-weight:700;line-height:27px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45);
+ background:var(--barbtn);background-origin:border-box;border:1px solid #2f4769;border-top-color:#343a42;
+ border-radius:5px;padding:0 9px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 0 rgba(255,255,255,.25)} .nav .bar.r{justify-self:end}
 /* iOS 6 back button: arrow art drawn after UIKit's UINavigationBarDefaultBack, stretched through the middle */
-.nav .back{display:inline-flex;align-items:center;height:30px;box-sizing:border-box;max-width:40vw;overflow:hidden;white-space:nowrap;padding:0 5px 0 1px;background:none;box-shadow:none;border-radius:0;
+.nav .back{display:inline-block;height:30px;line-height:28px;min-width:0;box-sizing:border-box;max-width:40vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 5px 0 1px;background:none;box-shadow:none;border-radius:0;
  border:solid transparent;border-width:0 5px 0 13px;border-image:url(/static/back.svg) 0 10 0 26 fill/0 5px 0 13px} .nav .back.is-pressed{border-image-source:url(/static/back-pressed.svg)} .dark .nav .back.is-pressed{filter:brightness(.75)}
 /* pressed states (UIKit's *Pressed art), on .is-pressed: the script below sets it while a finger is down */
-.nav .bar:not(.back).is-pressed{background:linear-gradient(#8b97af,#283e6b);border-color:#1c2c4f;border-top-color:#30343c}
-.dark .nav .bar:not(.back).is-pressed{background:linear-gradient(#2a2d32,#121316)}
+.nav .bar:not(.back).is-pressed{background:linear-gradient(#8b97af,#283e6b);background-origin:border-box;border-color:#1c2c4f;border-top-color:#30343c}
+.dark .nav .bar:not(.back).is-pressed{background:linear-gradient(#2a2d32,#121316);background-origin:border-box}
 /* held buttons, from the 4S art: white/grey round buttons go blue (iTunesStoreUI GradientButtonBackgroundPressed, same as the tiles);
    blue and green darken the way PurchaseButtonBluePressed (x.75) and PurchaseConfirmButtonPressed (x.8) do; red from UIAlertSheetDefaultDestroyButtonPressed */
 .get:not(.go):not(.blue).is-pressed,a.b.grey.is-pressed,label.b.grey.is-pressed,button.grey.is-pressed,.act:not(.red).is-pressed{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.3);border-color:#005ee8;background:linear-gradient(#058af5,#0160e6);box-shadow:none}
@@ -499,7 +504,10 @@ textarea{width:100%;box-sizing:border-box;font:12px/1.5 ui-monospace,Menlo,monos
  background:linear-gradient(#eef0f3,#fff 12px);box-shadow:inset 0 1px 2px rgba(0,0,0,.15);white-space:pre;overflow-x:auto}
 ol{margin:0;padding-left:1.3rem} li{margin:.35rem 0}
 .row{display:flex;align-items:center;gap:10px;min-height:43px;box-sizing:border-box;padding:8px 10px;border-top:1px solid var(--div);box-shadow:inset 0 1px 0 var(--divhi)}
-.g>:first-child{border-top:0!important} .row>div:not(.ico){flex:1;min-width:0} .row small{display:block}
+.g>:first-child{border-top:0!important} .row>div:not(.ico){flex:1;min-width:0} .row small{display:block;font-size:14px;color:var(--sub)}
+/* a held row in a table (a file link, a Help row) takes iFizBox's cell selection: the blue, white text, a white chevron */
+.g a.row.is-pressed,.g details>summary.is-pressed,.dark .g a.row.is-pressed,.dark .g details>summary.is-pressed{background:var(--select);color:#fff;text-shadow:none}
+.g a.row.is-pressed *,.g details>summary.is-pressed *{color:#fff} .g details>summary.is-pressed:after{filter:brightness(0) invert(1)}
 .ico{position:relative;width:50px;height:50px;flex:none;border-radius:10px;object-fit:cover;display:grid;place-items:center;color:#fff;font-weight:700;font-size:21px;
  text-shadow:0 -1px 0 rgba(0,0,0,.3);box-shadow:0 1px 3px rgba(0,0,0,.45)} div.ico:after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--gloss)}
 .locked .ico{filter:grayscale(.8);opacity:.6}
@@ -507,19 +515,27 @@ details{border-top:1px solid var(--sep)} details>summary{list-style:none;cursor:
  padding:0 10px;font-weight:700} details>summary::-webkit-details-marker{display:none}
 details>summary:after{content:"";flex:none;width:9px;height:13px;margin-right:.5px;background:var(--chev) center/contain no-repeat;transition:transform .2s}
 details[open]>summary:after{transform:rotate(90deg)} details>:not(summary){margin:0 10px 12px}
-.scrim[hidden]{display:none} .scrim{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:16px;background:radial-gradient(rgba(0,0,0,.2),rgba(0,0,0,.6))}
-.alert{width:min(284px,100%);box-sizing:border-box;border-radius:10px;border:2px solid #b1b7c1;border-bottom-color:#e1e3e3;padding:16px 14px 14px;text-align:center;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);
- background:linear-gradient(rgba(255,255,255,.25),rgba(255,255,255,.06) 40px,transparent 41px),rgba(4,20,70,.88);box-shadow:0 4px 18px rgba(0,0,0,.6),inset 0 0 0 1px #000;animation:pop .3s ease-out}
-@keyframes pop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.07);opacity:1}100%{transform:scale(1)}}
-.alert h3{margin:0 0 6px;font-size:17px} .alert p{margin:0 0 12px;font-size:15px}
-.abtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+/* UIAlertView as iFizBox draws it (its sources.css): one grid column exactly the screen's width (B32: a long URL in a message can't push the box
+   off the screen), the box widened from iOS 6's 284pt to 340 for today's screens, #0b1b43 at 80% in a 2px rim, a white gloss over the top 31px that
+   dips in a curve, 18pt titles and buttons, and the iOS bounce (scale 1.15, .95, 1.02, 1 in 360 ms) while the scrim fades in */
+.scrim[hidden]{display:none} .scrim{position:fixed;inset:0;z-index:20;display:grid;grid-template-columns:minmax(0,1fr);place-items:center;padding:16px;
+ background:radial-gradient(ellipse at center,rgba(0,0,0,.25),rgba(0,0,0,.6) 70%);animation:fadein .2s ease-out} .scrim.clear{animation:none}
+@keyframes fadein{from{opacity:0}}
+.alert{position:relative;width:min(340px,100%);max-width:100%;min-width:0;box-sizing:border-box;border-radius:10px;border:2px solid #b1b7c1;border-bottom-color:#e1e3e3;padding:16px 12px 11px;text-align:center;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.8);
+ background:rgba(11,27,67,.8);box-shadow:0 8px 19px rgba(0,0,0,.9);animation:pop .36s ease-out}
+.alert:before{content:"";position:absolute;left:0;right:0;top:0;height:31px;border-radius:8px 8px 0 0;pointer-events:none;
+ background:radial-gradient(ellipse 150% 100% at 50% 0,rgba(255,255,255,.5),rgba(255,255,255,.25) 99%,transparent 100%)}
+@keyframes pop{0%{transform:scale(1.15);opacity:0}55%{transform:scale(.95);opacity:1}80%{transform:scale(1.02)}100%{transform:scale(1)}}
+.alert h3{position:relative;margin:0 0 6px;font-size:18px;line-height:22px;overflow-wrap:anywhere;word-break:break-word}
+.alert p{position:relative;margin:0 0 10px;font-size:16px;line-height:20px;overflow-wrap:anywhere;word-break:break-word}
+.abtns{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
 /* UIKit alert buttons: UIPopupAlertSheetDefaultButton (Cancel), UIPopupAlertSheetButton (OK), UIPopupAlertSheetButtonPress */
-.alert .abtns button{height:43px;padding:0;font-size:16px;border:1px solid rgba(19,29,57,.9);border-radius:5px;box-shadow:none;
+.alert .abtns button{height:43px;min-width:0;padding:0 6px;font-size:18px;text-shadow:0 -1px 0 rgba(0,0,0,.8);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;border:1px solid rgba(19,29,57,.9);border-radius:5px;box-shadow:none;
  
  background:linear-gradient(#707a91,#283659 49%,#0b1b43 50%,#182747)}  /* Cancel-style (left), as UIAlertView draws it on the 4S */
 .alert .abtns .ok{background:linear-gradient(#b4b9c8,#5f6882 49%,#596484 51%,#4d597a)}  /* sampled from Cydia's alert on the 4S: opaque greys, no white line */
 /* Dark Mode (follows the phone, or the Settings tab switch): gunmetal bars, dark pinstripes, inverted emboss */
-html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6fa8ff;--head:#8b9099;--emboss:0 -1px 0 #000;
+html.dark{color-scheme:dark;--mute:#8b9099;--sub:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6fa8ff;--head:#8b9099;--emboss:0 -1px 0 #000;
  --pin:repeating-linear-gradient(90deg,#1b1d21 0 5px,#202227 5px 7px);--navbg:linear-gradient(#5f656f,#3b4048 50%,#30343b 51%,#23262b);--statbg:#000;--navhi:#7a808a;--navedge:#0b0c0e;--table:#2c2f34;--div:#17191c;--divhi:rgba(255,255,255,.07);
  --barbtn:linear-gradient(#4a4f58,#24272c);--greybtn:linear-gradient(#4a4f58,#2c2f34);background:#1d1f23}
 .dark body{color:#e6e8eb} .dark .nav .bar{border-color:#111} .dark .nav .back{border-image-source:url(/static/back-dark.svg)}
@@ -535,7 +551,12 @@ html.dark{color-scheme:dark;--mute:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6
  background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7)) bottom/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.2),rgba(255,255,255,.2)) top/100% 1px no-repeat,linear-gradient(rgba(76,76,76,.8),rgba(0,0,0,.8) 52%);
  transform:translateY(100%);transition:transform .25s ease-in} html.reloading #rbar{transform:none;transition:transform .3s cubic-bezier(.25,.1,.25,1)}  /* F204's timings: up .3s, down .25s */
 html.reloading #scr{padding-bottom:calc(116px + env(safe-area-inset-bottom))}
-.spin{width:20px;height:20px;flex:none;animation:spin 1s steps(12) infinite} @keyframes spin{to{transform:rotate(360deg)}}
+.spin{width:20px;height:20px;flex:none;animation:spin .96s linear infinite}
+/* iFizBox's F166: spinners turn a spoke at a time by holding each 30-degree turn for 1/12 of the cycle. Not steps(12): WebKit on iOS 15 hands the
+   animation to Core Animation, where steps() leaves it standing still */
+@keyframes spin{0%,8.332%{transform:rotate(0)}8.333%,16.666%{transform:rotate(30deg)}16.667%,24.999%{transform:rotate(60deg)}25%,33.332%{transform:rotate(90deg)}
+ 33.333%,41.666%{transform:rotate(120deg)}41.667%,49.999%{transform:rotate(150deg)}50%,58.332%{transform:rotate(180deg)}58.333%,66.666%{transform:rotate(210deg)}
+ 66.667%,74.999%{transform:rotate(240deg)}75%,83.332%{transform:rotate(270deg)}83.333%,91.666%{transform:rotate(300deg)}91.667%,100%{transform:rotate(330deg)}}
 .scrim.clear{background:none} .nw{white-space:nowrap} .a2l>span{display:block;margin:2px 0} .ic{width:1.15em;height:1.15em;vertical-align:-.2em;margin-right:3px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
 {% if back %}<header class=nav><a class="bar back" href="{{ back[1] }}" onclick="return goBack(this.href)">{{ back[0] }}</a><h1>{{ title }}</h1><span></span></header>
@@ -555,7 +576,7 @@ function goTo(el){let b=scr;b.scrollTo({top:Math.min(b.scrollTop+el.getBoundingC
 addEventListener("gesturestart",e=>e.preventDefault())
 /* pressed looks: .is-pressed while a finger is down, off when it lifts, slides off the control or the page scrolls.
    Not :active: iOS keeps that on a held control after the touch has turned into a scroll. A quick tap still shows it for 140 ms, as UIKit does. */
-const PRESS=".get,.tile,a.b,label.b,button,.nav .bar,.sw";let pd=null,pdAt=0;
+const PRESS=".get,.tile,a.b,label.b,button,.nav .bar,.sw,.g a.row,.g details>summary";let pd=null,pdAt=0;
 const unpress=now=>{let el=pd;if(!el)return;pd=null;setTimeout(()=>{if(pd!==el)el.classList.remove("is-pressed")},now?0:Math.max(0,140-(performance.now()-pdAt)))};
 addEventListener("touchstart",e=>{unpress(1);let el=e.target.closest&&e.target.closest(PRESS);if(!el||el.disabled||e.touches.length>1)return;pd=el;pdAt=performance.now();el.classList.add("is-pressed")},{passive:true});
 addEventListener("touchmove",e=>{let t=e.touches[0];if(pd&&!pd.contains(document.elementFromPoint(t.clientX,t.clientY)))unpress(1)},{passive:true});
@@ -668,7 +689,7 @@ def home():
 #setup{margin-top:12px} #setup[hidden]{display:none}
 .dark .hd p a{color:var(--acc);text-shadow:var(--emboss)} .dark .hx .hp{border-color:#0d0e10;box-shadow:0 1px 0 rgba(255,255,255,.06)} .dark .hx .hp .tile+.tile{border-left-color:#0d0e10}
 .dark .hx .tile,.dark .hx .hw .tile,.dark .hx .tile.reg,.dark .hx .tile.todo{background:linear-gradient(#34373d,#2a2d32);border-color:#0d0e10;color:#e6e8eb} .dark .hx .hp .tile{background:none}
-.hx .tile.is-pressed,.dark .hx .tile.is-pressed{background:linear-gradient(#058cf5,#015fe6);color:#fff} .hx .tile.is-pressed small,.hx .tile.is-pressed .hdt{color:#fff}
+.hx .tile.is-pressed,.dark .hx .tile.is-pressed{background:var(--select);color:#fff} .hx .tile.is-pressed small,.hx .tile.is-pressed .hdt{color:#fff}
 /* iOS 5 App Store price button: grey GET, a tap turns it into a green INSTALL, a second tap installs */
 .get{flex:none;display:inline-block;width:auto;min-width:62px;box-sizing:border-box;text-align:center;font-size:12px;font-weight:700;letter-spacing:.02em;line-height:1.2;font-family:inherit;padding:5px 10px;
  border-radius:4px;cursor:pointer;white-space:nowrap;color:#4e5866;text-shadow:var(--emboss);border:1px solid #9aa3ae;background:var(--greybtn);box-shadow:inset 0 1px 0 #fff,0 1px 1px rgba(0,0,0,.12)}
@@ -707,9 +728,11 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .split .tile+.tile{border-left:1px solid var(--sep)} .pair .tile{border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8)}
 .tile:after{content:"";margin-left:auto;flex:none;width:9px;height:13px;margin-right:.5px;background:var(--chev) center/contain no-repeat}
 .tile.is-pressed:after,.tile.sel:after{filter:brightness(0) invert(1)}
-.tile.is-pressed,.tile.sel{background:linear-gradient(#058cf5,#015fe6);color:#fff}
-.tic{position:relative;flex:none;width:30px;height:30px;border-radius:7px;display:grid;place-items:center;box-shadow:0 1px 2px rgba(0,0,0,.4)}
-.tic:after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--gloss)} .tic svg{width:19px;height:19px}
+.tile.is-pressed,.tile.sel,.dark .tile.is-pressed,.dark .tile.sel{background:var(--select);color:#fff}  /* iFizBox's cell selection */
+/* row icons as iFizBox's F205 (iOS 6 Settings, measured on the 4S): a flat 29pt tile, 6pt corners, no gloss or shadow (user's pick for iFizBox),
+   7pt in from the row's edge with the label 11pt after it */
+.tic{position:relative;flex:none;width:29px;height:29px;border-radius:6px;display:grid;place-items:center} .tic svg{width:19px;height:19px}
+.split .tile,.pair .tile{padding-left:7px;gap:11px}
 .out{margin-top:20px}
 /* switch: the Teehan+Lax kit's size (77x27 track, 25pt knob 1pt inside it, 50pt travel); the knob, the blue fill (ends at the knob's centre) and both labels all ride on --x, so ON moves like OFF when tapped or dragged */
 .sw{position:relative;flex:none;width:77px;height:27px;--x:0px} .sw:has(input:checked){--x:50px}
@@ -759,8 +782,10 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 /* iOS 5 red count badge on the Changes tab */
 .badge{position:absolute;top:-2px;left:calc(50% + 5px);min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:10px;border:2px solid #fff;color:#fff;letter-spacing:-.02em;
  font:700 13px/16px "Helvetica Neue",Helvetica,sans-serif;text-align:center;background:linear-gradient(#f7b3b7,#e92d35 48.8%,#e70f19 50.5%,#c50103);box-shadow:0 2px 2.5px rgba(0,0,0,.6)}
-/* Cydia: while it checks for updates the badge spins instead of counting */
-.badge.busy{font-size:0;padding:0} .badge.busy:after{content:"";position:absolute;inset:0;margin:auto;width:10px;height:10px;box-sizing:border-box;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+/* Cydia: while it checks for updates the badge spins instead of counting. As iFizBox's: the white UIActivityIndicatorView (spokes drawn from the
+   4S's frames) inside the 2px ring, turning a spoke at a time */
+.badge.busy{font-size:0;padding:0;width:20px} .badge.busy:after{content:"";position:absolute;inset:0;animation:spin .96s linear infinite;
+ background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cg stroke='%23fff' stroke-width='2' stroke-linecap='round'%3E%3Cline x1='10' y1='1' x2='10' y2='4' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(30 10 10)' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(60 10 10)' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(90 10 10)' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(120 10 10)' opacity='0.369'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(150 10 10)' opacity='0.463'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(180 10 10)' opacity='0.561'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(210 10 10)' opacity='0.659'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(240 10 10)' opacity='0.753'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(270 10 10)' opacity='0.851'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(300 10 10)' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(330 10 10)' opacity='0.271'/%3E%3C/g%3E%3C/svg%3E") center/16px no-repeat}
 /* Cydia tab bar: 3pt + 44pt tabs + 2pt, then the home indicator's area. --tabh, in CSS (not measured once by script, before iOS has applied
    the safe area), so the reload bar and pushed pages always sit right on top of it */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;height:var(--tabh);box-sizing:border-box;display:grid;grid-template-columns:repeat(4,1fr);
@@ -874,11 +899,11 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% else %}<button type=button class=gbtn onclick="nudge()">Register This iPhone First</button>{% endif %}
 <small>Version {{ ifz.short }}, signed for this iPhone. Your certificate and {{ n_sources }} sources come with it.</small></div>
 <h3 class=hdr>Why {{ ifz.title }}</h3><div class="g why">
-<div class=row><span class=tic style="background:linear-gradient(#ffb36b,#d9650f)"><svg viewBox="0 0 24 24"><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="#fff" stroke-width="2.4"/><rect x="5" y="11" width="14" height="10" rx="2" fill="#fff"/></svg></span><div><b>Your certificate, already in it</b><small>No .p12 to find and no password to type: it signs with this site's certificate from the first launch.</small></div></div>
-<div class=row><span class=tic style="background:linear-gradient(#8fc6ff,#2a72d6)"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="4" rx="1.5" fill="#fff"/><rect x="4" y="10" width="16" height="4" rx="1.5" fill="#fff"/><rect x="4" y="16" width="16" height="4" rx="1.5" fill="#fff"/></svg></span><div><b>Comes with the sources</b><small>{{ n_sources }} sources, ready the first time it opens.</small></div></div>
-<div class=row><span class=tic style="background:linear-gradient(#8fd96b,#3c9a1d)"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><path d="M12 7v7m-3-3 3 3 3-3" fill="none" stroke="#3c9a1d" stroke-width="2"/></svg></span><div><b>Signs on your iPhone</b><small>Install any IPA or AltStore app right on the phone: no computer, nothing uploaded.</small></div></div>
-<div class=row><span class=tic style="background:linear-gradient(#ff8f8f,#d42a2a)"><svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zm0 2.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 1 1 0-13z" fill="#fff"/><path d="M11 7.5h2.2v4.4l3 2-1.2 1.8-4-2.7z" fill="#fff"/></svg></span><div><b>Updates in one tap</b><small>Changes lists the new versions of what you installed.</small></div></div>
-<div class=row><span class=tic style="background:linear-gradient(#b7c0cc,#5d6878)"><svg viewBox="0 0 24 24"><path d="M12 3 21 7.5v9L12 21l-9-4.5v-9z" fill="#fff"/></svg></span><div><b>The iOS 6 look, at 120 Hz</b><small>A package manager with the classic look, smooth on today's iPhones.</small></div></div></div>
+<div class=row><span class=tic style="background:#f08b1d"><svg viewBox="0 0 24 24"><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="#fff" stroke-width="2.4"/><rect x="5" y="11" width="14" height="10" rx="2" fill="#fff"/></svg></span><div><b>Your certificate, already in it</b><small>No .p12 to find and no password to type: it signs with this site's certificate from the first launch.</small></div></div>
+<div class=row><span class=tic style="background:#3f80e0"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="4" rx="1.5" fill="#fff"/><rect x="4" y="10" width="16" height="4" rx="1.5" fill="#fff"/><rect x="4" y="16" width="16" height="4" rx="1.5" fill="#fff"/></svg></span><div><b>Comes with the sources</b><small>{{ n_sources }} sources, ready the first time it opens.</small></div></div>
+<div class=row><span class=tic style="background:#40ae4c"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><path d="M12 7v7m-3-3 3 3 3-3" fill="none" stroke="#3c9a1d" stroke-width="2"/></svg></span><div><b>Signs on your iPhone</b><small>Install any IPA or AltStore app right on the phone: no computer, nothing uploaded.</small></div></div>
+<div class=row><span class=tic style="background:#e2382f"><svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zm0 2.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 1 1 0-13z" fill="#fff"/><path d="M11 7.5h2.2v4.4l3 2-1.2 1.8-4-2.7z" fill="#fff"/></svg></span><div><b>Updates in one tap</b><small>Changes lists the new versions of what you installed.</small></div></div>
+<div class=row><span class=tic style="background:#8c9097"><svg viewBox="0 0 24 24"><path d="M12 3 21 7.5v9L12 21l-9-4.5v-9z" fill="#fff"/></svg></span><div><b>The iOS 6 look, at 120 Hz</b><small>A package manager with the classic look, smooth on today's iPhones.</small></div></div></div>
 <p class=ftr>It needs Developer Mode, like every app here. <a href="https://ifizbox.com">ifizbox.com</a></p>
 {% else %}<p class="c m">iFizBox isn't here yet. Tap Reload in a minute.</p>{% endif %}
 </section>
@@ -890,12 +915,12 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% if stats[1] %}<div class=kv><b>Apps work until</b><span>{{ stats[1].strftime('%b %-d, %Y') }}</span></div>{% endif %}{% endif %}</div>
 {% if enrolled %}<p class=ftr>This iPhone is registered and can install every app.</p>{% endif %}
 <div class="g split">
-{% if is_admin %}<a class=tile href=/admin data-push><span class=tic style="background:linear-gradient(#ffb36b,#d9650f)"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="#fff"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z" fill="#fff"/></svg></span>Manage</a>
-{% else %}<a class=tile href=#apps><span class=tic style="background:linear-gradient(#8fd96b,#3c9a1d)"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#3c9a1d"/></svg></span>Register</a>{% endif %}
-<button type=button class=tile onclick="goTo(document.getElementById('sign'))"><span class=tic style="background:linear-gradient(#b7c0cc,#5d6878)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</button></div>
+{% if is_admin %}<a class=tile href=/admin data-push><span class=tic style="background:#f08b1d"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="#fff"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z" fill="#fff"/></svg></span>Manage</a>
+{% else %}<a class=tile href=#apps><span class=tic style="background:#40ae4c"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#3c9a1d"/></svg></span>Register</a>{% endif %}
+<button type=button class=tile onclick="goTo(document.getElementById('sign'))"><span class=tic style="background:#8e44c9"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</button></div>
 <div class=pair>
-<button type=button class=tile onclick="let d=document.getElementById('dev');d.open=true;goTo(d)"><span class=tic style="background:linear-gradient(#bfc4c9,#5f666e)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-dasharray="2.4 2"><circle cx="12" cy="12" r="7"/></svg></span>Help</button>
-<button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:linear-gradient(#8fc6ff,#2a72d6)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
+<button type=button class=tile onclick="let d=document.getElementById('dev');d.open=true;goTo(d)"><span class=tic style="background:#8a929c"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-dasharray="2.4 2"><circle cx="12" cy="12" r="7"/></svg></span>Help</button>
+<button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:#3f80e0"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
 <h3 class=hdr>Display</h3><div class=g><div class=row><div>Dark Mode</div><label class=sw><input type=checkbox id=darkSw aria-label="Dark Mode"
  onchange="try{localStorage.dark=this.checked?1:0}catch(e){}theme()"><i></i><span class=k></span></label></div></div>
 {% if enrolled %}<h3 class=hdr>Notifications</h3><div class=g><div class=row><div>Update Alerts</div><label class=sw><input type=checkbox id=pushSw aria-label="Update Alerts"

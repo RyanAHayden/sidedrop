@@ -1,4 +1,7 @@
 # TODO — open tasks, in order
 
 ### Next
-- [ ] **F5** Bring over iFizBox's UI improvements: compare sidedrop's page to the current iFizBox web app (~/repos/iFizBox web/app) and port the look/feel improvements made since sidedrop copied it (nav and tab bars, lists, pressed states, alerts, settings rows and switches). Write the list of what was ported in the commit. Check: test_app.py still passes; screenshots before/after in the journal. | files: app.py, static/**
+
+### Parked
+
+- [ ] **F8** (follow-up, later) Dark Mode as iFizBox's OLED Black (its default dark palette since F198, 2026-11-18): black ground, bars and tab bar, near-black tables, no pinstripe or emboss; gunmetal (sidedrop's current dark) kept or dropped as the user picks. Token values in ~/repos/iFizBox/web/app/ios6.css html[data-theme=dark]. Left out of F5 because it changes the whole dark look, not one control | files: app.py
