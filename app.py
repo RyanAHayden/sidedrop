@@ -490,23 +490,184 @@ def version_foot():
     udid = token_udid(tok)
     return Markup(render_template_string(VERSION_FOOT, m=device_model(udid if udid in profile_udids() else None), commit=COMMIT))
 
+
+# ---- F18: themes, after iFizBox's Settings > Theme (its ios6.css, palettes.css and theme-boot.js; values copied, no file shared) ----
+# <html data-theme=light|dark data-palette=<name>> (plus the old .dark class on a dark page, which every .dark rule below keys on) is put
+# on the page before first paint by THEME_BOOT. Each palette is one block of sidedrop's own CSS variables: Classic is also :root's and
+# Gunmetal (sidedrop's dark before F18) also html.dark's, so every other palette only has to win over those. The first of each tone is
+# its default. A new palette: add it here with every token its tone's first block sets (test_app.py checks).
+def back_arrow(edge_top, edge_bottom, fill_top, fill_bottom, rim=".3"):
+    """static/back.svg (the iOS 6 back button) with a palette's edge and fill gradients, as a data: URL."""
+    stops = iter((edge_top, edge_bottom, fill_top, fill_bottom))
+    svg = re.sub(r'stop-color="[^"]+"', lambda m: f'stop-color="{next(stops)}"', BACK_SVG).replace('opacity=".3"', f'opacity="{rim}"')
+    return 'url("data:image/svg+xml;base64,' + base64.b64encode(svg.encode()).decode() + '")'
+
+
+BACK_SVG = (Path(__file__).with_name("static") / "back.svg").read_text().strip()
+pin = lambda a, b: f"repeating-linear-gradient(90deg,{a} 0 2.5px,{b} 2.5px 8px)"  # the pinstripe: 2.5px dark, 5.5px light
+nav = lambda edge, hi, bar, status: f"--navedge:{edge};--navhi:{hi};--navbg:{bar};--statbg:{status};"
+TABS_BLACK = ("linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7)) top/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.1),rgba(255,255,255,.1)) 0 1px/100% 1px no-repeat,"
+              "linear-gradient(#2f2f2f,#151515 49.5%,#000 49.5%) 0 1px/100% 48px no-repeat,#000")  # the kit's black tab bar
+# name: (tone, label, Safari's top-bar colour (iFizBox's THEME_COLORS), tokens)
+PALETTES = {
+    "classic": ("light", "Classic", "#4f698b",
+        "--text:#000;--plain:#fff;--ground:#c8cfd6;--pin:" + pin("#cbd0da", "#ced3dc") + ";--head:#4c566c;--emboss:0 1px 0 rgba(255,255,255,.75);--acc:#385487;"
+        "--select:linear-gradient(#85a7e9,#2765db);--sub:#7f7f7f;--mute:#6d7480;--table:#f7f7f7;--line:#b7b9bd;--div:#c9c9c9;--divhi:#fff;--sep:#e0e0e0;"
+        + nav("#2d3642", "#eff2f7", "linear-gradient(#bdcbdc,#597498)", "linear-gradient(#4f698b,#3f5b7f)") +
+        "--barbtn:linear-gradient(#99aac2,#41618e);--barpress:linear-gradient(#8b97af,#283e6b);--baredge:#2f4769;--baredgetop:#343a42;--barpe:#1c2c4f;--barpet:#30343c;"
+        "--back:url(/static/back.svg);--backp:url(/static/back-pressed.svg);--greybtn:linear-gradient(#fdfdfd,#e3e6ea);--tabbar:" + TABS_BLACK + ";"
+        "--cyh:linear-gradient(rgba(152,165,177,.92),rgba(184,193,201,.92))"),
+    "sepia": ("light", "Sepia", "#7a5c36",  # iBooks 2012's sepia page, a leather-brown nav bar
+        "--text:#3b2f22;--plain:#fbf4e4;--ground:#ebdfc5;--pin:" + pin("#e6d9bd", "#ebdfc5") + ";--head:#6b5434;--emboss:0 1px 0 rgba(255,250,235,.75);--acc:#8a5a2b;"
+        "--select:linear-gradient(#c9a26e,#93652f);--sub:#806b52;--mute:#806b52;--table:#fbf4e4;--line:#c2b08a;--div:#dccdab;--divhi:#fffaf0;--sep:#e5d9be;"
+        + nav("#3e2e1a", "#f5ecdc", "linear-gradient(#d2bf9c,#8c6c43)", "linear-gradient(#7a5c36,#6a4e2c)") +
+        "--barbtn:linear-gradient(#c4a77d,#7f5f36);--barpress:linear-gradient(#b39469,#5f4424);--baredge:#5a4224;--baredgetop:#3f3a33;--barpe:#5a4224;--barpet:#3f3a33;"
+        f"--back:{back_arrow('#3f3a33', '#5a4224', '#c4a77d', '#7f5f36')};--backp:{back_arrow('#3a3530', '#4a361c', '#b39469', '#5f4424')};"
+        "--greybtn:linear-gradient(#fdf9ef,#ece2cb);--tabbar:" + TABS_BLACK + ";"
+        "--cyh:linear-gradient(rgba(146,118,80,.9),rgba(190,166,128,.9) 5%,rgba(184,160,122,.9) 94%,rgba(150,124,88,.9))"),
+    "solarized": ("light", "Solarized", "#2a74a8",  # Solarized Light: base3 tables on base2, a Solarized-blue nav bar
+        "--text:#073642;--plain:#fdf6e3;--ground:#eee8d5;--pin:" + pin("#e9e2cd", "#eee8d5") + ";--head:#4d6168;--emboss:0 1px 0 rgba(253,246,227,.8);--acc:#1b6fab;"
+        "--select:linear-gradient(#5aa9e0,#1f73b0);--sub:#586e75;--mute:#586e75;--table:#fdf6e3;--line:#c9c1aa;--div:#e2dbc4;--divhi:#fffcf2;--sep:#eee8d5;"
+        + nav("#0f3d5c", "#e6f2fa", "linear-gradient(#9fcbea,#2f7fb8)", "linear-gradient(#2a74a8,#22679b)") +
+        "--barbtn:linear-gradient(#79b3dd,#22679b);--barpress:linear-gradient(#6aa0c8,#1a547f);--baredge:#1d4f73;--baredgetop:#2f3a40;--barpe:#1d4f73;--barpet:#2f3a40;"
+        f"--back:{back_arrow('#2f3a40', '#1d4f73', '#79b3dd', '#22679b')};--backp:{back_arrow('#2a343a', '#163f5d', '#6aa0c8', '#1a547f')};"
+        "--greybtn:linear-gradient(#fffcf2,#eee8d5);--tabbar:" + TABS_BLACK + ";"
+        "--cyh:linear-gradient(rgba(101,123,131,.9),rgba(147,161,161,.9) 5%,rgba(140,155,156,.9) 94%,rgba(106,126,132,.9))"),
+    "oled": ("dark", "OLED Black", "#000",  # pure black ground and bars, near-black tables, no pinstripe or emboss
+        "--text:#fff;--plain:#000;--ground:#000;--pin:#000;--head:#d6d6db;--emboss:none;--acc:#5fa2ff;--sub:#8d8d93;--mute:#8d8d93;"
+        "--table:#0e0e0f;--line:#1f1f22;--div:#1c1c1f;--divhi:transparent;--sep:#1c1c1f;--inset:transparent;--rowbg:#0e0e0f;--keyline:#1c1c1f;"
+        + nav("#1a1a1c", "rgba(255,255,255,.16)", "linear-gradient(#333336,#151517 50%,#070708 51%,#000)", "#000") +
+        "--barbtn:linear-gradient(#3a3a3e,#121214);--barpress:linear-gradient(#1c1c1f,#050506);--baredge:#000;--baredgetop:#000;--barpe:#000;--barpet:#000;"
+        f"--back:{back_arrow('#000', '#000', '#3a3a3e', '#121214', '.12')};--backp:var(--back);--tabbar:linear-gradient(#1c1c1e,#1c1c1e) top/100% 1px no-repeat,#000;"
+        "--cyh:linear-gradient(rgba(36,36,40,.94),rgba(22,22,24,.94) 5%,rgba(14,14,15,.94) 94%,rgba(0,0,0,.94));"
+        "--field:#1c1c1f;--fieldtext:#d6d6db;--btn:linear-gradient(#3a3a3e,#1c1c1f 90%,#121214);--btnhi:transparent;--greybtn:linear-gradient(#3a3a3e,#121214);"
+        "--getc:#d6d6db;--getoff:#8d8d93;--getdown:linear-gradient(#1c1c1f,#0e0e0f);--steps:linear-gradient(#000,#0e0e0f);--greenbg:#0f2414;--greenline:#1c1c1f;"
+        "--warnbg:#241f08;--warnedge:#5a4f1a;--warntext:#fff3b0;--badbg:#2a1212;--badedge:#610d14;--badtext:#ff7b6b;"
+        "--swtrack:linear-gradient(#0e0e0f,#1f1f22);--swoff:#8d8d93;--swon:linear-gradient(#0b4fb0,#3d8cf0);--swknob:linear-gradient(#55555b,#2a2a2e);--swheld:linear-gradient(#444449,#1f1f22)"),
+    "gunmetal": ("dark", "Gunmetal", "#5f656f",  # sidedrop's dark before F18: gunmetal bars, dark pinstripes, inverted emboss
+        "--text:#e6e8eb;--plain:#2c2f34;--ground:#1d1f23;--pin:repeating-linear-gradient(90deg,#1b1d21 0 5px,#202227 5px 7px);--head:#8b9099;--emboss:0 -1px 0 #000;"
+        "--acc:#6fa8ff;--sub:#8b9099;--mute:#8b9099;--table:#2c2f34;--line:#0d0e10;--div:#17191c;--divhi:rgba(255,255,255,.07);--sep:#17191c;--inset:rgba(255,255,255,.06);"
+        "--rowbg:linear-gradient(#34373d,#2a2d32);--keyline:#3a3d42;"
+        + nav("#0b0c0e", "#7a808a", "linear-gradient(#5f656f,#3b4048 50%,#30343b 51%,#23262b)", "#000") +
+        "--barbtn:linear-gradient(#4a4f58,#24272c);--barpress:linear-gradient(#2a2d32,#121316);--baredge:#111;--baredgetop:#111;--barpe:#111;--barpet:#111;"
+        "--back:url(/static/back-dark.svg);--backp:var(--back);--tabbar:" + TABS_BLACK + ";--cyh:linear-gradient(rgba(86,92,102,.94),rgba(58,62,70,.94));"
+        "--field:#1f2125;--fieldtext:#ccc;--btn:linear-gradient(#4a4f58,#2c2f34 50%,#24272c 51%,#2c2f34);--btnhi:rgba(255,255,255,.15);--greybtn:linear-gradient(#4a4f58,#2c2f34);"
+        "--getc:#c9ced5;--getoff:#8b9099;--getdown:linear-gradient(#1f2125,#2a2d32);--steps:linear-gradient(#26292d,#2c2f34);--greenbg:#24302a;--greenline:#1a221d;"
+        "--warnbg:#3a3220;--warnedge:#6b5a26;--warntext:#f0c870;--badbg:#3a2020;--badedge:#6b2626;--badtext:#ff8a8a;"
+        "--swtrack:linear-gradient(#2b2e33,#3c4047);--swoff:#9aa0a8;--swon:linear-gradient(#0b4fb0,#3d8cf0);--swknob:linear-gradient(#6a6f78,#3c4047);--swheld:linear-gradient(#55595f,#2e3136)"),
+    "midnight": ("dark", "Midnight", "#0a1424",  # deep navy ground and bars, navy tables, cool blue-grey text
+        "--text:#fff;--plain:#0c1628;--ground:#0a1424;--pin:" + pin("#0a1424", "#0c172a") + ";--head:#c3cde0;--emboss:0 -1px 0 rgba(0,0,0,.8);--acc:#7fb0ff;"
+        "--sub:#93a0ba;--mute:#93a0ba;--table:#121d31;--line:#050a14;--div:#0a1322;--divhi:rgba(255,255,255,.05);--sep:#0a1322;--inset:rgba(255,255,255,.05);"
+        "--rowbg:#121d31;--keyline:#1a2740;"
+        + nav("#050a14", "rgba(255,255,255,.18)", "linear-gradient(#2c3d5f,#18253e 50%,#0f1a2f 51%,#0a1424)", "#0a1424") +
+        "--barbtn:linear-gradient(#34476b,#142038);--barpress:linear-gradient(#1c2a44,#0a1222);--baredge:#050a14;--baredgetop:#050a14;--barpe:#050a14;--barpet:#050a14;"
+        f"--back:{back_arrow('#050a14', '#050a14', '#34476b', '#142038', '.12')};--backp:var(--back);--tabbar:linear-gradient(#1a2740,#1a2740) top/100% 1px no-repeat,#070e1b;"
+        "--cyh:linear-gradient(rgba(42,58,90,.94),rgba(30,44,70,.94) 5%,rgba(22,34,56,.94) 94%,rgba(8,14,26,.94));"
+        "--field:#18253e;--fieldtext:#c3cde0;--btn:linear-gradient(#34476b,#1c2a44 90%,#142038);--btnhi:rgba(255,255,255,.05);--greybtn:linear-gradient(#34476b,#142038);"
+        "--getc:#c3cde0;--getoff:#93a0ba;--getdown:linear-gradient(#18253e,#121d31);--steps:linear-gradient(#0c1628,#121d31);--greenbg:#102a24;--greenline:#0a1322;"
+        "--warnbg:#2a2510;--warnedge:#5a4f1a;--warntext:#fff3b0;--badbg:#2a1212;--badedge:#610d14;--badtext:#ff7b6b;"
+        "--swtrack:linear-gradient(#0a1322,#18253e);--swoff:#93a0ba;--swon:linear-gradient(#1d56b8,#4a8ef0);--swknob:linear-gradient(#56688c,#26344f);--swheld:linear-gradient(#45577a,#1c2a44)"),
+    "linen": ("dark", "Linen", "#000",  # iOS 6's Notification Center linen (woven in CSS) behind charcoal tables, the kit's black bars
+        "--text:#fff;--plain:#2a2c30;--ground:#36383d;--pin:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,rgba(0,0,0,0) 1px 2px,rgba(0,0,0,.06) 2px 3px),"
+        "repeating-linear-gradient(90deg,rgba(0,0,0,.09) 0 1px,rgba(255,255,255,.02) 1px 2px,rgba(0,0,0,0) 2px 3px),repeating-linear-gradient(45deg,rgba(255,255,255,.015) 0 1px,rgba(0,0,0,0) 1px 5px),#36383d;"
+        "--head:#e1e3e8;--emboss:0 -1px 0 rgba(0,0,0,.85);--acc:#a9c4f2;--sub:#b9bdc5;--mute:#b9bdc5;--table:#2a2c30;--line:#121315;--div:#1b1c1f;--divhi:rgba(255,255,255,.06);"
+        "--sep:#1b1c1f;--inset:rgba(255,255,255,.06);--rowbg:#2a2c30;--keyline:#3a3c41;"
+        + nav("#000", "rgba(255,255,255,.18)", "linear-gradient(#4c4c4c,#262626 50%,#141414 51%,#000)", "#000") +
+        "--barbtn:linear-gradient(#4a4d54,#222428);--barpress:linear-gradient(#2a2c30,#111214);--baredge:#111;--baredgetop:#111;--barpe:#111;--barpet:#111;"
+        f"--back:{back_arrow('#111', '#111', '#4a4d54', '#222428', '.12')};--backp:var(--back);--tabbar:" + TABS_BLACK + ";"
+        "--cyh:linear-gradient(rgba(64,66,72,.94),rgba(50,52,57,.94) 5%,rgba(40,42,46,.94) 94%,rgba(18,19,21,.94));"
+        "--field:#232528;--fieldtext:#d6d9e0;--btn:linear-gradient(#55585f,#3a3c41 90%,#303236);--btnhi:rgba(255,255,255,.06);--greybtn:linear-gradient(#4a4d54,#222428);"
+        "--getc:#e1e3e8;--getoff:#b9bdc5;--getdown:linear-gradient(#232528,#2a2c30);--steps:linear-gradient(#232528,#2a2c30);--greenbg:#243a2a;--greenline:#1b1c1f;"
+        "--warnbg:#3e3714;--warnedge:#7a6c26;--warntext:#fff3b0;--badbg:#4a2a2a;--badedge:#610d14;--badtext:#ff7b6b;"
+        "--swtrack:linear-gradient(#1b1c1f,#303236);--swoff:#a2a6ae;--swon:linear-gradient(#0b4fb0,#3d8cf0);--swknob:linear-gradient(#6a6d74,#3a3c41);--swheld:linear-gradient(#55585f,#2a2c30)"),
+    "nord": ("dark", "Nord", "#2e3440",  # Polar Night ground, bars and tables, Snow Storm text, Frost accents, Aurora status colours
+        "--text:#eceff4;--plain:#2e3440;--ground:#2e3440;--pin:" + pin("#2e3440", "#313744") + ";--head:#d8dee9;--emboss:0 -1px 0 rgba(0,0,0,.5);--acc:#88c0d0;"
+        "--sub:#aeb7c7;--mute:#aeb7c7;--table:#3b4252;--line:#232831;--div:#2e3440;--divhi:rgba(255,255,255,.05);--sep:#2e3440;--inset:rgba(255,255,255,.05);"
+        "--rowbg:#3b4252;--keyline:#4c566a;"
+        + nav("#1f232c", "rgba(255,255,255,.15)", "linear-gradient(#4c566a,#3b4252 50%,#343a48 51%,#2b303b)", "#2e3440") +
+        "--barbtn:linear-gradient(#4c566a,#2e3440);--barpress:linear-gradient(#353c4a,#232831);--baredge:#1f232c;--baredgetop:#1f232c;--barpe:#1f232c;--barpet:#1f232c;"
+        f"--back:{back_arrow('#1f232c', '#1f232c', '#4c566a', '#2e3440', '.12')};--backp:var(--back);"
+        "--tabbar:linear-gradient(#1f232c,#1f232c) top/100% 1px no-repeat,linear-gradient(#3b4252,#2b303b) 0 1px/100% 48px no-repeat,#2b303b;"
+        "--cyh:linear-gradient(rgba(76,86,106,.94),rgba(67,76,94,.94) 5%,rgba(59,66,82,.94) 94%,rgba(35,40,49,.94));"
+        "--field:#343a48;--fieldtext:#d8dee9;--btn:linear-gradient(#4c566a,#3b4252 90%,#343a48);--btnhi:rgba(255,255,255,.05);--greybtn:linear-gradient(#4c566a,#2e3440);"
+        "--getc:#d8dee9;--getoff:#aeb7c7;--getdown:linear-gradient(#343a48,#3b4252);--steps:linear-gradient(#343a48,#3b4252);--greenbg:#34403a;--greenline:#2e3440;"
+        "--warnbg:#4a4434;--warnedge:#8a7a50;--warntext:#ebcb8b;--badbg:#4a3439;--badedge:#69353a;--badtext:#eea2a8;"
+        "--swtrack:linear-gradient(#2b303b,#3b4252);--swoff:#aeb7c7;--swon:linear-gradient(#5e81ac,#88c0d0);--swknob:linear-gradient(#6b768c,#434c5e);--swheld:linear-gradient(#5b657a,#3b4252)"),
+    "dracula": ("dark", "Dracula", "#21222c",  # #282a36 ground, #44475a bars and lines, purple headers, pink links, Dracula status colours
+        "--text:#f8f8f2;--plain:#282a36;--ground:#282a36;--pin:" + pin("#282a36", "#2b2d3a") + ";--head:#bd93f9;--emboss:0 -1px 0 rgba(0,0,0,.6);--acc:#ff79c6;"
+        "--sub:#a4abcf;--mute:#a4abcf;--table:#343746;--line:#191a21;--div:#282a36;--divhi:rgba(255,255,255,.04);--sep:#282a36;--inset:rgba(255,255,255,.05);"
+        "--rowbg:#343746;--keyline:#3a3d4d;"
+        + nav("#15161c", "rgba(255,255,255,.15)", "linear-gradient(#4f5268,#383b4c 50%,#2c2e3b 51%,#21222c)", "#21222c") +
+        "--barbtn:linear-gradient(#5a5e78,#2c2e3b);--barpress:linear-gradient(#383b4c,#1e1f28);--baredge:#15161c;--baredgetop:#15161c;--barpe:#15161c;--barpet:#15161c;"
+        f"--back:{back_arrow('#15161c', '#15161c', '#5a5e78', '#2c2e3b', '.12')};--backp:var(--back);"
+        "--tabbar:linear-gradient(#15161c,#15161c) top/100% 1px no-repeat,linear-gradient(#383b4c,#21222c) 0 1px/100% 48px no-repeat,#21222c;"
+        "--cyh:linear-gradient(rgba(80,84,106,.94),rgba(68,71,90,.94) 5%,rgba(56,59,76,.94) 94%,rgba(25,26,33,.94));"
+        "--field:#44475a;--fieldtext:#f8f8f2;--btn:linear-gradient(#5a5e78,#44475a 90%,#383b4c);--btnhi:rgba(255,255,255,.04);--greybtn:linear-gradient(#5a5e78,#2c2e3b);"
+        "--getc:#f8f8f2;--getoff:#a4abcf;--getdown:linear-gradient(#2c2e3b,#343746);--steps:linear-gradient(#2c2e3b,#343746);--greenbg:#1f3a2a;--greenline:#282a36;"
+        "--warnbg:#3e3a20;--warnedge:#8a8440;--warntext:#f1fa8c;--badbg:#4a2630;--badedge:#772828;--badtext:#ff7b7b;"
+        "--swtrack:linear-gradient(#21222c,#383b4c);--swoff:#a4abcf;--swon:linear-gradient(#8a5fe0,#bd93f9);--swknob:linear-gradient(#6c708c,#44475a);--swheld:linear-gradient(#5a5e78,#383b4c)"),
+}
+THEMES = {t: [n for n, p in PALETTES.items() if p[0] == t] for t in ("light", "dark")}  # in menu order; [0] is the default
+THEMES_CSS = "/* F18 palettes (PALETTES in app.py) */\n" + "\n".join(
+    (":root," if n == "classic" else "html.dark," if n == "gunmetal" else "") + f"html[data-theme={t}][data-palette={n}]{{{css}}}"
+    for n, (t, _, _, css) in PALETTES.items()) + "\n.tabs{background:var(--tabbar)}"
+# Before first paint: Mode (localStorage.mode: light, dark or auto) picks the tone, lightTheme and darkTheme the palette in each. Before F18 a
+# Dark Mode switch stored localStorage.dark = 1 or 0, read here as Mode Dark or Light until a Mode is picked; with neither, Mode is Automatic
+# (it followed the phone before, so nobody's page changes tone). theme() runs again when the phone's appearance flips and after a pick.
+THEME_BOOT = ("<script>/* F18 themes: THEME_BOOT in app.py */\nconst THEMES=" + json.dumps(THEMES, separators=(",", ":")) + ",THEME_COLORS="
+              + json.dumps({n: p[2] for n, p in PALETTES.items()}, separators=(",", ":")) + """;
+function themeState(){let s={};try{s={mode:localStorage.mode,light:localStorage.lightTheme,dark:localStorage.darkTheme,old:localStorage.dark}}catch(e){}
+ return{mode:["light","dark","auto"].includes(s.mode)?s.mode:s.old=="1"?"dark":s.old=="0"?"light":"auto",
+  light:THEMES.light.includes(s.light)?s.light:THEMES.light[0],dark:THEMES.dark.includes(s.dark)?s.dark:THEMES.dark[0]}}
+function theme(){let s=themeState(),h=document.documentElement,dk=s.mode=="dark"||s.mode=="auto"&&matchMedia("(prefers-color-scheme: dark)").matches,p=dk?s.dark:s.light;
+ h.classList.toggle("dark",dk);h.setAttribute("data-theme",dk?"dark":"light");h.setAttribute("data-palette",p);
+ document.querySelector("meta[name=theme-color]").content=THEME_COLORS[p];s.tone=dk?"dark":"light";return s}  /* Safari's top bar matches the status bar */
+theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{theme();if(window.themeMarks)themeMarks()})</script>""")
+# Settings > Display, as iFizBox's Theme page: Mode, then each tone's themes, a checkmark on the one in use (iOS 6's
+# UITableViewCellAccessoryCheckmark, the row's label turning blue with it). Each theme row has a little swatch: its bar over its table.
+THEMES_CSS += """
+.ck{cursor:pointer;color:var(--text)} .ck[aria-checked=true]{color:var(--acc)} .ck .sws{flex:none;width:26px;height:26px;border-radius:5px;box-sizing:border-box;border:1px solid rgba(0,0,0,.45);box-shadow:0 1px 0 var(--divhi)}
+.ck[aria-checked=true]:after{content:"";flex:none;width:15px;height:14px;background:currentColor;-webkit-mask:var(--tick) center/contain no-repeat;mask:var(--tick) center/contain no-repeat}
+:root{--tick:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 15 14'%3E%3Cpath d='M1 7.6 3.2 5.5 6 8.2 12.4 0.8 14.5 2.6 6.1 12.6Z'/%3E%3C/svg%3E")}"""
+
+
+from markupsafe import Markup  # noqa: E402 (the theme menu below is a template global)
+
+
+def theme_rows(key, options):
+    swatch = lambda n: (lambda css: f'<span class=sws style="background:linear-gradient({PALETTES[n][2]} 0 45%,{css["table"]} 45%)"></span>')(
+        dict(re.findall(r"--([a-z]+):([^;]+)", PALETTES[n][3])))
+    rows = "".join(f'<a class="row ck" role=radio data-v={v} onclick="themePick(this)">{swatch(v) if key != "mode" else ""}<div>{label}</div></a>' for v, label in options)
+    return f'<div class="g thm" role=radiogroup data-k={key}>{rows}</div>'
+
+
+app.jinja_env.globals["theme_menu"] = Markup(
+    "<h3 class=hdr>Display</h3>" + theme_rows("mode", [("light", "Light"), ("dark", "Dark"), ("auto", "Automatic")])
+    + "<p class=ftr>Automatic follows your iPhone's Light or Dark appearance.</p>"
+    + "".join(f"<h3 class=hdr>{t.title()} Theme</h3>" + theme_rows(f"{t}Theme", [(n, PALETTES[n][1]) for n in THEMES[t]]) for t in ("light", "dark"))
+    + """<script>/* F18: the checkmarks follow themeState() (THEME_BOOT); a pick stores it and repaints. A theme in the tone not showing also
+   switches Mode to that tone, as iFizBox's does, so the pick shows at once (even from Automatic). */
+function themeMarks(){let s=themeState();document.querySelectorAll(".thm").forEach(g=>{let v={mode:s.mode,lightTheme:s.light,darkTheme:s.dark}[g.dataset.k];
+ g.querySelectorAll(".ck").forEach(r=>r.setAttribute("aria-checked",r.dataset.v==v))})}
+function themePick(a){let k=a.parentNode.dataset.k,s=themeState(),tone=k=="lightTheme"?"light":"dark",
+  shown=s.mode=="dark"||s.mode=="auto"&&matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";
+ try{localStorage[k]=a.dataset.v;if(k!="mode"&&shown!=tone)k="mode",localStorage.mode=tone;if(k=="mode")localStorage.removeItem("dark")}catch(e){}
+ theme();themeMarks()}
+themeMarks()</script>""")
+
 PAGE = """<!doctype html><meta charset=utf-8><meta name=build content=%BUILD%><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>SideDrop</title><meta name=description content="Share an Apple developer account with friends and sideload apps.">
 <meta property=og:title content=SideDrop><meta property=og:description content="Share an Apple developer account with friends and sideload apps."><meta property=og:site_name content=SideDrop>
 <meta property=og:type content=website><meta property=og:url content="%PUBLIC_URL%/"><meta property=og:image content="%PUBLIC_URL%/static/og.png"><meta property=og:image:width content=1200><meta property=og:image:height content=630>
-<meta name=twitter:card content=summary_large_image><meta name=twitter:image content="%PUBLIC_URL%/static/og.png"><link rel=apple-touch-icon href=/apple-touch-icon.png><link rel=manifest href=/manifest.webmanifest><meta name=theme-color content="#bdcbdc"><meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=SideDrop>
-<script>/* Dark Mode follows the phone's theme until the Settings switch picks one (localStorage.dark = "1"/"0") */
-function theme(){let d=null;try{d=localStorage.dark}catch(e){}let on=document.documentElement.classList.toggle("dark",d?d=="1":matchMedia("(prefers-color-scheme: dark)").matches);
- document.querySelector("meta[name=theme-color]").content=on?"#5f656f":"#bdcbdc"}  /* Safari's top bar matches the nav */
-theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",theme)</script>
+<meta name=twitter:card content=summary_large_image><meta name=twitter:image content="%PUBLIC_URL%/static/og.png"><link rel=apple-touch-icon href=/apple-touch-icon.png><link rel=manifest href=/manifest.webmanifest><meta name=theme-color content="#4f698b"><meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=SideDrop>
+%THEME_BOOT%
 <style>
-/* 2012 iOS look (pinstripes, glossy bars, App Store buttons), with a gunmetal Dark Mode below. */
-:root{color-scheme:light;--mute:#6d7480;--sep:#e0e0e0;--line:#b7b9bd;--acc:#385487;--head:#4c566c;
- --pin:repeating-linear-gradient(90deg,#cbd0da 0 2.5px,#ced3dc 2.5px 8px);--gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
- --tabh:calc(49px + env(safe-area-inset-bottom));--navbg:linear-gradient(#bdcbdc,#597498);--statbg:linear-gradient(#4f698b,#3f5b7f);--navhi:#eff2f7;--navedge:#2d3642;--table:#f7f7f7;--div:#c9c9c9;--divhi:#fff;--barbtn:linear-gradient(#99aac2,#41618e);  /* iOS 6 UIKit nav art: smooth, no gloss split */
+/* 2012 iOS look (pinstripes, glossy bars, App Store buttons). Colours that change with the theme are variables, set per palette by
+   THEMES_CSS at the end of this sheet (Classic's are :root's, Gunmetal's html.dark's). */
+:root{color-scheme:light;--gloss:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,.12) 50%,rgba(255,255,255,0) 51%);
+ --tabh:calc(49px + env(safe-area-inset-bottom));
  --bluebtn:linear-gradient(#7aa5ef,#3b72d4 50%,#2861c9 51%,#3a73da);--greenbtn:linear-gradient(#8fd96b,#4caa2b 50%,#3c9a1d 51%,#4cae2a);
- --select:linear-gradient(#85a7e9,#2765db);--sub:#7f7f7f;  /* as iFizBox: a held row's blue (the kit's "Button (Matte Blue)") and a row's subtitle grey */
- --greybtn:linear-gradient(#fdfdfd,#e3e6ea);--emboss:0 1px 0 rgba(255,255,255,.75);--chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17.5 26.4'%3E%3Cpath fill='%237f7f7f' d='M.07 4.23 9.12 13.27 0 22.26 4.12 26.38 17.47 13.03 4.43 0Z'/%3E%3C/svg%3E");background:#c8cfd6}
+ --chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17.5 26.4'%3E%3Cpath fill='%237f7f7f' d='M.07 4.23 9.12 13.27 0 22.26 4.12 26.38 17.47 13.03 4.43 0Z'/%3E%3C/svg%3E");background:var(--ground)}
 /* fixed backdrop: stays put while iOS rubber-bands the page, so the bounce shows pinstripes instead of a flat color */
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
 /* always 1px taller than the screen, so short pages still rubber-band like native */
@@ -519,7 +680,7 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
    whole page, that washed the bar out; under an opaque bar on top it doesn't show. A fixed box also follows the screen through a rotation, where
    body at 100% went stale (top cut off, bars not taking taps). */
 html,body{height:100%;overflow:hidden;margin:0}
-body{font:17px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#000;-webkit-font-smoothing:antialiased}
+body{font:17px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif;color:var(--text);-webkit-font-smoothing:antialiased}
 #scr{position:fixed;inset:0;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;
  padding:calc(56px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right),(100% - 30rem)/2) calc(72px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left),(100% - 30rem)/2)}
 a{color:var(--acc);text-decoration:none} small,.m{color:var(--mute)} small{font-size:13px} .err{color:#d70015} h2{font-size:19px;margin:0}
@@ -535,14 +696,13 @@ a,img{-webkit-user-drag:none}  /* iFizBox's B24: holding a link row or an image 
 /* bar buttons as iFizBox's: 29pt high, a long label ends in "…", and background-origin:border-box, without which the gradient tiles into the
    1px border and its light top shows as a line along the bottom */
 .nav .bar{justify-self:start;width:auto;height:29px;min-width:50px;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:12px;font-weight:700;line-height:27px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.45);
- background:var(--barbtn);background-origin:border-box;border:1px solid #2f4769;border-top-color:#343a42;
+ background:var(--barbtn);background-origin:border-box;border:1px solid var(--baredge);border-top-color:var(--baredgetop);
  border-radius:5px;padding:0 9px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 0 rgba(255,255,255,.25)} .nav .bar.r{justify-self:end}
 /* iOS 6 back button: arrow art drawn after UIKit's UINavigationBarDefaultBack, stretched through the middle */
 .nav .back{display:inline-block;height:30px;line-height:28px;min-width:0;box-sizing:border-box;max-width:40vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 5px 0 1px;background:none;box-shadow:none;border-radius:0;
- border:solid transparent;border-width:0 5px 0 13px;border-image:url(/static/back.svg) 0 10 0 26 fill/0 5px 0 13px} .nav .back.is-pressed{border-image-source:url(/static/back-pressed.svg)} .dark .nav .back.is-pressed{filter:brightness(.75)}
+ border:solid transparent;border-width:0 5px 0 13px;border-image:var(--back) 0 10 0 26 fill/0 5px 0 13px} .nav .back.is-pressed{border-image-source:var(--backp)} .dark .nav .back.is-pressed{filter:brightness(.75)}
 /* pressed states (UIKit's *Pressed art), on .is-pressed: the script below sets it while a finger is down */
-.nav .bar:not(.back).is-pressed{background:linear-gradient(#8b97af,#283e6b);background-origin:border-box;border-color:#1c2c4f;border-top-color:#30343c}
-.dark .nav .bar:not(.back).is-pressed{background:linear-gradient(#2a2d32,#121316);background-origin:border-box}
+.nav .bar:not(.back).is-pressed{background:var(--barpress);background-origin:border-box;border-color:var(--barpe);border-top-color:var(--barpet)}
 /* held buttons, from the 4S art: white/grey round buttons go blue (iTunesStoreUI GradientButtonBackgroundPressed, same as the tiles);
    blue and green darken the way PurchaseButtonBluePressed (x.75) and PurchaseConfirmButtonPressed (x.8) do; red from UIAlertSheetDefaultDestroyButtonPressed */
 .get:not(.go):not(.blue).is-pressed,a.b.grey.is-pressed,label.b.grey.is-pressed,button.grey.is-pressed,.act:not(.red).is-pressed{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.3);border-color:#005ee8;background:linear-gradient(#058af5,#0160e6);box-shadow:none}
@@ -551,7 +711,7 @@ a,img{-webkit-user-drag:none}  /* iFizBox's B24: holding a link row or an image 
 .act.red.is-pressed{border-color:#8a1c1c;background:linear-gradient(#cf848a,#9d010c 80%,#b33941)}
 .alert .abtns button,.alert .abtns .ok{background-origin:border-box!important}  /* the background shorthands reset it; without it the gradient tiles into the see-through border and its bright top shows as a line at the bottom */
 .alert .abtns button.is-pressed{background:linear-gradient(#6d7da3,#3c4e7d 49%,#22325e 51%,#2f3f6c)}
-.sw.is-pressed .k{background:linear-gradient(#bcbcbc,#e6e6e6)} .dark .sw.is-pressed .k{background:linear-gradient(#55595f,#2e3136)}
+.sw.is-pressed .k{background:linear-gradient(#bcbcbc,#e6e6e6)} .dark .sw.is-pressed .k{background:var(--swheld)}
 .sw{touch-action:none} .sw.drag i:before,.sw.drag i:after,.sw.drag .k{transition:none}  /* while dragging, everything follows --x with the finger */
 #sb.on{pointer-events:auto}
 *{-webkit-tap-highlight-color:transparent}  /* no grey tap flash; controls have their own pressed looks */
@@ -560,7 +720,7 @@ h3.hdr{font-size:17px;font-weight:700;line-height:21px;letter-spacing:-.01em;col
 .ftr{font-size:15px;line-height:19px;color:var(--head);text-align:center;text-shadow:var(--emboss);margin:7px 9px 0;overflow-wrap:anywhere}
 .ver{margin:14px 10px 6px;font-size:13px;line-height:16px;text-align:center;color:var(--head);text-shadow:var(--emboss);overflow-wrap:anywhere} .ver.vc{margin-top:-4px;opacity:.8}
 .alert .ver{margin:0 0 4px;font-size:13px;line-height:16px;color:inherit;text-shadow:inherit;opacity:.85} .alert .ver.vc{margin-bottom:10px;opacity:.7}
-.c,.g{background:#fff;border:1px solid var(--line);border-radius:9.5px;box-shadow:inset 0 .5px .5px rgba(0,0,0,.2);overflow:hidden} .g{background:var(--table)}
+.c,.g{background:var(--plain);border:1px solid var(--line);border-radius:9.5px;box-shadow:inset 0 .5px .5px rgba(0,0,0,.2);overflow:hidden} .g{background:var(--table)}
 .c{padding:14px;margin:0 0 12px;display:flex;flex-direction:column;gap:10px} .c p{margin:0}
 a.b,label.b,button{display:block;box-sizing:border-box;width:100%;font:inherit;font-weight:700;line-height:1.2;text-align:center;cursor:pointer;padding:11px;color:#fff;
  text-shadow:0 -1px 0 rgba(0,0,0,.4);border:1px solid #2b4f8a;border-radius:9px;background:var(--bluebtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 1px 2px rgba(0,0,0,.3)}
@@ -602,15 +762,12 @@ details[open]>summary:after{transform:rotate(90deg)} details>:not(summary){margi
  
  background:linear-gradient(#707a91,#283659 49%,#0b1b43 50%,#182747)}  /* Cancel-style (left), as UIAlertView draws it on the 4S */
 .alert .abtns .ok{background:linear-gradient(#b4b9c8,#5f6882 49%,#596484 51%,#4d597a)}  /* sampled from Cydia's alert on the 4S: opaque greys, no white line */
-/* Dark Mode (follows the phone, or the Settings tab switch): gunmetal bars, dark pinstripes, inverted emboss */
-html.dark{color-scheme:dark;--mute:#8b9099;--sub:#8b9099;--sep:#17191c;--line:#0d0e10;--acc:#6fa8ff;--head:#8b9099;--emboss:0 -1px 0 #000;
- --pin:repeating-linear-gradient(90deg,#1b1d21 0 5px,#202227 5px 7px);--navbg:linear-gradient(#5f656f,#3b4048 50%,#30343b 51%,#23262b);--statbg:#000;--navhi:#7a808a;--navedge:#0b0c0e;--table:#2c2f34;--div:#17191c;--divhi:rgba(255,255,255,.07);
- --barbtn:linear-gradient(#4a4f58,#24272c);--greybtn:linear-gradient(#4a4f58,#2c2f34);background:#1d1f23}
-.dark body{color:#e6e8eb} .dark .nav .bar{border-color:#111} .dark .nav .back{border-image-source:url(/static/back-dark.svg)}
-.dark .c,.dark .g{background:#2c2f34;border-color:#0d0e10;box-shadow:0 1px 0 rgba(255,255,255,.06)}
-.dark .row,.dark details>summary{background:linear-gradient(#34373d,#2a2d32);box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
-.dark input{background:#1f2125;border-color:#0d0e10;color:#e6e8eb;box-shadow:inset 0 1px 3px #000} .dark textarea{background:#1f2125;border-color:#0d0e10;color:#ccc}
-.dark a.b.grey,.dark label.b.grey,.dark button.grey{color:#e6e8eb;border-color:#111;background:linear-gradient(#4a4f58,#2c2f34 50%,#24272c 51%,#2c2f34);box-shadow:inset 0 1px 0 rgba(255,255,255,.15)}
+/* Dark (Settings > Display's Mode, or the phone's while it's Automatic): the dark palette's variables (THEMES_CSS), inverted emboss */
+html.dark{color-scheme:dark}
+.dark .c,.dark .g{background:var(--table);border-color:var(--line);box-shadow:0 1px 0 var(--inset)}
+.dark .row,.dark details>summary{background:var(--rowbg);box-shadow:inset 0 1px 0 var(--divhi)}
+.dark input{background:var(--field);border-color:var(--line);color:var(--text);box-shadow:inset 0 1px 3px #000} .dark textarea{background:var(--field);border-color:var(--line);color:var(--fieldtext)}
+.dark a.b.grey,.dark label.b.grey,.dark button.grey{color:var(--text);border-color:var(--baredge);background:var(--btn);box-shadow:inset 0 1px 0 var(--btnhi)}
 /* Cydia's reload bar while Reload syncs sources and re-signs: the kit's "Semi-transparent black bar" (#4c4c4c to black at 52%, a white-at-20%
    line on top, black-at-70% at the bottom) at .8, a 20pt white spinner, a bold white line. As iFizBox's F204: it sits on top of the tab bar, sliding
    up from behind it, and nothing on the page moves; the page gets 44pt more room at the bottom while it shows, so the last row still scrolls clear */
@@ -626,7 +783,8 @@ html.reloading #scr{padding-bottom:calc(116px + env(safe-area-inset-bottom))}
  33.333%,41.666%{transform:rotate(120deg)}41.667%,49.999%{transform:rotate(150deg)}50%,58.332%{transform:rotate(180deg)}58.333%,66.666%{transform:rotate(210deg)}
  66.667%,74.999%{transform:rotate(240deg)}75%,83.332%{transform:rotate(270deg)}83.333%,91.666%{transform:rotate(300deg)}91.667%,100%{transform:rotate(330deg)}}
 .scrim.clear{background:none} .nw{white-space:nowrap} .a2l>span{display:block;margin:2px 0} .ic{width:1.15em;height:1.15em;vertical-align:-.2em;margin-right:3px}
-@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}</style>
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+%THEMES_CSS%</style>
 {% if back %}<header class=nav><a class="bar back" href="{{ back[1] }}" onclick="return goBack(this.href)">{{ back[0] }}</a><h1>{{ title }}</h1><span></span></header>
 <script>/* a pushed page: tapping back pops; iOS's own edge swipe (Safari and the home-screen app) does the same. history.back() keeps the previous page's scroll, like a native pop; first visits (no "/" behind us) follow the link */
 function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.length>1){history.back();return false}}catch(e){}location.href=h;return false}
@@ -678,7 +836,7 @@ addEventListener("DOMContentLoaded",()=>{
    w.skip=1;setTimeout(()=>w.skip=0,400);if(on!=i.checked){i.checked=on;i.dispatchEvent(new Event("change"))}};
   w.addEventListener("touchend",end);w.addEventListener("touchcancel",end)})})  // iOS ends a gesture it took over with touchcancel  // Safari ignores user-scalable=no for pinch
 </script>
-{% if "<div id=scr" in body %}{{ body|safe }}{% else %}<div id=scr><section class=page>{{ body|safe }}</section></div>{% endif %}""".replace("%PUBLIC_URL%", PUBLIC_URL).replace("%BUILD%", BUILD)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
+{% if "<div id=scr" in body %}{{ body|safe }}{% else %}<div id=scr><section class=page>{{ body|safe }}</section></div>{% endif %}""".replace("%PUBLIC_URL%", PUBLIC_URL).replace("%BUILD%", BUILD).replace("%THEME_BOOT%", THEME_BOOT).replace("%THEMES_CSS%", THEMES_CSS)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
 
 
 def file_labels(folder):
@@ -758,8 +916,8 @@ def home():
 .hx .tile:after{transition:transform .2s} .hx .tile[aria-expanded=true]:after{transform:rotate(90deg)}
 .hx .tic{width:29px;height:29px;border-radius:6.5px} .hx .tic svg{width:19px;height:19px}
 #setup{margin-top:12px} #setup[hidden]{display:none}
-.dark .hd p a{color:var(--acc);text-shadow:var(--emboss)} .dark .hx .hp{border-color:#0d0e10;box-shadow:0 1px 0 rgba(255,255,255,.06)} .dark .hx .hp .tile+.tile{border-left-color:#0d0e10}
-.dark .hx .tile,.dark .hx .hw .tile,.dark .hx .tile.reg,.dark .hx .tile.todo{background:linear-gradient(#34373d,#2a2d32);border-color:#0d0e10;color:#e6e8eb} .dark .hx .hp .tile{background:none}
+.dark .hd p a{color:var(--acc);text-shadow:var(--emboss)} .dark .hx .hp{border-color:var(--line);box-shadow:0 1px 0 var(--inset)} .dark .hx .hp .tile+.tile{border-left-color:var(--line)}
+.dark .hx .tile,.dark .hx .hw .tile,.dark .hx .tile.reg,.dark .hx .tile.todo{background:var(--rowbg);border-color:var(--line);color:var(--text)} .dark .hx .hp .tile{background:none}
 .hx .tile.is-pressed,.dark .hx .tile.is-pressed{background:var(--select);color:#fff} .hx .tile.is-pressed small,.hx .tile.is-pressed .hdt{color:#fff}
 /* iOS 5 App Store price button: grey GET, a tap turns it into a green INSTALL, a second tap installs */
 .get{flex:none;display:inline-block;width:auto;min-width:62px;box-sizing:border-box;text-align:center;font-size:12px;font-weight:700;letter-spacing:.02em;line-height:1.2;font-family:inherit;padding:5px 10px;
@@ -790,12 +948,12 @@ details.c[open]>summary:after{transform:rotate(-45deg)} details.c>summary,.dark 
 .warn{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;background:#fff8e1;border:1px solid #e6cf7a;font-size:14px}
 button.gbtn{border-color:#2f7a17;background:var(--greenbtn)} /* not .green: that's the Settings tab's status panel */
 fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;filter:grayscale(.6)}
-.dark .warn{background:#3a3220;border-color:#6b5a26}
+.dark .warn{background:var(--warnbg);border-color:var(--warnedge)}
 .nudge{animation:nudge .45s} @keyframes nudge{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
 /* Settings tab: Cydia-style rows */
 .green{background:#e9f8e4} .kv{display:flex;justify-content:space-between;gap:10px;padding:11px 12px;border-top:1px solid #d6e6cf} .kv span{color:var(--acc);text-align:right}
 .split{display:grid;grid-template-columns:1fr 1fr;margin-top:12px} .pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-.tile{display:flex;align-items:center;gap:9px;min-height:50px;padding:8px 10px;box-sizing:border-box;font-weight:700;color:#000;background:var(--table);cursor:pointer;text-align:left;border:0;border-radius:0;box-shadow:none;text-shadow:none;line-height:1.35}
+.tile{display:flex;align-items:center;gap:9px;min-height:50px;padding:8px 10px;box-sizing:border-box;font-weight:700;color:var(--text);background:var(--table);cursor:pointer;text-align:left;border:0;border-radius:0;box-shadow:none;text-shadow:none;line-height:1.35}
 .split .tile+.tile{border-left:1px solid var(--sep)} .pair .tile{border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8)}
 .tile:after{content:"";margin-left:auto;flex:none;width:9px;height:13px;margin-right:.5px;background:var(--chev) center/contain no-repeat}
 .tile.is-pressed:after,.tile.sel:after{filter:brightness(0) invert(1)}
@@ -833,23 +991,23 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .con .confin{width:100%;max-width:360px;height:44px;margin:2px 0 0;padding:0 12px;border:0;border-radius:10px;font:bold 20px/44px "Helvetica Neue",Helvetica,sans-serif;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);
  box-shadow:0 0 0 2.5px #000,0 3.5px 0 0 rgba(211,211,211,.19);background:linear-gradient(#878787,#686868 7%,#545454 23%,#383838 38%,#1a1a1a 54%,#020202 69%,#000 77%,#131313)} .con .confin[hidden]{display:none}
 .con .confin.is-pressed{background:linear-gradient(#c7cde9,#c7cde9 .5px,#818fce .5px,#7a8acb 8%,#6577c3 18%,#485db8 31%,#2b45ae 44%,#253eaa 50%,#001d9d 50%,#04229e 56%,#1330a7 69%,#1940b4 82%,#1354cd calc(100% - .5px),#2c68d4 calc(100% - .5px))}
-.dark .get{color:#c9ced5;border-color:#111;box-shadow:inset 0 1px 0 rgba(255,255,255,.15)} .dark .get[aria-expanded=true]{color:#8b9099;background:linear-gradient(#1f2125,#2a2d32);box-shadow:inset 0 1px 3px #000}
-.dark .steps{background:linear-gradient(#26292d,#2c2f34)} .dark .step+.step{border-top-color:#3a3d42}
-.dark .green{background:#24302a} .dark .kv{border-top-color:#1a221d}
-.dark .tile{background:linear-gradient(#34373d,#2a2d32);color:#e6e8eb} .dark .pair .tile{border-color:#0d0e10;box-shadow:0 1px 0 rgba(255,255,255,.06)} .dark .split .tile+.tile{border-left-color:#17191c}
-.dark .sw i{border-color:#111;background:linear-gradient(#2b2e33,#3c4047);box-shadow:inset 0 1px 3px rgba(0,0,0,.8)} .dark .sw i:after{color:#9aa0a8}
-.dark .sw i:before{background:linear-gradient(#0b4fb0,#3d8cf0)} .dark .sw .k{background:linear-gradient(#6a6f78,#3c4047);border-color:#111}
+.dark .get{color:var(--getc);border-color:var(--baredge);box-shadow:inset 0 1px 0 var(--btnhi)} .dark .get[aria-expanded=true]{color:var(--getoff);background:var(--getdown);box-shadow:inset 0 1px 3px #000}
+.dark .steps{background:var(--steps)} .dark .step+.step{border-top-color:var(--keyline)}
+.dark .green{background:var(--greenbg)} .dark .kv{border-top-color:var(--greenline)}
+.dark .tile{background:var(--rowbg);color:var(--text)} .dark .pair .tile{border-color:var(--line);box-shadow:0 1px 0 var(--inset)} .dark .split .tile+.tile{border-left-color:var(--div)}
+.dark .sw i{border-color:var(--baredge);background:var(--swtrack);box-shadow:inset 0 1px 3px rgba(0,0,0,.8)} .dark .sw i:after{color:var(--swoff)}
+.dark .sw i:before{background:var(--swon)} .dark .sw .k{background:var(--swknob);border-color:var(--baredge)}
 /* Changes tab: Cydia's plain list with sticky section strips (top is inside body's 56px padding, so -12px lands under the 44px nav) */
-.cy{margin:-12px -10px 0;background:#fff;border-bottom:1px solid #d0d4d9}
+.cy{margin:-12px -10px 0;background:var(--plain);border-bottom:1px solid #d0d4d9}
 .cyh{position:sticky;top:-12px;z-index:2;padding:1px 10px;font-size:19px;font-weight:700;color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.5);
- background:linear-gradient(rgba(152,165,177,.92),rgba(184,193,201,.92));border-top:1px solid #8f9aa5;border-bottom:1px solid #a6afb8}
+ background:var(--cyh);border-top:1px solid #8f9aa5;border-bottom:1px solid #a6afb8}
 .cyr{display:flex;align-items:flex-start;gap:9px;padding:8px 10px;border-top:1px solid #e0e0e0} .cyh+.cyr{border-top:0}
 .cyi{flex:none;width:30px;height:30px;margin-top:3px;border-radius:7px;object-fit:cover;display:grid;place-items:center;color:#fff;font-weight:700;font-size:15px;box-shadow:0 1px 2px rgba(0,0,0,.35)}
 .cyt{flex:1;min-width:0} .cyt b{display:block;font-size:19px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cyt small{display:block;padding-left:12px;color:#000;font-size:13px} .cyt p{margin:2px 0 0;color:#6d7480;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cyr .get{align-self:center}
-.dark .cy{background:#2c2f34;border-color:#0d0e10} .dark .cyr{border-color:#3a3d42} .dark .cyt small{color:#c9ced5}
-.dark .cyh{background:linear-gradient(rgba(86,92,102,.94),rgba(58,62,70,.94));border-color:#111}
+.dark .cy{background:var(--table);border-color:var(--line)} .dark .cyr{border-color:var(--keyline)} .dark .cyt small{color:var(--getc)}
+.dark .cyh{border-color:var(--baredge)}
 /* iOS 5 red count badge on the Changes tab */
 .badge{position:absolute;top:-2px;left:calc(50% + 5px);min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:10px;border:2px solid #fff;color:#fff;letter-spacing:-.02em;
  font:700 13px/16px "Helvetica Neue",Helvetica,sans-serif;text-align:center;background:linear-gradient(#f7b3b7,#e92d35 48.8%,#e70f19 50.5%,#c50103);box-shadow:0 2px 2.5px rgba(0,0,0,.6)}
@@ -868,13 +1026,13 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .tabs a[aria-current]{background:rgba(255,255,255,.15);color:#fff;box-shadow:inset 0 0 1px rgba(0,0,0,.31)}
 /* a pushed page (Manage, Sign) in place over its tab: the iOS slide (350 ms, UINavigationController's curve), the page below moving a third as far and
    darkening 10%; transform and opacity only */
-.layer{position:fixed;z-index:6;top:0;left:0;right:0;bottom:var(--tabh,0);background:var(--pin);background-color:#c8cfd6} .dark .layer{background-color:#1d1f23}
+.layer{position:fixed;z-index:6;top:0;left:0;right:0;bottom:var(--tabh,0);background:var(--pin);background-color:var(--ground)}
 .layer[hidden]{display:none} .layer .nav{position:absolute;z-index:1}  /* above its own scroller, as the main nav is above #scr */ .layer .nav h1{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .lscroll{position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;scrollbar-width:none;
  padding:calc(56px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right),(100% - 30rem)/2) 20px max(10px,env(safe-area-inset-left),(100% - 30rem)/2)}
 .lscroll>.page{min-height:calc(100% + 1px)} html.reloading .lscroll{padding-bottom:64px}  /* the reload bar over a pushed page: its last row still scrolls clear */
 /* first install tap: a one-time sheet (SDP, then Developer Mode) over everything, sliding up like the install page; its screenshots are Help's */
-.fl{position:fixed;inset:0;z-index:25;background:var(--pin);background-color:#c8cfd6;animation:conup .35s cubic-bezier(.36,.66,.04,1)} .fl[hidden]{display:none} .dark .fl{background-color:#1d1f23}
+.fl{position:fixed;inset:0;z-index:25;background:var(--pin);background-color:var(--ground);animation:conup .35s cubic-bezier(.36,.66,.04,1)} .fl[hidden]{display:none}
 .fl .nav{position:absolute;z-index:1} .fl .c>.shot{margin:0} .fl .c>.shot+.shot{margin-top:12px} .fl .lead{margin:0 4px 12px;font-size:15px}
 .shade{position:fixed;inset:0;z-index:6;background:#000;opacity:0;pointer-events:none}
 .ghost{position:absolute;margin:0;pointer-events:none;z-index:1}
@@ -997,8 +1155,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class=pair>
 <button type=button class=tile onclick="let d=document.getElementById('dev');d.open=true;goTo(d)"><span class=tic style="background:#8a929c"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-dasharray="2.4 2"><circle cx="12" cy="12" r="7"/></svg></span>Help</button>
 <button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:#3f80e0"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
-<h3 class=hdr>Display</h3><div class=g><div class=row><div>Dark Mode</div><label class=sw><input type=checkbox id=darkSw aria-label="Dark Mode"
- onchange="try{localStorage.dark=this.checked?1:0}catch(e){}theme()"><i></i><span class=k></span></label></div></div>
+{{ theme_menu }}
 {% if enrolled %}<h3 class=hdr>Notifications</h3><div class=g><div class=row><div>Update Alerts</div><label class=sw><input type=checkbox id=pushSw aria-label="Update Alerts"
  onchange="pushSet(this.checked)"><i></i><span class=k></span></label></div></div>
 <p class=ftr id=pushNote>Tells you when an app you installed has a new version.</p>{% endif %}
@@ -1181,7 +1338,7 @@ function firstRunGo(ok){let b=frNext;frNext=null;firstRun.hidden=true;if(!ok)ret
  try{localStorage.devTold=1}catch(e){}fetch("/first-run",{method:"POST"}).catch(()=>{});  // it covered Developer Mode: no second alert after the install
  if(b){if(b.dataset.arm)b.classList.add("go");b.click()}}  // an armed GET installs on click
 show();
-addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();darkSw.checked=document.documentElement.classList.contains("dark")});
+addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();themeMarks()});
 </script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=admin_enabled(), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
         ifz_m=signed_url(f"/m/{ifz['name']}.plist") if ifz else "",
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
@@ -2001,12 +2158,12 @@ MANAGE_CSS = """<style>.mg label{display:flex;flex-direction:column;gap:4px;font
 .mrow.is-pressed:after,.mrow.sel:after{filter:brightness(0) invert(1)}
 .g a.row.sel,.dark .g a.row.sel{background:var(--select);color:#fff;text-shadow:none} .g a.row.sel *{color:#fff}
 /* a row's value on the right, UITableViewCellStyleValue1's blue-grey */
-.val{flex:none;max-width:60%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:#385487} .dark .val{color:var(--sub)}
+.val{flex:none;max-width:60%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--acc)} .dark .val{color:var(--sub)}
 .kvr>div{flex:none!important} .kvr .val{flex:1;max-width:none;text-align:right;white-space:normal;overflow-wrap:anywhere}
 .cw{display:flex;gap:10px;align-items:center;margin:0 0 6px;padding:10px 12px;border-radius:9.5px;background:#fff8e1;border:1px solid #e6cf7a;color:#7a4b00;font-size:15px;font-weight:700}
 .cw.bad{background:#fdecec;border-color:#e3a1a1;color:#b00012} .cw>div{flex:1;min-width:0} .cw p{margin:0} .cw p+p{margin-top:6px}
 a.cw:after{content:"";flex:none;width:9px;height:13px;background:var(--chev) center/contain no-repeat} .cw small{display:block;margin-top:4px;font-size:13px;font-weight:400;color:inherit}
-.dark .cw{background:#3a3220;border-color:#6b5a26;color:#f0c870} .dark .cw.bad{background:#3a2020;border-color:#6b2626;color:#ff8a8a}
+.dark .cw{background:var(--warnbg);border-color:var(--warnedge);color:var(--warntext)} .dark .cw.bad{background:var(--badbg);border-color:var(--badedge);color:var(--badtext)}
 .drow .dl{flex:1;min-width:0;display:block;color:inherit} .drow b{display:block;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .drow.off .dl{opacity:.45}
 .load{color:var(--sub);font-size:15px} .load .spin{width:20px;height:20px} [data-devs].busy{opacity:.6;pointer-events:none}
