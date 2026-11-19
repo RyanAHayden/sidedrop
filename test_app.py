@@ -655,7 +655,7 @@ G.asc = apple = FakeApple()
 g = G.app.test_client()
 assert g.post("/login", data={"password": "sidedrop"}).location == "/setup"
 html = g.get("/setup").data.decode()
-assert "Choose API Key" in html and "Manual setup" in html and "developer-account.md#manual-setup" in html and "Choose Signing Files" in html
+assert "Choose API Key" in html and "Manual setup" in html and "openssl req -new" in html and "Choose Signing Files" in html
 key_only = lambda **f: g.post("/setup", data=dict({"password": "friends-pass", "admin_password": "admin-pass-x", "bundle_id": "com.me.sideload",
     "asc_issuer_id": "69a6de7e-1111-47e3-e053-5b8c7c11a4d1"}, **f, files=[(io.BytesIO(p8), "AuthKey_KEYID12345.p8")]), content_type="multipart/form-data")
 apple.forbid = True  # an App Manager key: Apple refuses the certificate, and the error says which role it needs
@@ -706,12 +706,12 @@ assert friend.post("/login", data={"password": "env-friends-pass"}).location == 
 assert boss.get("/?password=env-admin-pass").location == "/" and other.get("/?password=env-admin-pass").location == "/"
 html = boss.get("/admin/passwords").data.decode(); csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
 assert html.count("Set in .env") == 2 and "name=password " in html and "name=admin_password " in html and "data-env=1" in html
-assert "Replace the .env Password?" in html and "old ?password= links stop working" in html and "Use .env Password" not in html
-assert "stay signed in" not in html and "window.confirm" not in html
+assert "Change the Password?" in html and "This replaces the password from .env" in html and "Use .env Password" not in html
+assert "Sign Out Everyone" in html and "Keep Signed In" in html and "window.confirm" not in html and "activeElement.blur()" in html  # keyboard down first
 p12post = lambda cl, **f: cl.post("/admin/passwords", data=dict(f, csrf=csrf))
 assert b"Confirm replacing" in p12post(boss, password="new-friends-pass").data and J.password_ok("env-friends-pass")  # no confirm: nothing changes
 assert b"different ones" in p12post(boss, password="env-admin-pass", replace_env="1").data
-assert p12post(boss, password="new-friends-pass", replace_env="1").location == "/admin/passwords?done=passwords"
+assert p12post(boss, password="new-friends-pass", replace_env="1", signout="1").location == "/admin/passwords?done=passwords"
 saved = (envd / "setup.json").read_text()
 assert "new-friends-pass" not in saved and "env-friends-pass" not in saved and "password_override" in saved
 assert "err=1" in J.app.test_client().post("/login", data={"password": "env-friends-pass"}).location  # old one refused
@@ -722,7 +722,7 @@ assert b"Changed here, over the one in .env" in boss.get("/admin/passwords").dat
 html = boss.get("/admin/passwords").data.decode()
 assert html.count("Use .env Password") == 1 and "Use the .env Password?" in html
 # the admin password too: other admin iPhones are signed out, the one making the change stays
-assert p12post(boss, admin_password="new-admin-pass", replace_env="1").location == "/admin/passwords?done=passwords"
+assert p12post(boss, admin_password="new-admin-pass", replace_env="1", signout="1").location == "/admin/passwords?done=passwords"
 assert boss.get("/admin/passwords").status_code == 200 and other.get("/admin/passwords").location == "/"
 assert J.password_ok("new-admin-pass", admin=True) and not J.password_ok("env-admin-pass", admin=True)
 # a restart with the same .env keeps the overrides
@@ -732,11 +732,30 @@ assert J2.password_ok("new-friends-pass") and not J2.password_ok("env-friends-pa
 friend = J2.app.test_client(); boss = J2.app.test_client()
 assert friend.post("/login", data={"password": "new-friends-pass"}).location == "/" and boss.get("/?password=new-admin-pass").location == "/"
 html = boss.get("/admin/passwords").data.decode(); csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
-assert boss.post("/admin/passwords", data={"csrf": csrf, "use_env": "PASSWORD"}).location == "/admin/passwords?done=env"
+assert boss.post("/admin/passwords", data={"csrf": csrf, "use_env": "PASSWORD", "signout": "1"}).location == "/admin/passwords?done=env"
 assert J2.password_ok("env-friends-pass") and not J2.password_ok("new-friends-pass") and J2.password_ok("new-admin-pass", admin=True)
 assert b"Register iPhone" not in friend.get("/").data and b"works again" in boss.get("/admin/passwords?done=env").data
 # .env edited to a different admin password: .env wins and the override is dropped
 J3 = boot(envd, PASSWORD="env-friends-pass", ADMIN_PASSWORD="edited-admin-pass", SECRET_KEY="f" * 32)
 assert J3.password_ok("edited-admin-pass", admin=True) and not J3.password_ok("new-admin-pass", admin=True)
 assert "password_override" not in (envd / "setup.json").read_text() and J3.password_ok("env-friends-pass")
+# Keep Signed In: the password changes, but iPhones signed in with the old one stay signed in (as before F12)
+friend, boss = J3.app.test_client(), J3.app.test_client()
+assert friend.post("/login", data={"password": "env-friends-pass"}).location == "/" and boss.get("/?password=edited-admin-pass").location == "/"
+html = boss.get("/admin/passwords").data.decode(); csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
+assert boss.post("/admin/passwords", data={"csrf": csrf, "password": "kept-friends-pass", "replace_env": "1", "signout": "0"}).location == "/admin/passwords?done=passwords"
+assert J3.password_ok("kept-friends-pass") and not J3.password_ok("env-friends-pass")
+assert b"Register iPhone" in friend.get("/").data, "Keep Signed In kept the friend signed in"
+assert "err=1" in J3.app.test_client().post("/login", data={"password": "env-friends-pass"}).location  # but the old one no longer signs in
+# the iPhones page loads in the bottom reload bar, not a row that pushes the list down
+html = boss.get("/admin/iphones").data.decode()
+assert 'getElementById("rbarT")' in html and 'class="row load"' not in html
+# an upload the server can't write shows an error on the page, not a 500
+fd = envd / "files"; fd.mkdir(exist_ok=True); fd.chmod(0o500)
+r = boss.post("/admin/files", data={"csrf": csrf, "files": [(io.BytesIO(b"x"), "a.txt")]}, content_type="multipart/form-data")
+fd.chmod(0o700)
+assert r.status_code == 200 and b"can&#39;t write to the data folder" in r.data, r.status_code
+# the manual certificate steps are on the page, not a link out
+html = boss.get("/admin/signing").data.decode()
+assert "openssl pkcs12 -export" in html and "Apple Distribution" in html and "docs/developer-account.md" not in html
 print("ok")

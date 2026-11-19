@@ -533,7 +533,7 @@ details[open]>summary:after{transform:rotate(90deg)} details>:not(summary){margi
 @keyframes pop{0%{transform:scale(1.15);opacity:0}55%{transform:scale(.95);opacity:1}80%{transform:scale(1.02)}100%{transform:scale(1)}}
 .alert h3{position:relative;margin:0 0 6px;font-size:18px;line-height:22px;overflow-wrap:anywhere;word-break:break-word}
 .alert p{position:relative;margin:0 0 10px;font-size:16px;line-height:20px;overflow-wrap:anywhere;word-break:break-word}
-.abtns{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.abtns{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px} .abtns.v{grid-template-columns:1fr}  /* 3 buttons stack, as iOS 6's */
 /* UIKit alert buttons: UIPopupAlertSheetDefaultButton (Cancel), UIPopupAlertSheetButton (OK), UIPopupAlertSheetButtonPress */
 .alert .abtns button{height:43px;min-width:0;padding:0 6px;font-size:18px;text-shadow:0 -1px 0 rgba(0,0,0,.8);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;border:1px solid rgba(19,29,57,.9);border-radius:5px;box-shadow:none;
  
@@ -551,7 +551,7 @@ html.dark{color-scheme:dark;--mute:#8b9099;--sub:#8b9099;--sep:#17191c;--line:#0
 /* Cydia's reload bar while Reload syncs sources and re-signs: the kit's "Semi-transparent black bar" (#4c4c4c to black at 52%, a white-at-20%
    line on top, black-at-70% at the bottom) at .8, a 20pt white spinner, a bold white line. As iFizBox's F204: it sits on top of the tab bar, sliding
    up from behind it, and nothing on the page moves; the page gets 44pt more room at the bottom while it shows, so the last row still scrolls clear */
-#rbar{position:fixed;z-index:4;bottom:var(--tabh,0);left:0;right:0;height:44px;box-sizing:border-box;padding:0 max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));
+#rbar{position:fixed;z-index:7;bottom:var(--tabh,0);left:0;right:0;height:44px;box-sizing:border-box;padding:0 max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));
  display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.8);pointer-events:none;
  background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7)) bottom/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.2),rgba(255,255,255,.2)) top/100% 1px no-repeat,linear-gradient(rgba(76,76,76,.8),rgba(0,0,0,.8) 52%);
  transform:translateY(100%);transition:transform .25s ease-in} html.reloading #rbar{transform:none;transition:transform .3s cubic-bezier(.25,.1,.25,1)}  /* F204's timings: up .3s, down .25s */
@@ -806,7 +806,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .layer[hidden]{display:none} .layer .nav{position:absolute;z-index:1}  /* above its own scroller, as the main nav is above #scr */ .layer .nav h1{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .lscroll{position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;scrollbar-width:none;
  padding:calc(56px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right),(100% - 30rem)/2) 20px max(10px,env(safe-area-inset-left),(100% - 30rem)/2)}
-.lscroll>.page{min-height:calc(100% + 1px)}
+.lscroll>.page{min-height:calc(100% + 1px)} html.reloading .lscroll{padding-bottom:64px}  /* the reload bar over a pushed page: its last row still scrolls clear */
 /* first install tap: a one-time sheet (SDP, then Developer Mode) over everything, sliding up like the install page; its screenshots are Help's */
 .fl{position:fixed;inset:0;z-index:25;background:var(--pin);background-color:#c8cfd6;animation:conup .35s cubic-bezier(.36,.66,.04,1)} .fl[hidden]{display:none} .dark .fl{background-color:#1d1f23}
 .fl .nav{position:absolute;z-index:1} .fl .c>.shot{margin:0} .fl .c>.shot+.shot{margin-top:12px} .fl .lead{margin:0 4px 12px;font-size:15px}
@@ -1500,7 +1500,19 @@ if P12.exists() and not needs_setup():  # ponytail: once per worker; Apple's che
 
 DIST_TYPES = ("DISTRIBUTION", "IOS_DISTRIBUTION")  # Apple Distribution, and the older iOS Distribution, which share the limit
 APP_ID_CAPS = ("PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS")  # as docs/developer-account.md ticks them; Push must work
-MANUAL_DOCS = "https://github.com/RyanAHayden/sidedrop/blob/main/docs/developer-account.md#manual-setup"
+# the manual certificate steps, shown where cert.p12 is picked (setup splash, Manage > Signing) instead of a link out
+MANUAL_STEPS = """<style>.msteps{margin:0;padding-left:20px;font-size:14px;color:var(--sub);display:flex;flex-direction:column;gap:6px}
+.msteps b{color:var(--fg,inherit)} .msteps code{display:block;margin-top:3px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}</style>
+<ol class=msteps>
+<li><b>Make a certificate request.</b> On a Mac: Keychain Access → Certificate Assistant → Request a Certificate From a Certificate Authority, Saved to disk. Or with OpenSSL:
+<code>openssl genrsa -out key.pem 2048
+openssl req -new -key key.pem -out request.csr -subj "/CN=sidedrop"</code></li>
+<li><b>Have Apple issue it.</b> <a href="https://developer.apple.com/account/resources/certificates/add">developer.apple.com → Certificates → +</a> → Apple Distribution → upload the request → download distribution.cer.</li>
+<li><b>Make cert.p12.</b> On a Mac: open distribution.cer, then in Keychain Access → My Certificates right-click it → Export, with a password. Or with OpenSSL:
+<code>openssl x509 -inform der -in distribution.cer -out cert.pem
+openssl pkcs12 -export -legacy -inkey key.pem -in cert.pem -out cert.p12</code></li>
+<li><b>Pick cert.p12 here</b> and type its password (or add a password.txt). sidedrop makes the App ID with Push if your account doesn't have it.</li>
+</ol>"""
 KEY_ROLE_ERR = ("Apple refused: making certificates needs an API key with the Admin role (App Manager keys can register iPhones "
                 "but not make certificates). Make an Admin key in App Store Connect → Users and Access → Integrations, or use "
                 "Manual setup with your own cert.p12.")
@@ -1676,14 +1688,14 @@ def setup():
 {% if 'BUNDLE_ID' not in env %}<label>App ID (BUNDLE_ID)<input name=bundle_id value="{{ s.bundle_id or '' }}" placeholder="com.you.sideload" autocapitalize=none autocomplete=off>
 <small>Made with Push if your account doesn't have it yet.</small></label>{% endif %}
 <details{% if p12 %} open{% endif %}><summary>Manual setup</summary>
-<small>Rather not give sidedrop a key that can make certificates? Make the certificate yourself (<a href="{{ docs }}">the manual steps</a>) and pick cert.p12 and a password.txt here; the API key then only registers iPhones.</small>
+<small>Rather not give sidedrop a key that can make certificates? Make the certificate yourself and pick it here; the API key then only registers iPhones.</small>""" + MANUAL_STEPS + """
 <input type=file name=files id=sigf multiple class=vh onchange="sigl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Signing Files'">
 <label class="b grey" for=sigf id=sigl>Choose Signing Files</label>
 <small>cert.p12 and a password.txt, loose or in a .zip.{% if p12 %} cert.p12 is saved.{% endif %}</small>
 {% if 'P12_PASSWORD' not in env %}<label>P12 Password<input type=password name=p12_password autocomplete=off><small>Leave empty to try a password.txt, or none.</small></label>{% endif %}
 </details>
 <button>Save</button></form>""", title="Set Up sidedrop", err=err, s=s, env=ENV_SET, p12=P12.exists(), p8=ASC_KEY.exists(),
-                certs=certs, confirm=REVOKE_CONFIRM, docs=MANUAL_DOCS)
+                certs=certs, confirm=REVOKE_CONFIRM)
 
 
 # --- admin: list the developer account's iPhones, disable the ones that shouldn't have apps any more ---
@@ -1974,7 +1986,7 @@ SPINNER = """<svg class=spin viewBox="0 0 24 24" aria-hidden=true><g stroke="#7f
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate({{ i * 30 }} 12 12)" opacity="{{ '%.2f' % (1 - i * 0.07) }}" />{% endfor %}</g></svg>"""
 DEVICE_LIST = """{% macro dev(d) %}<div class="row drow{{ '' if d.on else ' off' }}"><a class=dl href="/admin/iphone/{{ d.id }}" data-push><b>{{ d.name }}</b><small>{{ d.model }}{% if d.me %} · this iPhone{% endif %}</small></a>
 <label class=sw><input type=checkbox{{ ' checked' if d.on }} data-id="{{ d.id }}" data-name="{{ d.name }}" aria-label="{{ d.name }}" onchange="devSw(this)"><i></i><span class=k></span></label></div>{% endmacro %}
-{% if loading or devices %}<div class=g>{% if loading %}<div class="row load">""" + SPINNER + """<div>Loading from Apple…</div></div>{% endif %}{% for d in devices %}{{ dev(d) }}{% endfor %}</div>{% endif %}
+{% if devices %}<div class=g>{% for d in devices %}{{ dev(d) }}{% endfor %}</div>{% endif %}
 {% if failed %}<p class="c err">Apple's developer service didn't answer, so this is the list saved {{ saved }}. Try again in a few minutes.<small>{{ failed }}</small></p>{% endif %}
 {% if devices %}<p class=ftr>{{ devices|length }} of {{ slots }} slots used. Disabled iPhones still count until your membership renews.</p>
 {% elif not loading %}<p class=ftr>No iPhones registered yet.</p>{% endif %}"""
@@ -1995,9 +2007,13 @@ window.devSw=function(i){let b=i.closest("[data-devs]"),on=i.checked;
  let f=new FormData();f.append("csrf",b.dataset.csrf);f.append("id",i.dataset.id);f.append("status",on?"ENABLED":"DISABLED");f.append("json","1");b.classList.add("busy");
  fetch("/admin/device",{method:"POST",body:f,credentials:"same-origin"}).then(r=>r.json()).then(d=>{if(d.html==null)throw d.error;b.innerHTML=d.html})
   .catch(e=>{i.checked=!on;row.classList.toggle("off",on);alert("Apple didn't answer. Try again in a few minutes."+(e?"\\n\\n"+e:""))}).finally(()=>b.classList.remove("busy"))};
-/* the saved list shows at once; Apple's answer replaces it when it comes */
+/* the saved list shows at once; Apple's answer replaces it when it comes. "Loading from Apple…" shows in the bottom reload bar, which
+   slides over the page, so nothing in the list moves while it loads */
+let h=document.documentElement,t=document.getElementById("rbarT"),was=t&&t.textContent;
+if(t){t.textContent="Loading from Apple…";h.classList.add("reloading")}
 fetch("/admin/devices.json",{credentials:"same-origin",cache:"no-store"}).then(r=>r.json()).then(d=>{if(d.html==null)throw 0;box.innerHTML=d.html})
- .catch(()=>{let l=box.querySelector(".load");if(l)l.lastElementChild.textContent="Couldn't reach sidedrop. Showing the saved list."})})()</script>"""
+ .catch(()=>{if(t)t.textContent="Couldn't reach sidedrop. Showing the saved list.";return new Promise(r=>setTimeout(r,2500))})
+ .finally(()=>{if(t){h.classList.remove("reloading");setTimeout(()=>{t.textContent=was},300)}})})()</script>"""
 
 
 @app.get("/admin/iphones")
@@ -2087,7 +2103,7 @@ SIGNING = """{% for lvl, t in cert %}<div class="cw{{ ' bad' if lvl == 'error' }
 <div class=g><details{% if p12_open %} open{% endif %}><summary>Upload cert.p12 Instead</summary>
 <form class=mg method=post action=/admin/signing enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Uploading…'">
 <input type=hidden name=csrf value="{{ csrf }}">
-<small>A certificate you made yourself (<a href="{{ docs }}">the manual steps</a>): cert.p12 and a password.txt, loose or in a .zip.</small>
+<small>A certificate you made yourself: cert.p12 and a password.txt, loose or in a .zip.</small>""" + MANUAL_STEPS + """
 <input type=file name=files id=sigf multiple class=vh onchange="sigl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Signing Files'">
 <label class="b grey" for=sigf id=sigl>Choose Signing Files</label>
 {% if 'P12_PASSWORD' not in env %}<label>P12 Password<input type=password name=p12_password autocomplete=off><small>Leave empty to try a password.txt, or none.</small></label>{% endif %}
@@ -2099,7 +2115,7 @@ def signing_page(err=None, certs=None, manual=False):
     key_file = (f"AuthKey_{key_id}.p8" if key_id else "asc.p8") if ASC_KEY.exists() else ""
     role = {"admin": "Admin", "limited": "Not Admin"}.get(s.get("asc_role", ""), "Not checked yet" if key_file else "")
     return admin_page(SIGNING, "Signing", err=err, certs=certs or [], cert=cert_status_cached(), info=cert_info(), bundle=BUNDLE_ID,
-                      key_file=key_file, role=role, env=ENV_SET, s=s, confirm=REVOKE_CONFIRM, docs=MANUAL_DOCS, p12_open=manual)
+                      key_file=key_file, role=role, env=ENV_SET, s=s, confirm=REVOKE_CONFIRM, p12_open=manual)
 
 
 @app.get("/admin/signing")
@@ -2109,35 +2125,39 @@ def admin_signing_page():
     return signing_page()
 
 
-PW_ASK = """if(this.replace_env.value!='1'&&(this.dataset.ask||[...this.querySelectorAll('[data-env]')].some(i=>i.value))){let a=this.parentNode.querySelector('.ask-'+(this.dataset.ask||'env'));a.f=this;a.hidden=false;return false}this.querySelector('button').textContent='Saving…'"""
-PW_GO = "let s=this.closest('.scrim'),f=s.f;s.hidden=true;f.replace_env.value='1';f.requestSubmit?f.requestSubmit():f.submit()"
+# Save asks first whenever a password is typed: keep the signed-in iPhones or sign them out (and, over .env's, that it replaces it).
+# The keyboard goes down first (blur), so the alert isn't half under it
+PW_ASK = """if(this.signout.value===''&&(this.dataset.ask||[...this.querySelectorAll('input[type=password]')].some(i=>i.value))){document.activeElement&&document.activeElement.blur();let a=this.parentNode.querySelector('.ask-'+(this.dataset.ask||'env')),n=a.querySelector('.envnote');if(n)n.hidden=![...this.querySelectorAll('[data-env]')].some(i=>i.value);a.f=this;a.hidden=false;return false}this.querySelector('button').textContent='Saving…'"""
+PW_GO = "let s=this.closest('.scrim'),f=s.f;s.hidden=true;f.replace_env.value='1';f.signout.value=this.dataset.v;f.requestSubmit?f.requestSubmit():f.submit()"
+PW_BTNS = """<div class="abtns v"><button type=button class=ok data-v=1 onclick="{{ go }}">Sign Out Everyone</button><button type=button class=ok data-v=0 onclick="{{ go }}">Keep Signed In</button>
+<button type=button onclick="this.closest('.scrim').hidden=true">Cancel</button></div>"""
 # F12: both fields always show; one whose password comes from .env says so, and saving over it asks first (an iOS 6 alert in the page,
 # not window.confirm) and stores an override in setup.json; 'Use .env Password' drops it
 PASSWORDS = """{% macro note(k) %}{% if k in env %}<b>{{ 'Changed here, over the one in .env' if k in ov else 'Set in .env' }}</b>. {% endif %}{% endmacro %}
 <form class="c mg" method=post action=/admin/passwords onsubmit="{{ ask }}">
-<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=replace_env>
+<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=replace_env><input type=hidden name=signout>
 <label>Friends' Password<input type=password name=password autocomplete=new-password minlength=8{{ ' data-env=1' if 'PASSWORD' in env }}>
-<small>{{ note('PASSWORD') }}What friends type to sign in. Changing it signs out every iPhone signed in with the old one, and old <span class=nw>?password=</span> links stop working.</small></label>
+<small>{{ note('PASSWORD') }}What friends type to sign in. Old <span class=nw>?password=</span> links stop working; on Save you choose whether signed-in iPhones stay signed in.</small></label>
 <label>Admin Password<input type=password name=admin_password autocomplete=new-password minlength=8{{ ' data-env=1' if 'ADMIN_PASSWORD' in env }}>
-<small>{{ note('ADMIN_PASSWORD') }}Unlocks Manage. Keep it different from the friends' one. Changing it signs out the other iPhones signed in as admin; this one stays.</small></label>
+<small>{{ note('ADMIN_PASSWORD') }}Unlocks Manage. Keep it different from the friends' one. On Save you choose whether other admin iPhones stay signed in; this one always does.</small></label>
 <button>Save</button><small>Leave one empty to keep it. At least 8 characters.</small></form>
 {% for k, who in (('PASSWORD', "Friends'"), ('ADMIN_PASSWORD', 'Admin')) if k in ov %}
 <form class="c mg" method=post action=/admin/passwords data-ask=use onsubmit="{{ ask }}"><input type=hidden name=csrf value="{{ csrf }}">
-<input type=hidden name=replace_env><input type=hidden name=use_env value={{ k }}>
+<input type=hidden name=replace_env><input type=hidden name=signout><input type=hidden name=use_env value={{ k }}>
 <button class=grey>Use .env Password</button><small>{{ who }} password: drop the one set here and go back to the one in .env.</small></form>{% endfor %}
-<div class="scrim ask-env" hidden><div class=alert role=alertdialog aria-modal=true><h3>Replace the .env Password?</h3>
-<p>This replaces the password from .env on the server. Every iPhone signed in with it is signed out and needs the new password, and old ?password= links stop working.</p>
-<div class=abtns><button type=button onclick="this.closest('.scrim').hidden=true">Cancel</button><button type=button class=ok onclick="{{ go }}">Replace</button></div></div></div>
+<div class="scrim ask-env" hidden><div class=alert role=alertdialog aria-modal=true><h3>Change the Password?</h3>
+<p><span class=envnote>This replaces the password from .env on the server. </span>New sign-ins and old ?password= links need the new password. iPhones signed in now can stay signed in, or be signed out and need the new password.</p>
+""" + PW_BTNS + """</div></div>
 <div class="scrim ask-use" hidden><div class=alert role=alertdialog aria-modal=true><h3>Use the .env Password?</h3>
-<p>The password in .env works again and the one set here stops. Every iPhone signed in with the one set here is signed out.</p>
-<div class=abtns><button type=button onclick="this.closest('.scrim').hidden=true">Cancel</button><button type=button class=ok onclick="{{ go }}">Use .env</button></div></div></div>"""
+<p>The password in .env works again and the one set here stops. iPhones signed in with the one set here can stay signed in, or be signed out.</p>
+""" + PW_BTNS + """</div></div>"""
 
 
 @app.route("/admin/passwords", methods=["GET", "POST"])
 def admin_passwords():
     """Change the friends' and the admin password (hashed in setup.json). One set in .env gets an override (F12) that password_ok()
     checks first, with a hash of the .env value it replaced, so a later edit of .env wins again. Each change bumps that password's
-    version, which signs out the sessions made with the old one; the admin making it stays signed in."""
+    version when the admin picks Sign Out Everyone, which signs out the sessions made with the old one; the admin making it stays signed in."""
     if r := admin_gate():
         return r
     env = {k for k in ("PASSWORD", "ADMIN_PASSWORD") if k in ENV_SET}
@@ -2145,14 +2165,15 @@ def admin_passwords():
     if request.method == "POST":
         admin_check()
         f, s = request.form, load_json(SETUP)
-        bump = lambda p: s.__setitem__(f"{p}password_ver", s.get(f"{p}password_ver", 0) + 1)
+        out = f.get("signout") == "1"  # the alert's choice: Sign Out Everyone, or Keep Signed In (as before F12)
+        bump = lambda p: out and s.__setitem__(f"{p}password_ver", s.get(f"{p}password_ver", 0) + 1)
         if f.get("use_env") in env:  # 'Use .env Password': drop the override
             p = "admin_" if f["use_env"] == "ADMIN_PASSWORD" else ""
             if s.pop(f"{p}password_override", None):
                 s.pop(f"{p}password_env", None)
                 bump(p)
                 save_json(SETUP, s)
-                if p:
+                if p and out:
                     session["pv"] = ["a", s["admin_password_ver"]]
             return redirect("/admin/passwords?done=env")
         pw, admin_pw = f.get("password", ""), f.get("admin_password", "")
@@ -2175,7 +2196,7 @@ def admin_passwords():
                     s[f"{p}password"] = hash_password(new)
                 bump(p)
             save_json(SETUP, s)
-            if admin_pw:
+            if admin_pw and out:
                 session["pv"] = ["a", s["admin_password_ver"]]
             return redirect("/admin/passwords?done=passwords")
     return admin_page(PASSWORDS, "Passwords", err=err, env=env, ov={k for k in env if env_overridden(k == "ADMIN_PASSWORD")},
@@ -2317,8 +2338,13 @@ def admin_files():
         name = re.sub(r"[/\\\x00-\x1f]", "", (u.filename or "").rsplit("/", 1)[-1]).strip().lstrip(".")
         if name:
             tmp = FILES / f".{name}.part"
-            u.save(tmp)  # streamed to disk, so big files are fine
-            tmp.replace(FILES / name)
+            try:
+                u.save(tmp)  # streamed to disk, so big files are fine
+                tmp.replace(FILES / name)
+            except OSError as e:  # e.g. a files/ folder made by another user: say so instead of a 500
+                print("file upload failed:", e, flush=True)
+                return admin_page(ADMIN_CSS + FILES_PAGE, "Files for Friends", files=shared_files(),
+                                  err=f"Couldn't save {name}: the server can't write to the data folder's files/ ({e.strerror}).")
     return redirect("/admin/files?done=files")
 
 
