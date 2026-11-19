@@ -27,6 +27,8 @@ These files can be edited on github.com; a server running `deploy.sh` picks up c
 
 ## Setup
 
+Running sidedrop for your own friends for the first time? [docs/become-a-distributor.md](docs/become-a-distributor.md) goes from the Apple account through Docker Compose and HTTPS to the setup screen on your iPhone.
+
 New to the developer account? [docs/developer-account.md](docs/developer-account.md) walks through the certificate, the API key and an App ID with Push, step by step.
 
 Everything lives in one data folder (`./data`, or `DATA_DIR`, in `compose.yaml`), which must be owned by UID 568:
