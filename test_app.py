@@ -91,6 +91,28 @@ assert b'class="tile reg"' in html and b"go('changes')" in html and b"id=setupT"
 c.get("/logout", base_url="https://localhost"); c.post("/login", data={"password": "hunter2-but-longer"}, base_url="https://localhost")
 assert b"This iPhone is registered" in c.get("/", base_url="https://localhost").data
 assert A.profile_udids() == {"00008130-AAAA"} and (tmp / "signed" / "Demo.ipa").exists()
+# F15 version lines: the registered iPhone's PRODUCT and the commit on Apps, Settings and in About; unregistered: plain iPhone
+os.environ["SIDEDROP_COMMIT"] = "9dc9923"; assert A.read_commit() == "9dc9923"; del os.environ["SIDEDROP_COMMIT"]
+A.COMMIT = "9dc9923"
+html = c.get("/", base_url="https://localhost").data.decode()
+assert html.count('<p class=ver data-m="iPhone16,1">iPhone16,1, sidedrop</p><p class="ver vc">9dc9923</p>') == 3, html.count("class=ver")
+apps_tab = html[html.index("id=t-apps"):]; apps_tab = apps_tab[:apps_tab.index("</section>")]
+settings_tab = html[html.index("id=t-settings"):]; settings_tab = settings_tab[:settings_tab.index("</section>")]
+assert "9dc9923" in apps_tab and "9dc9923" in settings_tab and "9dc9923" in html[html.index("id=aboutT"):]
+assert "navigator.language" in html and "like Mac OS X" in html
+html = A.app.test_client().get("/?enrolled=" + A.device_token("00008130-AAAA")).data.decode()  # signed out: About still has it
+assert 'data-m="iPhone16,1"' in html and "9dc9923" in html
+anon = A.app.test_client(); anon.post("/login", data={"password": "hunter2-but-longer"})
+html = anon.get("/").data.decode()
+assert html.count('<p class=ver data-m="iPhone">iPhone, sidedrop</p>') == 3 and "iPhone16,1" not in html
+(tmp / "products.json").unlink()  # registered before F15: the PRODUCT in Apple's device name, else its model
+A.save_json(A.DEVICES, {"at": 1, "data": [{"attributes": {"udid": "00008130-AAAA", "name": "Sam iPhone15,2", "model": "iPhone 14 Pro"}}]})
+assert A.device_model("00008130-AAAA") == "iPhone15,2"
+A.save_json(A.DEVICES, {"at": 1, "data": [{"attributes": {"udid": "00008130-AAAA", "name": "Sam", "model": "iPhone 14 Pro"}}]})
+assert A.device_model("00008130-AAAA") == "iPhone 14 Pro" and A.device_model("other") == "iPhone" and A.device_model(None) == "iPhone"
+(tmp / "devices.json").unlink(); A.save_product("00008130-AAAA", "iPhone16,1")
+A.COMMIT = ""
+assert 'class="ver vc"' not in c.get("/", base_url="https://localhost").data.decode()  # no commit, no second line
 # signed with the concrete app ID, never the profile's wildcard
 assert signed_ents[-1]["application-identifier"] == "TEAM.com.me.demo"
 assert signed_ents[-1]["keychain-access-groups"] == ["TEAM.com.me.demo"] and signed_ents[-1]["get-task-allow"] is False

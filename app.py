@@ -190,6 +190,30 @@ def register(udid, name):
         resign(force=True)
 
 
+PRODUCTS, products_lock = DATA / "products.json", threading.Lock()  # {udid: "iPhone15,2"}: each iPhone's PRODUCT from registration (F15)
+
+
+def save_product(udid, product):
+    if product:
+        with products_lock:
+            save_json(PRODUCTS, {**load_json(PRODUCTS), udid: product})
+
+
+def device_model(udid):
+    """The model identifier for the version line: the PRODUCT it registered with, else (iPhones registered before F15)
+    the one in the ASC device's name ("Sam iPhone16,1") or Apple's model, else plain "iPhone"."""
+    if not udid:
+        return "iPhone"
+    if load_json(PRODUCTS).get(udid):
+        return load_json(PRODUCTS)[udid]
+    for d in cached_devices()[0] or []:
+        a = d.get("attributes") or {}
+        if a.get("udid") == udid:
+            m = re.search(r"\b(?:iPhone|iPad|iPod)\d+,\d+\b", a.get("name") or "")
+            return m.group(0) if m else a.get("model") or "iPhone"
+    return "iPhone"
+
+
 def ipa_info(path):
     with zipfile.ZipFile(path) as z:
         name = next(n for n in z.namelist() if re.fullmatch(r"Payload/[^/]+\.app/Info\.plist", n))
@@ -429,6 +453,36 @@ def sign_profile(data):
 
 BUILD = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:12]  # changes with every deploy of the page's code; an open page that sees a new one reloads
 
+
+def read_commit():
+    """The commit for the version line (F15): the Docker image has no .git, so deploy.sh passes it as SIDEDROP_COMMIT;
+    a checkout asks git; else none, and no commit line."""
+    if os.environ.get("SIDEDROP_COMMIT"):
+        return os.environ["SIDEDROP_COMMIT"].strip()
+    try:  # Popen, not run: test_app.py stubs subprocess.run for zsign
+        with subprocess.Popen(["git", "rev-parse", "--short", "HEAD"], cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True) as p:
+            out = p.communicate(timeout=5)[0].strip()
+        return out if p.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+COMMIT = read_commit()
+# The two grey lines at the bottom of Apps and Settings and in About, iFizBox's: "iPhone15,2, iOS 18.1, sidedrop (en-us)"
+# then the commit. The model comes from the server (device_model); iOS and the language from the browser (VERSION_JS)
+VERSION_FOOT = """<p class=ver data-m="{{ m }}">{{ m }}, sidedrop</p>{% if commit %}<p class="ver vc">{{ commit }}</p>{% endif %}"""
+VERSION_JS = """<script>/* F15: iOS from the user agent, as iFizBox's device.js (iOS 26 Safari freezes it at 18.x/26.0: we show what it says) */
+addEventListener("DOMContentLoaded",()=>{let o=navigator.userAgent.match(/\\b(?:iPhone|CPU) OS (\\d+)[_.](\\d+)(?:[_.](\\d+))?[^)]*like Mac OS X/),
+ ios=o?o[1]+"."+o[2]+(o[3]?"."+o[3]:""):"",lang=String(navigator.language||"en").toLowerCase();
+ document.querySelectorAll(".ver[data-m]").forEach(p=>p.textContent=[p.dataset.m,ios&&"iOS "+ios,"sidedrop"].filter(Boolean).join(", ")+" ("+lang+")")})</script>"""
+
+
+def version_foot():
+    from markupsafe import Markup
+    tok = request.args.get("enrolled") or request.cookies.get("device", "")
+    udid = token_udid(tok)
+    return Markup(render_template_string(VERSION_FOOT, m=device_model(udid if udid in profile_udids() else None), commit=COMMIT))
+
 PAGE = """<!doctype html><meta charset=utf-8><meta name=build content=%BUILD%><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>sidedrop</title><meta name=description content="Apps shared between friends, signed for your iPhone.">
 <meta property=og:title content=sidedrop><meta property=og:description content="Apps shared between friends, signed for your iPhone."><meta property=og:site_name content=sidedrop>
@@ -497,6 +551,8 @@ a,img{-webkit-user-drag:none}  /* iFizBox's B24: holding a link row or an image 
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none} input,textarea{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}  /* app, not a document: holding never selects, except fields */ #sb::before{content:"";position:absolute;inset:-12px -2px -12px -26px} #sb.grab{width:7px;right:1px;border-radius:4px}
 h3.hdr{font-size:17px;font-weight:700;line-height:21px;letter-spacing:-.01em;color:var(--head);margin:23px 9px 7px;text-shadow:var(--emboss)}
 .ftr{font-size:15px;line-height:19px;color:var(--head);text-align:center;text-shadow:var(--emboss);margin:7px 9px 0;overflow-wrap:anywhere}
+.ver{margin:14px 10px 6px;font-size:13px;line-height:16px;text-align:center;color:var(--head);text-shadow:var(--emboss);overflow-wrap:anywhere} .ver.vc{margin-top:-4px;opacity:.8}
+.alert .ver{margin:0 0 4px;font-size:13px;line-height:16px;color:inherit;text-shadow:inherit;opacity:.85} .alert .ver.vc{margin-bottom:10px;opacity:.7}
 .c,.g{background:#fff;border:1px solid var(--line);border-radius:9.5px;box-shadow:inset 0 .5px .5px rgba(0,0,0,.2);overflow:hidden} .g{background:var(--table)}
 .c{padding:14px;margin:0 0 12px;display:flex;flex-direction:column;gap:10px} .c p{margin:0}
 a.b,label.b,button{display:block;box-sizing:border-box;width:100%;font:inherit;font-weight:700;line-height:1.2;text-align:center;cursor:pointer;padding:11px;color:#fff;
@@ -573,6 +629,7 @@ function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.leng
 <div class=scrim id=about hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
 <h3 id=aboutT>About sidedrop</h3><p>Apps shared between friends, signed for each registered iPhone. Register once in Safari, then tap GET.</p>
 {% if stats %}<p>{{ stats[0] }} of 100 iPhones registered.{% if stats[1] %} Apps keep working until {{ stats[1].strftime('%B %-d, %Y') }}.{% endif %}</p>{% endif %}
+{{ vfoot }}
 <div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){go('settings');d.open=true;setTimeout(()=>goTo(d),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
 <script>/* alerts are modal like UIAlertView: only their buttons close them */
 /* #scr is the scroller; scrollIntoView would also scroll the locked <html> and drag the fixed nav down */
@@ -629,7 +686,8 @@ def page(body, back=None, title="sidedrop", **ctx):
     if logged_in() and PROFILE.exists():  # for the About alert: devices used, and when the profile (so every app) expires
         prof = embedded_plist(PROFILE.read_bytes())
         stats = (len(prof.get("ProvisionedDevices", [])), prof.get("ExpirationDate"))
-    return render_template_string(PAGE, body=render_template_string(body, stats=stats, **ctx), stats=stats, back=back, title=title)
+    vfoot = version_foot()
+    return render_template_string(PAGE + VERSION_JS, body=render_template_string(body, stats=stats, vfoot=vfoot, **ctx), stats=stats, back=back, title=title, vfoot=vfoot)
 
 
 @app.get("/")
@@ -883,6 +941,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <p class=ftr>Installs apps right on your iPhone. <a href=#ifizbox onclick="go('ifizbox');return false">Why iFizBox</a></p>{% endif %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
+{{ vfoot }}
 </section>
 {% if files %}<section class=page id=t-files data-title=Files>{# target=_blank: in the Home Screen app a file link opened a blank Quick Look page; Safari downloads it #}
 <h3 class=hdr>Files</h3><div class=g>{% for f in files %}<a class=row href="{{ fdl(f) }}" target=_blank download><div>{{ f.name }}<small>{{ f.stat().st_size|filesizeformat }}</small></div></a>{% endfor %}</div>
@@ -944,6 +1003,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <input type=url name=url placeholder="…or paste a link to an .ipa" aria-label="Link to an .ipa">
 <button>Sign</button><small>Signed for registered iPhones. The install link lasts 7 days.</small></form>
 <a class="b grey out" href=/logout>Sign out</a>
+{{ vfoot }}
 </section>
 </div>
 {% if just_enrolled %}<div class=scrim id=welcome><div class=alert role=alertdialog aria-modal=true aria-labelledby=welT>
@@ -2479,6 +2539,7 @@ def enroll():
 def udid(name):
     check_sig()
     attrs = embedded_plist(request.get_data())
+    save_product(attrs["UDID"], attrs.get("PRODUCT", ""))
     register(attrs["UDID"], f"{name} {attrs.get('PRODUCT', '')}".strip())
     return redirect(f"{PUBLIC_URL}/?enrolled={device_token(attrs['UDID'])}", 301)  # iOS requires a 301 here, then opens it in Safari
 
