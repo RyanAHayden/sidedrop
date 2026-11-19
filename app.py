@@ -1826,7 +1826,7 @@ def device_rows(listed):
         out.append(dict(id=d["id"], name=a.get("name", ""), model=a.get("model") or a.get("deviceClass", ""), udid=a.get("udid", ""),
                         on=a.get("status") == "ENABLED", added=added, me=bool(me) and a.get("udid") == me,
                         last=ago(seen[a["udid"]]).capitalize() if a.get("udid") in seen else "Not seen yet"))
-    out.sort(key=lambda d: (not d["on"], -(d["added"].timestamp() if d["added"] else 0)))
+    out.sort(key=lambda d: -(d["added"].timestamp() if d["added"] else 0))  # one list: a turned-off iPhone keeps its place
     return out
 
 
@@ -1887,6 +1887,7 @@ MANAGE_CSS = """<style>.mg label{display:flex;flex-direction:column;gap:4px;font
 a.cw:after{content:"";flex:none;width:9px;height:13px;background:var(--chev) center/contain no-repeat} .cw small{display:block;margin-top:4px;font-size:13px;font-weight:400;color:inherit}
 .dark .cw{background:#3a3220;border-color:#6b5a26;color:#f0c870} .dark .cw.bad{background:#3a2020;border-color:#6b2626;color:#ff8a8a}
 .drow .dl{flex:1;min-width:0;display:block;color:inherit} .drow b{display:block;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.drow.off .dl{opacity:.45}
 .load{color:var(--sub);font-size:15px} .load .spin{width:20px;height:20px} [data-devs].busy{opacity:.6;pointer-events:none}
 .udid{font:13px/1.4 ui-monospace,Menlo,monospace;-webkit-user-select:all;user-select:all}
 .g details>summary{color:var(--acc)} .g details>form{display:flex;flex-direction:column;gap:10px}
@@ -1938,12 +1939,10 @@ def manage_menu():
 
 SPINNER = """<svg class=spin viewBox="0 0 24 24" aria-hidden=true><g stroke="#7f7f7f" stroke-width="2.2" stroke-linecap="round">{% for i in range(12) %}
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate({{ i * 30 }} 12 12)" opacity="{{ '%.2f' % (1 - i * 0.07) }}" />{% endfor %}</g></svg>"""
-DEVICE_LIST = """{% macro dev(d) %}<div class="row drow"><a class=dl href="/admin/iphone/{{ d.id }}" data-push><b>{{ d.name }}</b><small>{{ d.model }}{% if d.me %} · this iPhone{% endif %}</small></a>
+DEVICE_LIST = """{% macro dev(d) %}<div class="row drow{{ '' if d.on else ' off' }}"><a class=dl href="/admin/iphone/{{ d.id }}" data-push><b>{{ d.name }}</b><small>{{ d.model }}{% if d.me %} · this iPhone{% endif %}</small></a>
 <label class=sw><input type=checkbox{{ ' checked' if d.on }} data-id="{{ d.id }}" data-name="{{ d.name }}" aria-label="{{ d.name }}" onchange="devSw(this)"><i></i><span class=k></span></label></div>{% endmacro %}
-{% set on = devices|selectattr('on')|list %}{% set off = devices|rejectattr('on')|list %}
-{% if loading or on %}<div class=g>{% if loading %}<div class="row load">""" + SPINNER + """<div>Loading from Apple…</div></div>{% endif %}{% for d in on %}{{ dev(d) }}{% endfor %}</div>{% endif %}
+{% if loading or devices %}<div class=g>{% if loading %}<div class="row load">""" + SPINNER + """<div>Loading from Apple…</div></div>{% endif %}{% for d in devices %}{{ dev(d) }}{% endfor %}</div>{% endif %}
 {% if failed %}<p class="c err">Apple's developer service didn't answer, so this is the list saved {{ saved }}. Try again in a few minutes.<small>{{ failed }}</small></p>{% endif %}
-{% if off %}<h3 class=hdr>Disabled</h3><div class=g>{% for d in off %}{{ dev(d) }}{% endfor %}</div>{% endif %}
 {% if devices %}<p class=ftr>{{ devices|length }} of {{ slots }} slots used. Disabled iPhones still count until your membership renews.</p>
 {% elif not loading %}<p class=ftr>No iPhones registered yet.</p>{% endif %}"""
 
@@ -1959,9 +1958,10 @@ IPHONES = """<div data-devs data-csrf="{{ csrf }}">{{ list|safe }}</div>
 /* each switch turns an iPhone on or off at Apple (POST /admin/device); the answer is the list drawn again */
 window.devSw=function(i){let b=i.closest("[data-devs]"),on=i.checked;
  if(!on&&!confirm("Turn off "+i.dataset.name+"? Its apps stop opening.")){i.checked=true;return}
+ let row=i.closest(".drow");row.classList.toggle("off",!on);
  let f=new FormData();f.append("csrf",b.dataset.csrf);f.append("id",i.dataset.id);f.append("status",on?"ENABLED":"DISABLED");f.append("json","1");b.classList.add("busy");
  fetch("/admin/device",{method:"POST",body:f,credentials:"same-origin"}).then(r=>r.json()).then(d=>{if(d.html==null)throw d.error;b.innerHTML=d.html})
-  .catch(e=>{i.checked=!on;alert("Apple didn't answer. Try again in a few minutes."+(e?"\\n\\n"+e:""))}).finally(()=>b.classList.remove("busy"))};
+  .catch(e=>{i.checked=!on;row.classList.toggle("off",on);alert("Apple didn't answer. Try again in a few minutes."+(e?"\\n\\n"+e:""))}).finally(()=>b.classList.remove("busy"))};
 /* the saved list shows at once; Apple's answer replaces it when it comes */
 fetch("/admin/devices.json",{credentials:"same-origin",cache:"no-store"}).then(r=>r.json()).then(d=>{if(d.html==null)throw 0;box.innerHTML=d.html})
  .catch(()=>{let l=box.querySelector(".load");if(l)l.lastElementChild.textContent="Couldn't reach sidedrop. Showing the saved list."})})()</script>"""

@@ -313,7 +313,15 @@ assert c.post("/admin/device", data={"id": "../x", "status": "DISABLED", "csrf":
 resign_all_real, dev_resigns = A.resign_all, []
 A.resign_all = lambda: dev_resigns.append(1)
 j = c.post("/admin/device", data={"id": "D1", "status": "DISABLED", "csrf": csrf, "json": "1"}).get_json()
-assert j["ok"] and "<h3 class=hdr>Disabled</h3>" in j["html"] and 'data-id="D1"' in j["html"] and " checked " not in j["html"]
+assert j["ok"] and "Disabled</h3>" not in j["html"] and 'class="row drow off"' in j["html"] and 'data-id="D1"' in j["html"] and " checked " not in j["html"]
+# F11: one list, newest first; a turned-off iPhone keeps its place, greyed with its switch off, under the same slots footer
+with A.app.test_request_context():
+    mix = [{"id": i, "attributes": {"name": i, "status": s, "addedDate": f"2026-11-0{n}T10:00:00.000+0000"}}
+           for i, s, n in (("OLD", "ENABLED", 1), ("NEW", "ENABLED", 3), ("MID", "DISABLED", 2))]
+    h = A.device_list_html(A.device_rows(mix))
+assert h.count("<div class=g>") == 1 and "Disabled</h3>" not in h and "3 of 100 slots used" in h
+assert h.index('data-id="NEW"') < h.index('data-id="MID"') < h.index('data-id="OLD"')
+assert h.count('class="row drow off"') == 1 and h.index('class="row drow off"') < h.index('data-id="MID"') < h.index('class="row drow"><a class=dl href="/admin/iphone/OLD"')
 assert ("PATCH", "/devices/D1") in [(m, p) for m, p, _ in patched] and A.load_json(A.DEVICES)["data"][0]["attributes"]["status"] == "DISABLED"
 deadline = time.monotonic() + 5
 while not dev_resigns and time.monotonic() < deadline: threading.Event().wait(.01)
