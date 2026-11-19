@@ -609,7 +609,7 @@ addEventListener("DOMContentLoaded",()=>{
    w.skip=1;setTimeout(()=>w.skip=0,400);if(on!=i.checked){i.checked=on;i.dispatchEvent(new Event("change"))}};
   w.addEventListener("touchend",end);w.addEventListener("touchcancel",end)})})  // iOS ends a gesture it took over with touchcancel  // Safari ignores user-scalable=no for pinch
 </script>
-{% if back %}<div id=scr><section class=page>{{ body|safe }}</section></div>{% else %}{{ body|safe }}{% endif %}""".replace("%PUBLIC_URL%", PUBLIC_URL).replace("%BUILD%", BUILD)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
+{% if "<div id=scr" in body %}{{ body|safe }}{% else %}<div id=scr><section class=page>{{ body|safe }}</section></div>{% endif %}""".replace("%PUBLIC_URL%", PUBLIC_URL).replace("%BUILD%", BUILD)  # link previews (iMessage, Discord) need absolute URLs; static/og.png is the card
 
 
 def file_labels(folder):
