@@ -1,4 +1,4 @@
-"""sidedrop: password-gated UDID enrollment, ad hoc OTA installs and private file downloads."""
+"""SideDrop: password-gated UDID enrollment, ad hoc OTA installs and private file downloads."""
 import base64, datetime, gzip, hashlib, hmac, itertools, json, os, plistlib, re, secrets, subprocess, threading, time, uuid, zipfile, zlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -475,13 +475,13 @@ def read_commit():
 
 
 COMMIT = read_commit()
-# The two grey lines at the bottom of Apps and Settings and in About, iFizBox's: "iPhone15,2, iOS 18.1, sidedrop (en-us)"
+# The two grey lines at the bottom of Apps and Settings and in About, iFizBox's: "iPhone15,2, iOS 18.1, SideDrop (en-us)"
 # then the commit. The model comes from the server (device_model); iOS and the language from the browser (VERSION_JS)
-VERSION_FOOT = """<p class=ver data-m="{{ m }}">{{ m }}, sidedrop</p>{% if commit %}<p class="ver vc">{{ commit }}</p>{% endif %}"""
+VERSION_FOOT = """<p class=ver data-m="{{ m }}">{{ m }}, SideDrop</p>{% if commit %}<p class="ver vc">{{ commit }}</p>{% endif %}"""
 VERSION_JS = """<script>/* F15: iOS from the user agent, as iFizBox's device.js (iOS 26 Safari freezes it at 18.x/26.0: we show what it says) */
 addEventListener("DOMContentLoaded",()=>{let o=navigator.userAgent.match(/\\b(?:iPhone|CPU) OS (\\d+)[_.](\\d+)(?:[_.](\\d+))?[^)]*like Mac OS X/),
  ios=o?o[1]+"."+o[2]+(o[3]?"."+o[3]:""):"",lang=String(navigator.language||"en").toLowerCase();
- document.querySelectorAll(".ver[data-m]").forEach(p=>p.textContent=[p.dataset.m,ios&&"iOS "+ios,"sidedrop"].filter(Boolean).join(", ")+" ("+lang+")")})</script>"""
+ document.querySelectorAll(".ver[data-m]").forEach(p=>p.textContent=[p.dataset.m,ios&&"iOS "+ios,"SideDrop"].filter(Boolean).join(", ")+" ("+lang+")")})</script>"""
 
 
 def version_foot():
@@ -491,10 +491,10 @@ def version_foot():
     return Markup(render_template_string(VERSION_FOOT, m=device_model(udid if udid in profile_udids() else None), commit=COMMIT))
 
 PAGE = """<!doctype html><meta charset=utf-8><meta name=build content=%BUILD%><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>sidedrop</title><meta name=description content="Apps shared between friends, signed for your iPhone.">
-<meta property=og:title content=sidedrop><meta property=og:description content="Apps shared between friends, signed for your iPhone."><meta property=og:site_name content=sidedrop>
+<title>SideDrop</title><meta name=description content="Share an Apple developer account with friends and sideload apps.">
+<meta property=og:title content=SideDrop><meta property=og:description content="Share an Apple developer account with friends and sideload apps."><meta property=og:site_name content=SideDrop>
 <meta property=og:type content=website><meta property=og:url content="%PUBLIC_URL%/"><meta property=og:image content="%PUBLIC_URL%/static/og.png"><meta property=og:image:width content=1200><meta property=og:image:height content=630>
-<meta name=twitter:card content=summary_large_image><meta name=twitter:image content="%PUBLIC_URL%/static/og.png"><link rel=apple-touch-icon href=/apple-touch-icon.png><link rel=manifest href=/manifest.webmanifest><meta name=theme-color content="#bdcbdc"><meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=sidedrop>
+<meta name=twitter:card content=summary_large_image><meta name=twitter:image content="%PUBLIC_URL%/static/og.png"><link rel=apple-touch-icon href=/apple-touch-icon.png><link rel=manifest href=/manifest.webmanifest><meta name=theme-color content="#bdcbdc"><meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-status-bar-style content=black><meta name=apple-mobile-web-app-title content=SideDrop>
 <script>/* Dark Mode follows the phone's theme until the Settings switch picks one (localStorage.dark = "1"/"0") */
 function theme(){let d=null;try{d=localStorage.dark}catch(e){}let on=document.documentElement.classList.toggle("dark",d?d=="1":matchMedia("(prefers-color-scheme: dark)").matches);
  document.querySelector("meta[name=theme-color]").content=on?"#5f656f":"#bdcbdc"}  /* Safari's top bar matches the nav */
@@ -631,10 +631,10 @@ html.reloading #scr{padding-bottom:calc(116px + env(safe-area-inset-bottom))}
 <script>/* a pushed page: tapping back pops; iOS's own edge swipe (Safari and the home-screen app) does the same. history.back() keeps the previous page's scroll, like a native pop; first visits (no "/" behind us) follow the link */
 function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.length>1){history.back();return false}}catch(e){}location.href=h;return false}
 </script>
-{% else %}<header class=nav><button type=button class=bar onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button><h1 id=navT>sidedrop</h1>
+{% else %}<header class=nav><button type=button class=bar onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button><h1 id=navT>SideDrop</h1>
 <button type=button class="bar r" onclick="reloadData()">Reload</button></header>{% endif %}
 <div class=scrim id=about hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
-<h3 id=aboutT>About sidedrop</h3><p>Apps shared between friends, signed for each registered iPhone. Register once in Safari, then tap GET.</p>
+<h3 id=aboutT>About SideDrop</h3><p>SideDrop shares one Apple developer account with friends, so everyone can sideload apps. Register your iPhone once in Safari, then tap GET.</p>
 {% if stats %}<p>{{ stats[0] }} of 100 iPhones registered.{% if stats[1] %} Apps keep working until {{ stats[1].strftime('%B %-d, %Y') }}.{% endif %}</p>{% endif %}
 {{ vfoot }}
 <div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){go('settings');d.open=true;setTimeout(()=>goTo(d),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
@@ -687,7 +687,7 @@ def file_labels(folder):
     return {k.strip(): v.strip() for k, _, v in (l.partition("=") for l in f.read_text().splitlines() if "=" in l)} if f.exists() else {}
 
 
-def page(body, back=None, title="sidedrop", **ctx):
+def page(body, back=None, title="SideDrop", **ctx):
     """back=("Settings", "/#settings") makes it a pushed screen: title in the nav, iOS back button and edge swipe."""
     stats = None
     if logged_in() and PROFILE.exists():  # for the About alert: devices used, and when the profile (so every app) expires
@@ -707,7 +707,8 @@ def home():
         return page("""<form class=c method=post action=/login>
 <label>Password<input type=password name=password autofocus required></label>
 {% if err %}<p class=err>Wrong password.</p>{% endif %}<button>Sign in</button></form>
-{% if first %}<p class=ftr>New server: sign in with the default password, <b>{{ first }}</b>, to set it up.</p>{% endif %}""",
+{% if first %}<p class=ftr>New server: sign in with the default password, <b>{{ first }}</b>, to set it up.</p>
+{% else %}<p class=ftr>SideDrop shares an Apple developer account with friends so they can sideload apps. The friend who sent you the link has the password.</p>{% endif %}""",
                     err=request.args.get("err"), first=needs_setup() and DEFAULT_PASSWORD)
     tok = request.args.get("enrolled") or request.cookies.get("device", "")  # ?enrolled= is the 301 after the profile install
     enrolled = token_udid(tok) in profile_udids()
@@ -729,7 +730,7 @@ def home():
         a["icon"] = (APPS / f".{a['name']}.icon").read_text().strip() if (APPS / f".{a['name']}.icon").exists() else ""
     meta = lambda a, k: (APPS / f".{a['name']}.{k}").read_text().strip() if (APPS / f".{a['name']}.{k}").exists() else ""
     for a in apps:
-        a["vkey"], a["source"], a["desc"] = f"{a['short']}/{a['version']}", meta(a, "source") or "sidedrop", meta(a, "desc")
+        a["vkey"], a["source"], a["desc"] = f"{a['short']}/{a['version']}", meta(a, "source") or "SideDrop", meta(a, "desc")
         try:
             a["when"] = datetime.date.fromisoformat(meta(a, "date")[:10])
         except ValueError:  # no release date from a source: when the IPA arrived
@@ -926,8 +927,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(270 12 12)" opacity=.3 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(300 12 12)" opacity=.25 /><line x1=12 y1=2.5 x2=12 y2=7 transform="rotate(330 12 12)" opacity=.2 /></g></svg><span id=rbarT>Reloading Data</span></div>
 <div id=scr><!-- only the pages scroll; the bars and alerts sit outside, above it, as in iFizBox: iOS 26 blurs a scroller's top edge, which the
      opaque nav bar then hides, instead of blurring the nav bar itself -->
-<section class=page id=t-apps data-title=sidedrop>
-<div class=hd><img src=/apple-touch-icon.png alt=""><div><div><h2>Welcome to sidedrop</h2><p>by <a href="https://github.com/RyanAHayden">Ryan Hayden (Fizlo)</a></p></div></div></div>
+<section class=page id=t-apps data-title=SideDrop>
+<div class=hd><img src=/apple-touch-icon.png alt=""><div><div><h2>Welcome to SideDrop</h2><p>by <a href="https://github.com/RyanAHayden">Ryan Hayden (Fizlo)</a></p></div></div></div>
 <div class=hx><div class=hp>
 <a class=tile href="https://github.com/RyanAHayden"><span class=tic style="background:#333"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/></svg></span>GitHub</a>
 <a class=tile href=#ifizbox onclick="go('ifizbox');return false"><span class=tic style="background:#1a82fb"><svg viewBox="0 0 30 30" fill="#fff"><path d="M15 3l11 5.5-11 5.5L4 8.5zM4 10.7l10 5v11.1l-10-5zM16 15.7l10-5v11.1l-10 5z"/></svg></span>iFizBox</a></div>
@@ -936,12 +937,13 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <a class=tile href=#sign onclick="go('settings');goTo(document.getElementById('sign'));return false"><span class=tic style="background:#8e44c9"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</a></div>
 {% if enrolled %}<a class="tile reg" href=#settings onclick="go('settings');return false"><span class=tic style="background:#34a84a"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.5 4.5 8.5-10"/></svg></span>Registered{% if stats and stats[1] %}<span class=hdt>until {{ stats[1].strftime('%b %-d, %Y') }}</span>{% endif %}</a>
 {% else %}<button type=button class="tile todo" id=setupT aria-expanded=false aria-controls=setup onclick="setupOpen(setup.hidden)"><span class=tic style="background:#f08a12"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#f08a12"/></svg></span><div>Set up this iPhone<small>2 steps, then every app unlocks</small></div></button>{% endif %}</div>
+<p class=ftr id=tagline>Sideload apps on your iPhone with a friend's Apple developer account.</p>
 {% if not enrolled %}<div id=setup hidden>
 <details class=c id=sdp open><summary><span class=num>1</span><div>Turn off Stolen Device Protection</div></summary>
 {{ sdp_steps }}
 <button type=button class=gbtn onclick="sdpDone(true)">I turned it off</button></details>
 <div class=c id=reg><div class=sh><span class=num>2</span><div>Register this iPhone<small>In Safari on this iPhone</small></div></div>
-<fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>Registered before but the apps are locked? Register again, it's instant.</small></div></div>{% endif %}
+<fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>This adds your iPhone to the shared developer account, so the apps here can be signed for it. Registered before but the apps are locked? Register again, it's instant.</small></div></div>{% endif %}
 {% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class=row>{{ ifz_icon(ifz) }}
 <div>{{ ifz.title }}<small>Version {{ ifz.short }} · your certificate inside</small></div>
 {% if enrolled %}<a class="get{{ ' done' if mine.get(ifz.name) == ifz.vkey }}" data-app="{{ ifz.name }}" aria-label="{{ ifz.title }}: why and install" href=#ifizbox onclick="go('ifizbox');return false">{{ 'GET' if ifz.name not in mine else 'INSTALLED' if mine[ifz.name] == ifz.vkey else 'UPDATE' }}</a>
@@ -1004,7 +1006,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% if enrolled %}<details><summary>Turn off Stolen Device Protection</summary>{{ sdp_steps }}</details>{% endif %}
 <details id=dev><summary>Turn on Developer Mode</summary>
 {{ dev_steps }}</details>
-<details id=a2hs><summary>Add to Home Screen</summary><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open sidedrop from there</span></p></details></div>
+<details id=a2hs><summary>Add to Home Screen</summary><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open SideDrop from there</span></p></details></div>
+<p class=ftr id=helpNote>Apps here are signed with a friend's developer certificate for each registered iPhone. iOS asks for Developer Mode once, then they open like any other app.</p>
 <h3 class=hdr id=sign>Sign your own IPA</h3>
 <form class=c method=post action=/sign enctype=multipart/form-data data-push onsubmit="this.querySelector('button').textContent='Signing…'">
 <input type=file name=ipa id=ipaf accept=.ipa class=vh onchange="ipal.textContent=this.files[0]?this.files[0].name:'Choose .ipa File'"><label class="b grey" for=ipaf id=ipal>Choose .ipa File</label>
@@ -1032,8 +1035,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class=c><div class=sh><span class=num>2</span><div>Turn on Developer Mode<small>After the app installs</small></div></div>{{ dev_steps }}</div>
 <button type=button class=gbtn onclick="firstRunGo(1)">Got It, Install</button></div></div>{% endif %}
 {% if enrolled %}<div class=scrim id=pushAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=pushT>
-<h3 id=pushT>Get Notified of Updates?</h3><p>sidedrop can tell you when an app you installed has a new version.</p>
-<div id=pushWeb hidden><div><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open sidedrop from there</span></p></div></div>
+<h3 id=pushT>Get Notified of Updates?</h3><p>SideDrop can tell you when an app you installed has a new version.</p>
+<div id=pushWeb hidden><div><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open SideDrop from there</span></p></div></div>
 <div class=abtns><button type=button onclick="pushAsk.hidden=true">Not Now</button><button type=button class=ok id=pushOk>Allow</button></div></div></div>{% endif %}
 <div class=con id=con hidden role=dialog aria-modal=true aria-labelledby=conT><header class=nav><span></span><h1 id=conT>Running</h1>
 <button type=button class="bar r" id=conX onclick="conClose()">Cancel</button></header><div class=conlog id=conL aria-live=polite><span class=concur id=conCur></span></div>
@@ -1102,7 +1105,7 @@ function ifzRun(){let b=document.getElementById("ifzb");if(!b)return nudge();
  let t=[...crypto.getRandomValues(new Uint8Array(12))].map(x=>x.toString(16).padStart(2,"0")).join(""),itms="itms-services://?action=download-manifest&url="+encodeURIComponent(b.dataset.m+"&t="+t);
  location.href=itms;mark(b,1);  // first, while Safari still counts this as the tap
  let run=conOpen(),a=b.dataset.title,st=IFZ_STEPS(a),shown=-1,at=0,t0=Date.now();
- conLine("step","Installing "+a+" "+b.dataset.v);conLine("raw","Signed for this iPhone by sidedrop");conLine("raw","Certificate: inside, imported on first launch");conLine("raw",b.dataset.n+" sources: inside, added on first launch");
+ conLine("step","Installing "+a+" "+b.dataset.v);conLine("raw","Signed for this iPhone by SideDrop");conLine("raw","Certificate: inside, imported on first launch");conLine("raw",b.dataset.n+" sources: inside, added on first launch");
  const show=async n=>{while(shown<n&&run==conRun){if(shown>=0){let l=400-(Date.now()-at);if(l>0)await wait(l)}if(run!=conRun)return;shown++;conLine("step",st[shown]);conS.textContent=st[shown];at=Date.now()}};  // each step shows at least 400 ms
  (async()=>{for(;;){if(run!=conRun)return;let s=null;try{s=await(await fetch("/install/"+t,{cache:"no-store"})).json()}catch(e){}
   let stage=s?(s.started?2:s.manifest?1:0):Math.max(shown,0);await show(stage);if(run!=conRun)return;
@@ -1225,7 +1228,7 @@ self.addEventListener("notificationclick",e=>{e.notification.close();e.waitUntil
 def manifest_json():  # iOS only offers web push to Home Screen apps with display: standalone
     # as iFizBox's: an opaque black status bar (capable + status-bar-style black above; a translucent one put the nav under it, where iOS 26 blurs
     # it and taps near the top go to the status bar) and portrait only (rotating left the page offset). iOS reads these when the icon is added.
-    return {"name": "sidedrop", "short_name": "sidedrop", "id": "/", "scope": "/", "display": "standalone", "orientation": "portrait",
+    return {"name": "SideDrop", "short_name": "SideDrop", "description": "Share an Apple developer account with friends and sideload apps.", "id": "/", "scope": "/", "display": "standalone", "orientation": "portrait",
             "start_url": "/", "background_color": "#c8cfd6", "theme_color": "#597498",
             "icons": [{"src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png"}]}
 
@@ -1584,12 +1587,12 @@ openssl req -new -key key.pem -out request.csr -subj "/CN=sidedrop"</code></li>
 <li><b>Make cert.p12.</b> On a Mac: open distribution.cer, then in Keychain Access → My Certificates right-click it → Export, with a password. Or with OpenSSL:
 <code>openssl x509 -inform der -in distribution.cer -out cert.pem
 openssl pkcs12 -export -legacy -inkey key.pem -in cert.pem -out cert.p12</code></li>
-<li><b>Pick cert.p12 here</b> and type its password (or add a password.txt). sidedrop makes the App ID with Push if your account doesn't have it.</li>
+<li><b>Pick cert.p12 here</b> and type its password (or add a password.txt). SideDrop makes the App ID with Push if your account doesn't have it.</li>
 </ol>"""
 KEY_ROLE_ERR = ("Apple refused: making certificates needs an API key with the Admin role (App Manager keys can register iPhones "
                 "but not make certificates). Make an Admin key in App Store Connect → Users and Access → Integrations, or use "
                 "Manual setup with your own cert.p12.")
-LIMIT_ERR = ("Your account already has as many Apple Distribution certificates as Apple allows. Pick one to revoke and sidedrop "
+LIMIT_ERR = ("Your account already has as many Apple Distribution certificates as Apple allows. Pick one to revoke and SideDrop "
              "makes a new one in its place. Apps signed with the revoked one stop opening, on every iPhone, wherever they were "
              "signed (another signing service, Xcode ad hoc builds); App Store and TestFlight apps aren't affected.")
 
@@ -1608,7 +1611,7 @@ def ensure_app_id(bid):
     if found:
         return False
     made = asc("POST", "/bundleIds", json={"data": {"type": "bundleIds", "attributes": {
-        "identifier": bid, "name": "sidedrop", "platform": "IOS"}}})["data"]
+        "identifier": bid, "name": "SideDrop", "platform": "IOS"}}})["data"]
     if not bid.endswith("*"):
         for cap in APP_ID_CAPS:
             try:
@@ -1702,7 +1705,7 @@ def api_signing(s, revoke=""):
 
 
 CERT_PICKER = """{% if certs %}<div class=g>{% for c in certs %}<label class=row style="flex-direction:row;align-items:center;font-weight:400">
-<input type=radio name=revoke value="{{ c.id }}" data-name="{{ c.name }}" style="flex:none;width:22px;height:22px;margin:0;padding:0;box-shadow:none;accent-color:#d43a3a"><div style="flex:1;min-width:0"><b>{{ c.name }}</b>{% if c.ours %} · sidedrop's certificate{% endif %}
+<input type=radio name=revoke value="{{ c.id }}" data-name="{{ c.name }}" style="flex:none;width:22px;height:22px;margin:0;padding:0;box-shadow:none;accent-color:#d43a3a"><div style="flex:1;min-width:0"><b>{{ c.name }}</b>{% if c.ours %} · SideDrop's certificate{% endif %}
 <small>{{ c.kind }} · made {{ c.created }} · expires {{ c.expires }}</small></div></label>{% endfor %}</div>{% endif %}"""
 REVOKE_CONFIRM = "var r=this.querySelector('input[name=revoke]:checked');if(r&&!confirm('Revoke '+r.dataset.name+'? Apps signed with it stop opening, wherever they were signed.'))return false;"
 
@@ -1747,7 +1750,7 @@ def setup():
             return redirect("/")
     return page("""<style>.setup label{display:flex;flex-direction:column;gap:4px;font-weight:700} .setup small{font-weight:400}
 .setup summary{color:var(--acc);font-weight:700} .setup details[open]{display:flex;flex-direction:column;gap:10px}</style>
-<p class=ftr>Welcome to sidedrop. Set the passwords and add your App Store Connect API key; sidedrop makes the certificate and App ID with it. Everything is kept on the server.</p>
+<p class=ftr>Welcome to SideDrop. Share your Apple developer account and help your friends sideload apps. Set the passwords and add your App Store Connect API key; SideDrop makes the certificate and App ID with it. Everything is kept on the server.</p>
 <form class="c setup" method=post action=/setup enctype=multipart/form-data onsubmit="{{ confirm }}this.querySelector('button').textContent='Saving…'">
 {% if err %}<p class=err>{{ err }}</p>{% endif %}""" + CERT_PICKER + """
 {% if 'PASSWORD' not in env %}<label>Password for friends<input type=password name=password autocomplete=new-password minlength=8 required></label>{% endif %}
@@ -1761,13 +1764,13 @@ def setup():
 {% if 'BUNDLE_ID' not in env %}<label>App ID (BUNDLE_ID)<input name=bundle_id value="{{ s.bundle_id or '' }}" placeholder="com.you.sideload" autocapitalize=none autocomplete=off>
 <small>Made with Push if your account doesn't have it yet.</small></label>{% endif %}
 <details{% if p12 %} open{% endif %}><summary>Manual setup</summary>
-<small>Rather not give sidedrop a key that can make certificates? Make the certificate yourself and pick it here; the API key then only registers iPhones.</small>""" + MANUAL_STEPS + """
+<small>Rather not give SideDrop a key that can make certificates? Make the certificate yourself and pick it here; the API key then only registers iPhones.</small>""" + MANUAL_STEPS + """
 <input type=file name=files id=sigf multiple class=vh onchange="sigl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Signing Files'">
 <label class="b grey" for=sigf id=sigl>Choose Signing Files</label>
 <small>cert.p12 and a password.txt, loose or in a .zip.{% if p12 %} cert.p12 is saved.{% endif %}</small>
 {% if 'P12_PASSWORD' not in env %}<label>P12 Password<input type=password name=p12_password autocomplete=off><small>Leave empty to try a password.txt, or none.</small></label>{% endif %}
 </details>
-<button>Save</button></form>""", title="Set Up sidedrop", err=err, s=s, env=ENV_SET, p12=P12.exists(), p8=ASC_KEY.exists(),
+<button>Save</button></form>""", title="Set Up SideDrop", err=err, s=s, env=ENV_SET, p12=P12.exists(), p8=ASC_KEY.exists(),
                 certs=certs, confirm=REVOKE_CONFIRM)
 
 
@@ -2086,7 +2089,7 @@ window.devSw=function(i){let b=i.closest("[data-devs]"),on=i.checked;
 let h=document.documentElement,t=document.getElementById("rbarT"),was=t&&t.textContent;
 if(t){t.textContent="Loading from Apple…";h.classList.add("reloading")}
 fetch("/admin/devices.json",{credentials:"same-origin",cache:"no-store"}).then(r=>r.json()).then(d=>{if(d.html==null)throw 0;box.innerHTML=d.html})
- .catch(()=>{if(t)t.textContent="Couldn't reach sidedrop. Showing the saved list.";return new Promise(r=>setTimeout(r,2500))})
+ .catch(()=>{if(t)t.textContent="Couldn't reach SideDrop. Showing the saved list.";return new Promise(r=>setTimeout(r,2500))})
  .finally(()=>{if(t){h.classList.remove("reloading");setTimeout(()=>{t.textContent=was},300)}})})()</script>"""
 
 
@@ -2473,7 +2476,7 @@ FILES_PAGE = """<style>.ptrack{height:12px;padding:3px;margin:5px 0 3px;border:1
 <input type=hidden name=csrf value="{{ csrf }}">
 <input type=file name=files id=upf multiple class=vh onchange="upAdd(this)">
 <label class="b grey" for=upf id=upl>Choose Files</label><noscript><button>Upload</button></noscript>
-<small>Listed on everyone's Files tab. A file with the same name is replaced. Uploads go on while you use the rest of sidedrop.</small></form>
+<small>Listed on everyone's Files tab. A file with the same name is replaced. Uploads go on while you use the rest of SideDrop.</small></form>
 <script>(function(){let Q=window.upQ=window.upQ||{jobs:[],n:0};
 const list=()=>{let l=document.getElementById("flist");return l&&l.isConnected?l:null};
 function unit(t){return t>=1e9?[1e9,"GB"]:t>=1e6?[1e6,"MB"]:[1e3,"KB"]}
@@ -2499,7 +2502,7 @@ function send(j){j.err=null;j.loaded=0;draw(j);let f=new FormData();f.append("cs
  x.onload=()=>{let d=null;try{d=JSON.parse(x.responseText)}catch(e){}
   if(x.status==200&&d&&d.html){j.saved=d.name;return finish(j,d.html)}
   j.err=d&&d.error||(x.status==403?"Signed out of Manage. Open Manage again, then Retry.":x.status==413?"Too big for the server.":"Upload failed (HTTP "+x.status+").");draw(j)};
- x.onerror=()=>{j.err="Couldn't reach sidedrop. Check the connection, then Retry.";draw(j)};x.onabort=()=>{Q.jobs=Q.jobs.filter(o=>o!=j)};x.send(f)}
+ x.onerror=()=>{j.err="Couldn't reach SideDrop. Check the connection, then Retry.";draw(j)};x.onabort=()=>{Q.jobs=Q.jobs.filter(o=>o!=j)};x.send(f)}
 window.upAdd=function(i){let csrf=i.form.dataset.csrf;[...i.files].forEach(file=>{let j={id:++Q.n,file,name:file.name,size:file.size,loaded:0,csrf};Q.jobs.push(j);send(j)});i.value=""};
 Q.jobs.forEach(draw)})()</script>"""
 
@@ -2718,12 +2721,12 @@ def enroll():
     url = signed_url(f"/udid/{name}/g/{pv[1]}/{pv[2]}" if guest else f"/udid/{name}", ttl=1800)  # F16: a guest's goes through its invite
     profile = plistlib.dumps({
         "PayloadContent": {"URL": url, "DeviceAttributes": ["UDID", "PRODUCT"]},
-        "PayloadOrganization": "sidedrop", "PayloadDisplayName": "sidedrop device registration",
+        "PayloadOrganization": "SideDrop", "PayloadDisplayName": "SideDrop device registration",
         "PayloadDescription": "Shares this iPhone's device ID so apps can be signed for it.",
         "PayloadIdentifier": "sidedrop.udid", "PayloadUUID": str(uuid.uuid4()).upper(),
         "PayloadType": "Profile Service", "PayloadVersion": 1})
     return sign_profile(profile), 200, {"Content-Type": "application/x-apple-aspen-config",
-                          "Content-Disposition": 'attachment; filename="sidedrop.mobileconfig"'}
+                          "Content-Disposition": 'attachment; filename="SideDrop.mobileconfig"'}
 
 
 @app.post("/udid/<name>")

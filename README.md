@@ -1,6 +1,6 @@
-# sidedrop
+# SideDrop
 
-A password-protected site for sharing ad hoc iOS apps with friends.
+Share your Apple developer account and help your friends sideload apps. SideDrop is a password-protected site: friends register their iPhones with your account, and every app on it is signed for them.
 
 1. A friend opens the site in Safari, types the password, turns off Stolen Device Protection (the page walks through it with screenshots from `static/`) and taps **Register iPhone**. They install the profile it downloads.
 2. iOS sends the server the phone's UDID. The server registers the device with Apple, regenerates the ad hoc profile and re-signs every app.
@@ -25,17 +25,19 @@ These files can be edited on github.com; a server running `deploy.sh` picks up c
 
 `deploy.sh` is a pull-deploy for a TrueNAS custom app named `sidedrop`: run it from cron every few minutes in a clone of this repo. It rebuilds the `sidedrop:latest` image and redeploys only when `main` has changed; `deploy.sh -f` deploys right away.
 
+The name people see is SideDrop. The lowercase `sidedrop` stays wherever a deployment or an installed iPhone depends on it: the repo, the Docker image and TrueNAS app, the `SIDEDROP_*` variables, the profile identifier `sidedrop.udid`, the ad hoc profile name (`PROFILE_NAME`) and the default password.
+
 ## Setup
 
-Running sidedrop for your own friends for the first time? [docs/become-a-distributor.md](docs/become-a-distributor.md) goes from the Apple account through Docker Compose and HTTPS to the setup screen on your iPhone.
+Running SideDrop for your own friends for the first time? [docs/become-a-distributor.md](docs/become-a-distributor.md) goes from the Apple account through Docker Compose and HTTPS to the setup screen on your iPhone.
 
-New to the developer account? [docs/developer-account.md](docs/developer-account.md): join the program, make one App Store Connect API key (role Admin) and upload it; sidedrop makes the certificate and the App ID with Push itself. Its **Manual setup** section makes them by hand instead, for a key that can't make certificates.
+New to the developer account? [docs/developer-account.md](docs/developer-account.md): join the program, make one App Store Connect API key (role Admin) and upload it; SideDrop makes the certificate and the App ID with Push itself. Its **Manual setup** section makes them by hand instead, for a key that can't make certificates.
 
 Everything lives in one data folder (`./data`, or `DATA_DIR`, in `compose.yaml`), which must be owned by UID 568:
 
 ```
 asc.p8          App Store Connect API key (Users and Access → Integrations → Keys, role Admin; App Manager on the manual path)
-cert.p12        Apple Distribution certificate + private key: made by sidedrop through the API, or yours (Keychain, openssl)
+cert.p12        Apple Distribution certificate + private key: made by SideDrop through the API, or yours (Keychain, openssl)
 apps/*.ipa      unsigned or dev-signed IPAs to share (or list AltStore sources in mirror-sources.txt)
 ```
 
@@ -46,13 +48,13 @@ Copy `.env.example` to `.env` and set `PUBLIC_URL`. The rest can stay empty and 
 1. Start the server and open the site. While no password is set, sign in with the default password, **`sidedrop`**. It opens only the setup screen.
 2. Set the password for friends and the admin password (they're saved hashed in `setup.json` in the data folder).
 3. Tap **Choose API Key** and pick `AuthKey_<Key ID>.p8`, loose or in a `.zip` with a text file holding the Issuer ID. The Key ID comes from the `.p8`'s name and the Issuer ID from a UUID in the text file; check or fill in both, and the App ID (`BUNDLE_ID`).
-4. **Save**. sidedrop makes the App ID if the account lacks it (explicit: with Push, App Groups and Associated Domains), makes a private key and CSR, has Apple issue an Apple Distribution certificate (`POST /v1/certificates`) and saves `cert.p12` with a random password in `setup.json`. If the account already has the most distribution certificates Apple allows, it lists them (name, made, expires) and the admin picks one to revoke, warned that apps signed with it anywhere stop opening; it never revokes one itself. Apple refuses certificates to keys without the Admin role, and the screen says so. Everything goes into the data folder, so it survives restarts, and the default password stops working.
+4. **Save**. SideDrop makes the App ID if the account lacks it (explicit: with Push, App Groups and Associated Domains), makes a private key and CSR, has Apple issue an Apple Distribution certificate (`POST /v1/certificates`) and saves `cert.p12` with a random password in `setup.json`. If the account already has the most distribution certificates Apple allows, it lists them (name, made, expires) and the admin picks one to revoke, warned that apps signed with it anywhere stop opening; it never revokes one itself. Apple refuses certificates to keys without the Admin role, and the screen says so. Everything goes into the data folder, so it survives restarts, and the default password stops working.
 
-**Manual setup** on the same screen takes today's files instead: `cert.p12` and a `password.txt` with its password (or type it), loose or in a `.zip`; the `.p12`'s password is tried from the text file. sidedrop then makes nothing with the key.
+**Manual setup** on the same screen takes today's files instead: `cert.p12` and a `password.txt` with its password (or type it), loose or in a `.zip`; the `.p12`'s password is tried from the text file. SideDrop then makes nothing with the key.
 
 Anything set in `.env` wins over the setup screen, and with `PASSWORD` set there is no setup screen, so a server can be configured without an iPhone: put `asc.p8` and `cert.p12` in the data folder and fill in `.env`. An empty `SECRET_KEY` is made once and kept in `secret.key` in the data folder.
 
-`BUNDLE_ID` can be a wildcard App ID, such as `com.you.*` (sidedrop makes it when it makes the certificate; on the manual path it must already exist in the developer portal). One profile then covers every app: apps whose bundle ID falls outside it are re-IDed at signing (`com.other.game` becomes `com.you.game`). Apps that need entitlements like push or App Groups won't work this way.
+`BUNDLE_ID` can be a wildcard App ID, such as `com.you.*` (SideDrop makes it when it makes the certificate; on the manual path it must already exist in the developer portal). One profile then covers every app: apps whose bundle ID falls outside it are re-IDed at signing (`com.other.game` becomes `com.you.game`). Apps that need entitlements like push or App Groups won't work this way.
 
 Or set `BUNDLE_ID` to an explicit App ID with Push Notifications (plus App Groups and Associated Domains) turned on, such as `com.you.sideload`. Every app is then signed under that one App ID but keeps its own bundle ID in Info.plist, which iOS doesn't check against the profile and registers for push with, so apps like YouTube get their developer's notifications. Apps signed under a wildcard before install again as separate apps; delete the old copies.
 
@@ -91,12 +93,12 @@ python test_app.py
 
 ## Auto-updating apps from GitHub releases
 
-List AltStore source URLs in `mirror-sources.txt`. sidedrop checks them hourly and on page load (at most once a minute), and downloads any new version into `apps/`. Point it at each repo's release asset, not a GitHub Pages copy: release assets update the moment a release is published, while Pages adds build time and a 10-minute CDN cache.
+List AltStore source URLs in `mirror-sources.txt`. SideDrop checks them hourly and on page load (at most once a minute), and downloads any new version into `apps/`. Point it at each repo's release asset, not a GitHub Pages copy: release assets update the moment a release is published, while Pages adds build time and a 10-minute CDN cache.
 
 To have new releases downloaded and signed before anyone opens the page, set `SYNC_TOKEN` and have CI call `POST /sync` after a release. For example, as the last step of the workflow that publishes your AltStore source:
 
 ```yaml
-      - run: curl -fsS -X POST -H "Authorization: Bearer $T" https://sidedrop.example.com/sync || echo "sidedrop unreachable, it'll catch up on its own"
+      - run: curl -fsS -X POST -H "Authorization: Bearer $T" https://sidedrop.example.com/sync || echo "SideDrop unreachable, it'll catch up on its own"
         env: { T: "${{ secrets.SIDEDROP_SYNC_TOKEN }}" }
 ```
 
