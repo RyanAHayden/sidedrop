@@ -777,6 +777,9 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .lscroll{position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;scrollbar-width:none;
  padding:calc(56px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right),(100% - 30rem)/2) 20px max(10px,env(safe-area-inset-left),(100% - 30rem)/2)}
 .lscroll>.page{min-height:calc(100% + 1px)}
+/* first install tap: a one-time sheet (SDP, then Developer Mode) over everything, sliding up like the install page; its screenshots are Help's */
+.fl{position:fixed;inset:0;z-index:25;background:var(--pin);background-color:#c8cfd6;animation:conup .35s cubic-bezier(.36,.66,.04,1)} .fl[hidden]{display:none} .dark .fl{background-color:#1d1f23}
+.fl .nav{position:absolute;z-index:1} .fl .c>.shot{margin:0} .fl .c>.shot+.shot{margin-top:12px} .fl .lead{margin:0 4px 12px;font-size:15px}
 .shade{position:fixed;inset:0;z-index:6;background:#000;opacity:0;pointer-events:none}
 .ghost{position:absolute;margin:0;pointer-events:none;z-index:1}
 .tabs a[aria-current] svg{fill:url(#tabglow);filter:drop-shadow(0 2.5px 2.5px rgba(0,0,0,.4))}
@@ -797,6 +800,13 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <img src=/static/sdp3.jpg alt="The Stolen Device Protection switch turned off, circled" width=640 height=291></figure>
 <div class=warn><span aria-hidden=true>⏳</span><div>Asked to wait an hour? Do this at home, where there's no wait.</div></div>
 {% endset %}
+{% set dev_steps %}<figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Privacy &amp; Security</b></span></figcaption>
+<img src=/static/dev1.jpg alt="Settings with Privacy and Security circled" width=640 height=243></figure>
+<figure class=shot><figcaption><span class=num>b</span><span>Scroll down, tap <b>Developer Mode</b></span></figcaption>
+<img src=/static/dev2.jpg alt="The Developer Mode row circled" width=640 height=215></figure>
+<figure class=shot><figcaption><span class=num>c</span><span>Turn it <b>on</b>, tap <b>Restart</b>, then <b>Turn On</b> after the restart</span></figcaption>
+<img src=/static/dev3.jpg alt="The Developer Mode switch turned on, circled" width=640 height=305></figure>
+<div class=warn><span aria-hidden=true>💡</span><div>Don't see it? Install an app first, then look again.</div></div>{% endset %}
 {% macro install(a) %}{% if not enrolled %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>
 {% else %}{% set lbl = 'GET' if a.name not in mine else 'INSTALLED' if mine[a.name] == a.vkey else 'UPDATE' %}
 {% if a.files %}<button type=button class="get{{ ' done' if lbl == 'INSTALLED' }}" data-app="{{ a.name }}" aria-expanded=false onclick="steps(this)">{{ lbl }}</button>
@@ -894,13 +904,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <h3 class=hdr id=help>Help</h3><div class=g>
 {% if enrolled %}<details><summary>Turn off Stolen Device Protection</summary>{{ sdp_steps }}</details>{% endif %}
 <details id=dev><summary>Turn on Developer Mode</summary>
-<figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Privacy &amp; Security</b></span></figcaption>
-<img src=/static/dev1.jpg alt="Settings with Privacy and Security circled" width=640 height=243></figure>
-<figure class=shot><figcaption><span class=num>b</span><span>Scroll down, tap <b>Developer Mode</b></span></figcaption>
-<img src=/static/dev2.jpg alt="The Developer Mode row circled" width=640 height=215></figure>
-<figure class=shot><figcaption><span class=num>c</span><span>Turn it <b>on</b>, tap <b>Restart</b>, then <b>Turn On</b> after the restart</span></figcaption>
-<img src=/static/dev3.jpg alt="The Developer Mode switch turned on, circled" width=640 height=305></figure>
-<div class=warn><span aria-hidden=true>💡</span><div>Don't see it? Install an app first, then look again.</div></div></details>
+{{ dev_steps }}</details>
 <details id=a2hs><summary>Add to Home Screen</summary><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open sidedrop from there</span></p></details></div>
 <h3 class=hdr id=sign>Sign your own IPA</h3>
 <form class=c method=post action=/sign enctype=multipart/form-data data-push onsubmit="this.querySelector('button').textContent='Signing…'">
@@ -921,6 +925,12 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <h3 id=devT>Developer Mode Required</h3><p>When the app finishes installing, opening it will ask you to turn on Developer Mode.</p>
 <p>Turn it on in Settings, restart, and the app will open.</p>
 <div class=abtns><button type=button onclick="devDone(1)">Show Me</button><button type=button class=ok onclick="devDone()">OK</button></div></div></div>{% endif %}
+{% if first_run %}<div class=fl id=firstRun hidden data-due=1 role=dialog aria-modal=true aria-labelledby=frT><header class=nav><button type=button class=bar onclick="firstRunGo()">Cancel</button><h1 id=frT>Before You Install</h1>
+<button type=button class="bar r" onclick="firstRunGo(1)">Install</button></header><div class=lscroll>
+<p class=lead>Two settings, once per iPhone. Apps from here open only with Developer Mode on, and Stolen Device Protection can make you wait an hour to turn it on.</p>
+<div class=c><div class=sh><span class=num>1</span><div>Turn off Stolen Device Protection<small>Skip this if it's already off</small></div></div>{{ sdp_steps }}</div>
+<div class=c><div class=sh><span class=num>2</span><div>Turn on Developer Mode<small>After the app installs</small></div></div>{{ dev_steps }}</div>
+<button type=button class=gbtn onclick="firstRunGo(1)">Got It, Install</button></div></div>{% endif %}
 {% if enrolled %}<div class=scrim id=pushAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=pushT>
 <h3 id=pushT>Get Notified of Updates?</h3><p>sidedrop can tell you when an app you installed has a new version.</p>
 <div id=pushWeb hidden><div><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open sidedrop from there</span></p></div></div>
@@ -1055,13 +1065,22 @@ function sdpDone(save){let d=document.getElementById("sdp");if(!d)return;d.class
 try{if(localStorage.sdp)sdpDone()}catch(e){}
 function setupOpen(on){let s=document.getElementById("setup");if(!s)return;s.hidden=!on;setupT.setAttribute("aria-expanded",on)}  // the Apps header's 'Set up this iPhone' tile unfolds the steps
 function nudge(){go("apps");setupOpen(true);let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
+/* the first install tap on this iPhone opens the splash (SDP, then Developer Mode) instead; Install there carries the held tap on, and the
+   server remembers the phone (/first-run), so Safari and the Home Screen app show it once between them. Cancel keeps it for the next tap. */
+let frNext=null;
+document.addEventListener("click",e=>{let f=window.firstRun,b=f&&f.dataset.due&&e.target.closest('a[href^="itms-services:"],#ifzb');if(!b)return;
+ e.preventDefault();e.stopImmediatePropagation();frNext=b;f.hidden=false;f.querySelector(".lscroll").scrollTop=0},true);  // capture: before the link's own onclick
+function firstRunGo(ok){let b=frNext;frNext=null;firstRun.hidden=true;if(!ok)return;delete firstRun.dataset.due;
+ try{localStorage.devTold=1}catch(e){}fetch("/first-run",{method:"POST"}).catch(()=>{});  // it covered Developer Mode: no second alert after the install
+ if(b){if(b.dataset.arm)b.classList.add("go");b.click()}}  // an armed GET installs on click
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();darkSw.checked=document.documentElement.classList.contains("dark")});
 </script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=admin_enabled(), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
         ifz_m=signed_url(f"/m/{ifz['name']}.plist") if ifz else "",
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
-        file_labels=file_labels, is_admin=is_admin(), files=shared_files(), fdl=lambda f: signed_url(f"/f/{f.name}")))
+        file_labels=file_labels, is_admin=is_admin(), files=shared_files(), fdl=lambda f: signed_url(f"/f/{f.name}"),
+        first_run=enrolled and first_run_due(token_udid(tok))))
     if enrolled and request.args.get("enrolled"):  # survives sign-out; re-checked against the profile on every load
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
     return resp
@@ -1132,6 +1151,23 @@ def mark_installed():
         data = installed()
         data.setdefault(udid, {})[p.stem] = f"{i['short']}/{i['version']}"
         save_json(INSTALLED, data)
+    return "", 204
+
+
+FIRST_RUN = DATA / "first_run.json"  # {udid: unix time} phones that went through the first-install splash (SDP + Developer Mode)
+first_run_due = lambda udid: bool(udid) and udid not in load_json(FIRST_RUN)
+
+
+@app.post("/first-run")
+def first_run_seen():
+    """The splash's Install: this phone has seen it, so later install taps go straight to iOS."""
+    udid = token_udid(request.cookies.get("device", ""))
+    if not logged_in() or not udid:
+        abort(403)
+    with installed_lock:
+        data = load_json(FIRST_RUN)
+        data.setdefault(udid, int(time.time()))
+        save_json(FIRST_RUN, data)
     return "", 204
 
 

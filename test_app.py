@@ -108,6 +108,15 @@ mf = plistlib.loads(anon.get(path_qs(m)).data)["items"][0]
 assert mf["metadata"] == {"bundle-identifier": "com.me.demo", "bundle-version": "7", "kind": "software", "title": "Demo"}
 assert anon.get(path_qs(mf["assets"][0]["url"])).status_code == 200
 
+# first install tap: a one-time splash (SDP, then Developer Mode, Help's screenshots) holds the tap, then carries it on; remembered per phone
+fr = html.split("id=firstRun")
+assert len(fr) == 2 and "hidden data-due=1" in fr[1][:40] and "/static/sdp1.jpg" in fr[1] and "/static/dev3.jpg" in fr[1] and "firstRunGo(1)" in fr[1]
+assert "e.target.closest('a[href^=\"itms-services:\"],#ifzb')" in html and html.count("/static/dev1.jpg") == 2  # catches every install link
+assert A.app.test_client().post("/first-run").status_code == 403
+assert c.post("/first-run").status_code == 204 and list(A.load_json(A.FIRST_RUN)) == ["00008130-AAAA"]
+html = c.get("/").data.decode()
+assert "id=firstRun" not in html and html.count("/static/dev1.jpg") == 1 and 'href="itms-services' in html  # second tap: straight to iOS
+
 # install tracking for the install page: the manifest and app carry the page's token (outside the signature), the page polls it
 tk = "ab" * 12
 assert anon.get(path_qs(m) + "&t=" + tk).status_code == 200 and c.get(f"/install/{tk}").json == {"manifest": True, "started": False}
@@ -423,6 +432,7 @@ assert A.app.test_client().post("/refresh").status_code == 403 and c.post("/refr
 fresh = A.app.test_client(); fresh.post("/login", data={"password": "hunter2-but-longer"}); e = "/?enrolled=" + A.device_token("00008130-AAAA")
 assert b"Setup Complete" in fresh.get(e).data and b"Setup Complete" not in fresh.get("/").data
 assert b"Setup Complete" not in fresh.get(e).data, "a Home Screen icon saved on /?enrolled= shows it only the first time"
+assert b"id=firstRun" not in fresh.get("/").data, "the splash is remembered for the phone, so the Home Screen app skips it too"
 # web push: subscribe per phone; upgrades already waiting count as told; one push per new version; 410 drops the subscription
 import json
 from pywebpush import WebPushException
