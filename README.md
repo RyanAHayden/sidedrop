@@ -1,4 +1,4 @@
-<p align="center"><img src="icon.png" alt="SideDrop icon" width="120"></p>
+<p align="center"><img src="docs/img/icon-rounded.png" alt="SideDrop icon" width="120"></p>
 
 <h1 align="center">SideDrop</h1>
 
@@ -259,4 +259,4 @@ uv run -q --no-project --with-requirements requirements.txt --with playwright py
 
 ## License
 
-No license has been chosen yet; ask before reusing the code.
+[GPL-3.0-or-later](LICENSE). zsign, which the Docker image downloads, is under its own license.
