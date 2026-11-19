@@ -74,10 +74,12 @@ graph TD
 What a friend sees: a local run with demo data (made-up apps, iPhones and account; nothing from a real server) at the
 iPhone 18 Pro's screen size, framed in its bezel. [`docs/readme_shots.py`](docs/readme_shots.py) makes them again.
 
-| | | | |
-|:-:|:-:|:-:|:-:|
-| <img src="docs/img/apps.png" alt="Apps: this iPhone's tile, iFizBox, the apps and their install state" width="200"> | <img src="docs/img/changes.png" alt="Changes: new versions by date, the update waiting for this iPhone on top" width="200"> | <img src="docs/img/install.png" alt="An app install: GET opens the steps of an app that needs a file" width="200"> | <img src="docs/img/settings.png" alt="Settings: this iPhone's status, the slots used and when the apps stop working" width="200"> |
-| **Apps** with install state | **Changes** with the update waiting on top | **An install** that brings a file | **Settings** with this iPhone's status |
+<p align="center">
+  <img src="docs/img/apps.png" alt="Apps: the apps and their install state" width="24%">
+  <img src="docs/img/changes.png" alt="Changes: new versions, the update waiting on top" width="24%">
+  <img src="docs/img/install.png" alt="Install: an app that brings a file" width="24%">
+  <img src="docs/img/settings.png" alt="Settings: this iPhone's status" width="24%">
+</p>
 
 ## Quick start
 
@@ -119,12 +121,16 @@ Put IPAs in `data/apps/` or list AltStore sources (see [Apps, sources and files]
 
 Sign in with the admin password instead of the friends' one and **Settings → Manage** appears. Friends never see it.
 
-| | | |
-|:-:|:-:|:-:|
-| <img src="docs/img/iphones.png" alt="iPhones" width="250"> | <img src="docs/img/signing.png" alt="Signing" width="250"> | <img src="docs/img/passwords.png" alt="Passwords" width="250"> |
-| **iPhones**: every device on the account; a switch takes one out of the profile | **Signing**: the certificate, App ID and API key; a new certificate in one tap | **Passwords**: change the friends' or the admin password |
-| <img src="docs/img/invites.png" alt="Invite Friends, with a new one-iPhone link for Casey" width="250"> | <img src="docs/img/files.png" alt="Files for Friends, two files uploading" width="250"> | <img src="docs/img/sources.png" alt="App Sources" width="250"> |
-| **Invite Friends**: a link for anyone, or one that registers one iPhone | **Files for Friends**: upload files everyone sees under Files | **App Sources**: the AltStore sources to mirror and sign |
+<p align="center">
+  <img src="docs/img/iphones.png" alt="iPhones: every device on the account; a switch takes one out of the profile" width="32%">
+  <img src="docs/img/signing.png" alt="Signing: the certificate, App ID and API key; a new certificate in one tap" width="32%">
+  <img src="docs/img/passwords.png" alt="Passwords: change the friends' or the admin password" width="32%">
+</p>
+<p align="center">
+  <img src="docs/img/invites.png" alt="Invite Friends: a link for anyone, or one that registers one iPhone" width="32%">
+  <img src="docs/img/files.png" alt="Files for Friends: two files uploading" width="32%">
+  <img src="docs/img/sources.png" alt="App Sources: the AltStore sources to mirror and sign" width="32%">
+</p>
 
 **iFizBox** edits the sources and settings iFizBox starts with, and Manage warns at the top when the certificate is
 about to expire or can't sign. The details are in [docs/configuration.md](docs/configuration.md#manage-in-more-detail).

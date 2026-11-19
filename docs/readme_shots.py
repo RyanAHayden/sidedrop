@@ -14,7 +14,8 @@ finished PNGs are written to docs/img:
 
 - <name>.png: the screen with the kit's iOS 27 status bar (white, "Dark Background") and home indicator drawn on it,
   a soft diagonal sheen, in the iPhone 18 Pro bezel, scaled to 0.4 of the 3x bezel (540x1104) with 24 transparent
-  pixels left and right, so phones side by side in the README don't touch;
+  pixels left and right, so phones side by side in the README don't touch, and its label from LABELS drawn under it
+  (the name on an amber pill, a line in grey: readable on GitHub's light and dark), so captions can't drift;
 - crop-<name>.png: a part of a page (the settings that matter), at the same scale as the phones' screens (0.4 of 3x),
   with rounded corners and no bezel.
 
@@ -34,6 +35,15 @@ K = 3  # captures and the bezel bitmap are 3x
 SAFE = {"top": 62, "bottom": 34, "left": 0, "right": 0}
 SCALE = 0.4  # of the 3x bezel: sharp at the README's ~200 px per phone on a 2x screen
 PAD = 24
+LABELS = {  # name: (the label's pill, the line under it), drawn under the phone (crops get none)
+    "apps": ("Apps", "your apps, ready to install"), "changes": ("Changes", "new versions, updates on top"),
+    "install": ("Install", "apps that bring their files"), "settings": ("Settings", "this iPhone's status"),
+    "manage": ("Manage", "the admin's menu"), "iphones": ("iPhones", "switch one off any time"),
+    "signing": ("Signing", "certificate and API key"), "passwords": ("Passwords", "change who gets in"),
+    "invites": ("Invite Friends", "a link for one iPhone"), "files": ("Files", "share files with everyone"),
+    "sources": ("App Sources", "mirror AltStore sources"),
+}
+font_file = lambda pattern: subprocess.run(["fc-match", "-f", "%{file}", pattern], capture_output=True, text=True, check=True).stdout  # Noto Sans
 UA = ("Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 "
       "Mobile/15E148 Safari/604.1")
 IPHONE = dict(viewport={"width": SCREEN_PT[0], "height": SCREEN_PT[1]}, device_scale_factor=K, is_mobile=True, has_touch=True,
@@ -230,10 +240,33 @@ def framing():
         else:
             img = rounded(shot, SCREEN_RADIUS_PT * K)
         img = scaled(img)
-        out = Image.new("RGBA", (img.width + 2 * PAD, img.height), (0, 0, 0, 0))
+        lab = label(*LABELS[src.stem], img.width + 2 * PAD) if src.stem in LABELS else None
+        out = Image.new("RGBA", (img.width + 2 * PAD, img.height + (lab.height if lab else 0)), (0, 0, 0, 0))
         out.alpha_composite(img, (PAD, 0))
+        if lab:
+            out.alpha_composite(lab, (0, img.height))
         out.save(dst, optimize=True)
         print(f"wrote {dst} {out.width}x{out.height} {dst.stat().st_size // 1024} KB")
+
+    def label(title, sub, width):
+        """The caption under a phone, drawn into the PNG so it always sits under its own phone at the same size (a
+        Markdown table sizes its columns by caption length). It has to read on GitHub's white and its near-black
+        alike, so no plain dark text: the name in white on a SideDrop-amber pill, the line under it in a grey
+        between the two backgrounds. Noto Sans (free to publish), sized for ~200 px per phone in the README."""
+        lab = Image.new("RGBA", (width * SS, 150 * SS), (0, 0, 0, 0))  # drawn 4x, scaled down: smooth pill edges
+        d, cx = ImageDraw.Draw(lab), width * SS // 2
+        big = ImageFont.truetype(font_file("Noto Sans:bold"), 40 * SS)
+        tw = d.textlength(title, font=big)
+        top, ph = 18 * SS, 60 * SS
+        pill = Image.new("RGBA", (int(tw + 52 * SS), ph))
+        grad = Image.linear_gradient("L").resize(pill.size)  # amber, lighter at the top, as the icon's
+        pill = Image.composite(Image.new("RGBA", pill.size, (184, 90, 7, 255)), Image.new("RGBA", pill.size, (232, 134, 36, 255)), grad)
+        mask = Image.new("L", pill.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, pill.width - 1, ph - 1), ph // 2, fill=255)
+        lab.paste(pill, (cx - pill.width // 2, top), mask)
+        d.text((cx, top + ph // 2), title, font=big, fill=(255, 255, 255, 255), anchor="mm")
+        d.text((cx, top + ph + 34 * SS), sub, font=ImageFont.truetype(font_file("Noto Sans"), 30 * SS), fill=(140, 149, 159, 255), anchor="mm")
+        return lab.resize((width, 150), Image.LANCZOS)
 
     def crop(src, dst):
         img = rounded(scaled(Image.open(src).convert("RGBA")), CROP_RADIUS_PT * K * SCALE)
