@@ -828,6 +828,9 @@ html = boss.get(f"/admin/invites?new={tok}").data.decode()
 assert f'data-link="https://x.test/invite/{tok}"' in html and "New link for Sam x" in html and "Not used" in html
 guest, early = I.app.test_client(), I.app.test_client()
 assert guest.get(f"/invite/{tok}").location == "/" and b"Register iPhone" in guest.get("/").data
+assert b'placeholder="Your name"' not in guest.get("/").data  # a named invite skips the name step
+r = guest.post("/enroll", data={"name": "Someone Else"})
+assert b"/udid/Sam%20x/g/" in r.data and b"Someone" not in r.data, "registered under the invite's name, not the form's"
 assert early.get(f"/invite/{tok}").location == "/" and signed_in(early)  # someone else opening the shared link before it's used
 for p in ("/admin", "/admin/invites", "/admin/passwords", "/admin/iphones", "/admin/devices.json", "/admin/files"):
     assert guest.get(p).status_code == 403, p

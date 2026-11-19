@@ -882,8 +882,9 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% if error %}<p class="c err">{{ error }}</p>{% endif %}
 {% set enroll_form %}<form method=post action=/enroll style="display:flex;flex-direction:column;gap:10px"
  onsubmit="document.getElementById('next').hidden=false;this.querySelector('button').textContent='Check the popup…'">
-<input name=name required maxlength=30 placeholder="Your name" aria-label="Your name" autocomplete=given-name
- oninput="this.form.querySelector('button').disabled=!this.value.trim()"><button disabled>Register iPhone</button></form>
+{% if inv_name %}<button>Register iPhone</button>{# a named one-iPhone invite: registered under its name, no typing #}
+{% else %}<input name=name required maxlength=30 placeholder="Your name" aria-label="Your name" autocomplete=given-name
+ oninput="this.form.querySelector('button').disabled=!this.value.trim()"><button disabled>Register iPhone</button>{% endif %}</form>
 <ol id=next hidden><li>Tap <b>Allow</b>, then <b>Close</b>.</li><li>Open the <b>Settings</b> app.</li>
 <li>Tap <b>Profile Downloaded</b> near the top.</li><li>Tap <b>Install</b>, enter your passcode, tap <b>Install</b> again.</li>
 <li>You'll land back here automatically, registered.</li></ol>{% endset %}
@@ -1182,7 +1183,7 @@ addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").f
         ifz_m=signed_url(f"/m/{ifz['name']}.plist") if ifz else "",
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
-        file_labels=file_labels, is_admin=is_admin(), files=shared_files(), fdl=lambda f: signed_url(f"/f/{f.name}"),
+        file_labels=file_labels, is_admin=is_admin(), files=shared_files(), inv_name=invite_name(), fdl=lambda f: signed_url(f"/f/{f.name}"),
         first_run=enrolled and first_run_due(token_udid(tok))))
     if enrolled and request.args.get("enrolled"):  # survives sign-out; re-checked against the profile on every load
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
@@ -2298,6 +2299,12 @@ def load_invites():
     return load_json(INVITES)
 
 
+def invite_name():
+    """The name the admin gave this guest's one-iPhone invite, or "" (not a guest, or an invite without a name)."""
+    pv = session.get("pv") or ()
+    return (load_invites().get(pv[1], {}).get("name") or "") if is_guest() and len(pv) > 2 else ""
+
+
 def is_guest():
     return session.get("ok") is True and (session.get("pv") or ("",))[0] == "g"
 
@@ -2707,7 +2714,7 @@ def enroll():
         abort(403)
     pv = session.get("pv") or ()
     guest = len(pv) > 2 and pv[0] == "g"
-    name = re.sub(r"[^\w .'-]", "", request.form.get("name", "") or (guest and load_invites().get(pv[1], {}).get("name")) or "")[:30] or "friend"
+    name = re.sub(r"[^\w .'-]", "", invite_name() or request.form.get("name", ""))[:30] or "friend"  # a named invite's name wins over the form
     url = signed_url(f"/udid/{name}/g/{pv[1]}/{pv[2]}" if guest else f"/udid/{name}", ttl=1800)  # F16: a guest's goes through its invite
     profile = plistlib.dumps({
         "PayloadContent": {"URL": url, "DeviceAttributes": ["UDID", "PRODUCT"]},
