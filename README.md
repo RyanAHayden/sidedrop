@@ -27,6 +27,8 @@ These files can be edited on github.com. The NAS picks up changes within 5 minut
 
 ## Setup
 
+New to the developer account? [docs/developer-account.md](docs/developer-account.md) walks through the certificate, the API key and an App ID with Push, step by step.
+
 Everything lives in one data folder (`/mnt/SSD/sidedrop` in `compose.yaml`), which must be owned by UID 568:
 
 ```
