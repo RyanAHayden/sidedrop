@@ -1,0 +1,16 @@
+# agent-runner (https://github.com/FIZL0/agent-runner): `tmux new -s sidedrop agent-runner run 2`
+[plan]
+dir = "plan"
+journal = "journal"
+
+[run]
+test = "uv run -q --no-project --with-requirements requirements.txt python test_app.py"  # no venv needed in a worktree
+slots = 2
+notes = ".runner"
+joinable = ["plan/TODO.md", "plan/DONE.md", "journal/*/*.md"]
+untested = ["*.md", "docs/*", "journal/*"]
+
+[git]
+push = "origin"
+push_merge = true
+land_edited = "wip"
