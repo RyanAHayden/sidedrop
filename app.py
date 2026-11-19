@@ -15,10 +15,14 @@ from flask import Flask, abort, make_response, redirect, render_template_string,
 DATA = Path(os.environ.get("DATA", "/data"))
 APPS, SIGNED = DATA / "apps", DATA / "signed"
 APP_FILES = DATA / "appfiles"  # appfiles/<ipa name>/* are listed under that app's Install button
+FILES = DATA / "files"  # files the admin uploads on Manage for every friend, listed under Files on the Apps tab
 CUSTOM = SIGNED / "custom"  # one-off IPAs friends upload or link on the page
 HERE = Path(__file__).parent  # config files edited on GitHub; the NAS pulls and rebuilds (deploy.sh)
-read_urls = lambda f: [u for u in (HERE / f).read_text().split() if u.startswith(("https://", "http://"))] if (HERE / f).exists() else []
+CONFIG = DATA / "config"  # the admin's edits of the repo's config files (Manage); the repo copies stay the defaults
+conf = lambda f: CONFIG / f if (CONFIG / f).exists() else HERE / f
+read_urls = lambda f: [u for u in conf(f).read_text().split() if u.startswith(("https://", "http://"))] if conf(f).exists() else []
 IFIZBOX_SOURCES = "ifizbox-sources.txt"  # the sources iFizBox starts with (ifizbox_transfer)
+IFIZBOX_SETTINGS = "ifizbox-settings.json"  # a JSON object of iFizBox settings it imports with them; none in the repo, set on Manage
 IFIZBOX_ID = "com.ryha.ifizbox"  # signed with our certificate and sources inside it (ifizbox_identity, ifizbox_transfer)
 INSTALLS = {}  # ponytail: in memory (one gunicorn worker); {token: {"at", "manifest", "started"}}: iOS's requests, for the install page
 PROFILE = DATA / "adhoc.mobileprovision"
@@ -44,8 +48,8 @@ PROFILE_NAME = os.environ.get("PROFILE_NAME", "sidedrop adhoc")
 LINK_TTL = int(os.environ.get("LINK_TTL", 7 * 86400))
 # AltStore sources to mirror into apps/: one per line, a URL then optionally the bundle IDs to take (else all its apps);
 # third-party-sources.txt's apps are listed under "Third-party apps"
-read_sources = lambda f: [(l.split()[0], l.split()[1:]) for l in (HERE / f).read_text().splitlines()
-                          if l.startswith(("https://", "http://"))] if (HERE / f).exists() else []
+read_sources = lambda f: [(l.split()[0], l.split()[1:]) for l in conf(f).read_text().splitlines()
+                          if l.startswith(("https://", "http://"))] if conf(f).exists() else []
 SOURCES = [(u, ids, False) for u, ids in read_sources("mirror-sources.txt")] + \
           [(u, ids, True) for u, ids in read_sources("third-party-sources.txt")]
 SYNC_TOKEN = os.environ.get("SYNC_TOKEN", "")
@@ -243,8 +247,16 @@ def ifizbox_identity():
 def ifizbox_transfer():
     """iFizBox imports web/transfer.link from its bundle once, on first launch: ifizbox://import?d=<base64url of gzipped JSON>
     (iFizBox's core/transfer.js), here only our sources."""
-    payload = {"v": 1, "sources": read_urls(IFIZBOX_SOURCES), "settings": {}, "holds": []}
+    payload = {"v": 1, "sources": read_urls(IFIZBOX_SOURCES), "settings": ifizbox_settings(), "holds": []}
     return "ifizbox://import?d=" + base64.urlsafe_b64encode(gzip.compress(json.dumps(payload).encode())).decode().rstrip("=")
+
+
+def ifizbox_settings():
+    try:
+        s = json.loads(conf(IFIZBOX_SETTINGS).read_text())
+        return s if isinstance(s, dict) else {}
+    except (OSError, ValueError):
+        return {}
 
 
 def sign_ipa(src, out):
@@ -273,7 +285,7 @@ def resign(force=False):
     SIGNED.mkdir(exist_ok=True)
     for src in sorted(APPS.glob("*.ipa")):
         out = SIGNED / src.name
-        deps = [src, PROFILE] + [p for p in [HERE / IFIZBOX_SOURCES] if src.stem == IFIZBOX_ID and p.exists()]  # its sources are inside it
+        deps = [src, PROFILE] + [p for p in [conf(IFIZBOX_SOURCES), conf(IFIZBOX_SETTINGS)] if src.stem == IFIZBOX_ID and p.exists()]  # inside it
         if force or not out.exists() or out.stat().st_mtime < max(d.stat().st_mtime for d in deps):
             sign_ipa(src, out)
 
@@ -831,6 +843,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <p class=ftr>Installs apps right on your iPhone. <a href=#ifizbox onclick="go('ifizbox');return false">Why iFizBox</a></p>{% endif %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
+{% if files %}<h3 class=hdr id=files>Files</h3><div class=g>{% for f in files %}<a class=row href="{{ fdl(f) }}" download><div>{{ f.name }}<small>{{ f.stat().st_size|filesizeformat }}</small></div></a>{% endfor %}</div>
+<p class=ftr>The links work without signing in for 7 days, so wget and curl can use them.</p>{% endif %}
 </section>
 
 {% macro cyrow(a, up) %}<div class="cyr{{ ' up' if up }}">{% if a.icon %}<img class=cyi src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=cyi style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
@@ -866,7 +880,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% if stats[1] %}<div class=kv><b>Apps work until</b><span>{{ stats[1].strftime('%b %-d, %Y') }}</span></div>{% endif %}{% endif %}</div>
 {% if enrolled %}<p class=ftr>This iPhone is registered and can install every app.</p>{% endif %}
 <div class="g split">
-{% if enrolled and admin_on %}<a class=tile href=/admin data-push><span class=tic style="background:linear-gradient(#ffb36b,#d9650f)"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="#fff"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z" fill="#fff"/></svg></span>Manage</a>
+{% if is_admin %}<a class=tile href=/admin data-push><span class=tic style="background:linear-gradient(#ffb36b,#d9650f)"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="#fff"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z" fill="#fff"/></svg></span>Manage</a>
 {% else %}<a class=tile href=#apps><span class=tic style="background:linear-gradient(#8fd96b,#3c9a1d)"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#3c9a1d"/></svg></span>Register</a>{% endif %}
 <button type=button class=tile onclick="goTo(document.getElementById('sign'))"><span class=tic style="background:linear-gradient(#b7c0cc,#5d6878)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</button></div>
 <div class=pair>
@@ -1047,7 +1061,7 @@ addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").f
         ifz_m=signed_url(f"/m/{ifz['name']}.plist") if ifz else "",
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
-        file_labels=file_labels))
+        file_labels=file_labels, is_admin=is_admin(), files=shared_files(), fdl=lambda f: signed_url(f"/f/{f.name}")))
     if enrolled and request.args.get("enrolled"):  # survives sign-out; re-checked against the profile on every load
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
     return resp
@@ -1064,10 +1078,14 @@ def login():
     if needs_setup() and hmac.compare_digest(pw.encode(), DEFAULT_PASSWORD.encode()):  # first run: only the setup splash
         session.permanent, session["setup"] = True, True
         return redirect("/setup")
-    if not password_ok(pw):
+    if password_ok(pw):
+        session.permanent, session["ok"] = True, True
+        session.pop("admin", None)  # a friend's login on a shared browser drops an earlier admin one
+    elif not needs_setup() and admin_enabled() and password_ok(pw, admin=True):  # the same form and ?password= link sign the admin in
+        session.permanent, session["ok"], session["admin"], session["csrf"] = True, True, time.time(), secrets.token_urlsafe(32)
+    else:
         time.sleep(2)  # ponytail: slows guessing per request, add per-IP lockout if this ever gets hammered
         return redirect("/?err=1")
-    session.permanent, session["ok"] = True, True
     return redirect("/")
 
 
@@ -1218,6 +1236,38 @@ def sort_signing_files(files):
     return out
 
 
+def take_signing_files(f, uploads, s):
+    """The setup splash's and Manage's Choose Signing Files: writes a working cert.p12 and .p8 into the data folder and the
+    p12 password, Key ID, Issuer ID and App ID into s (the caller saves it). Returns an error or None."""
+    err = None
+    got = sort_signing_files([(u.filename or "", u.read()) for u in uploads if u.filename])
+    if got["p12"]:  # a working certificate is kept even if something else is wrong, so a retry needn't pick it again
+        typed = [f["p12_password"]] if f.get("p12_password") else []
+        tries = [P12_PASSWORD] if "P12_PASSWORD" in ENV_SET else typed + got["passwords"] + [""]  # "" too: many have none
+        p12_pw = next((g for g in tries if p12_opens(got["p12"], g)), None)
+        if p12_pw is None:
+            err = "The P12_PASSWORD in .env doesn't open this cert.p12." if "P12_PASSWORD" in ENV_SET else \
+                "The certificate's password didn't open cert.p12. Type it in P12 Password."
+        else:
+            P12.write_bytes(got["p12"])
+            s["p12_password"] = p12_pw
+    elif f.get("p12_password") and P12.exists() and "P12_PASSWORD" not in ENV_SET:
+        if p12_opens(P12.read_bytes(), f["p12_password"]):
+            s["p12_password"] = f["p12_password"]
+        else:
+            err = "That password doesn't open cert.p12."
+    if got["p8"]:
+        try:
+            serialization.load_pem_private_key(got["p8"], None)
+            ASC_KEY.write_bytes(got["p8"])
+        except (ValueError, TypeError):
+            err = err or "The .p8 isn't an App Store Connect API key."
+    for k, guess in (("asc_key_id", got["key_id"]), ("asc_issuer_id", got["issuer_id"]), ("bundle_id", "")):
+        if k.upper() not in ENV_SET and (v := f.get(k, "").strip() or guess):
+            s[k] = v
+    return err
+
+
 @app.route("/setup", methods=["GET", "POST"])
 def setup():
     """The first-run splash: only after signing in with DEFAULT_PASSWORD, only until it's saved."""
@@ -1226,30 +1276,8 @@ def setup():
     s, err = load_json(SETUP), None
     if request.method == "POST":
         f = request.form
-        got = sort_signing_files([(u.filename or "", u.read()) for u in request.files.getlist("files") if u.filename])
         pw, admin_pw = f.get("password", ""), f.get("admin_password", "")
-        if got["p12"]:  # a working certificate is kept even if something else is wrong, so a retry needn't pick it again
-            typed = [f["p12_password"]] if f.get("p12_password") else []
-            p12_pw = next((g for g in typed + got["passwords"] + [""] if p12_opens(got["p12"], g)), None)  # "" too: many have none
-            if p12_pw is None:
-                err = "The certificate's password didn't open cert.p12. Type it in P12 Password."
-            else:
-                P12.write_bytes(got["p12"])
-                s["p12_password"] = p12_pw
-        elif f.get("p12_password") and P12.exists() and "P12_PASSWORD" not in ENV_SET:
-            if p12_opens(P12.read_bytes(), f["p12_password"]):
-                s["p12_password"] = f["p12_password"]
-            else:
-                err = "That password doesn't open cert.p12."
-        if got["p8"]:
-            try:
-                serialization.load_pem_private_key(got["p8"], None)
-                ASC_KEY.write_bytes(got["p8"])
-            except (ValueError, TypeError):
-                err = err or "The .p8 isn't an App Store Connect API key."
-        for k, guess in (("asc_key_id", got["key_id"]), ("asc_issuer_id", got["issuer_id"]), ("bundle_id", "")):
-            if k.upper() not in ENV_SET and (v := f.get(k, "").strip() or guess):
-                s[k] = v
+        err = take_signing_files(f, request.files.getlist("files"), s)
         save_json(SETUP, {k: v for k, v in s.items() if k not in ("password", "admin_password")})
         apply_setup()
         need = lambda k: k not in ENV_SET and not s.get(k.lower())
@@ -1330,33 +1358,7 @@ def admin():
 <form class=c method=post><input type=password name=password placeholder="Admin password" aria-label="Admin password" autofocus required
  oninput="this.form.querySelector('button').disabled=!this.value"><script>addEventListener("pageshow",()=>{let i=document.querySelector("input[name=password]");i.oninput()})</script>
 {% if err %}<p class=err>{{ err }}</p>{% endif %}<button disabled>Unlock</button></form>""", back=MORE, title="Manage iPhones", err=err)
-    seen, me = load_json(SEEN), token_udid(request.cookies.get("device", ""))
-    now = time.time()
-    def ago(t):
-        days = int((now - t) // 86400)
-        return "today" if days < 1 else "yesterday" if days < 2 else f"{days} days ago" if days < 60 else time.strftime("%b %-d, %Y", time.localtime(t))
-    devices = []
-    try:
-        listed = asc("GET", "/devices", params={"filter[platform]": "IOS", "limit": 200})["data"]
-    except Exception as e:
-        return page(ADMIN_CSS + """
-<p class="c err">Apple's developer service didn't answer. Try again in a few minutes.<small>{{ e }}</small></p>""", back=MORE, title="Manage iPhones", e=str(e)[:200])
-    for d in listed:
-        a = d["attributes"]
-        added = datetime.datetime.strptime(a["addedDate"][:10], "%Y-%m-%d") if a.get("addedDate") else None
-        devices.append(dict(id=d["id"], name=a.get("name", ""), model=a.get("model") or a.get("deviceClass", ""), udid=a.get("udid", ""),
-                            on=a.get("status") == "ENABLED", added=added, me=a.get("udid") == me,
-                            used=f"Last used {ago(seen[a['udid']])}" if a.get("udid") in seen else "Not seen yet"))
-    devices.sort(key=lambda d: (not d["on"], -(d["added"].timestamp() if d["added"] else 0)))
-    return page(ADMIN_CSS + """
-<div class=g>{% for d in devices %}<div class="row{{ '' if d.on else ' off' }}"><div><b>{{ d.name }}</b>{% if d.me %} · this iPhone{% endif %}
-<small>{{ d.model }}{% if d.added %} · added {{ d.added.strftime('%b %-d, %Y') }}{% endif %}</small><small>{{ d.used }}{% if not d.on %} · disabled{% endif %}</small></div>
-<form method=post action=/admin/device data-name="{{ d.name }}" onsubmit="{% if d.on %}if(!confirm('Disable '+this.dataset.name+'? Its apps stop opening.'))return false;{% endif %}this.querySelector('button').textContent='Saving…'">
-<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=id value="{{ d.id }}"><input type=hidden name=status value="{{ 'DISABLED' if d.on else 'ENABLED' }}">
-<button class="act{{ ' red' if d.on }}">{{ 'DISABLE' if d.on else 'ENABLE' }}</button></form></div>{% endfor %}</div>
-<p class=ftr>{{ devices|selectattr('on')|list|length }} enabled, {{ devices|rejectattr('on')|list|length }} disabled. Disabling takes an iPhone out of the profile, so its apps stop opening.
-Apple still counts it toward the 100 until your membership renews, when you can remove it at developer.apple.com.</p>""", back=MORE, title="Manage iPhones",
-                devices=devices, csrf=session["csrf"])
+    return manage_page()
 
 
 @app.post("/admin/device")
@@ -1371,6 +1373,175 @@ def admin_device():
         regen_profile()
         resign(force=True)
     return redirect("/admin")
+
+
+# --- Manage, beyond the iPhones: signing files, sources and iFizBox settings (overrides in DATA/config), files for friends ---
+
+EDITABLE = {"mirror-sources.txt": "Sources", "third-party-sources.txt": "Third-party sources",
+            IFIZBOX_SOURCES: "iFizBox's starting sources", IFIZBOX_SETTINGS: "iFizBox settings"}
+DONE = {"signing": "Saved. Apps are being signed with the new files.", "sources": "Saved.", "default": "Back to the default.",
+        "files": "Uploaded.", "deleted": "Deleted."}
+
+
+def shared_files():
+    return sorted((p for p in FILES.iterdir() if p.is_file() and not p.name.startswith(".")), key=lambda p: p.name.lower()) if FILES.exists() else []
+
+
+def admin_check():
+    if not is_admin() or not hmac.compare_digest(request.form.get("csrf", ""), session["csrf"]):
+        abort(403)
+
+
+def manage_page(err=None):
+    seen, me = load_json(SEEN), token_udid(request.cookies.get("device", ""))
+    now = time.time()
+    def ago(t):
+        days = int((now - t) // 86400)
+        return "today" if days < 1 else "yesterday" if days < 2 else f"{days} days ago" if days < 60 else time.strftime("%b %-d, %Y", time.localtime(t))
+    devices, asc_err = [], None
+    try:
+        listed = asc("GET", "/devices", params={"filter[platform]": "IOS", "limit": 200})["data"]
+    except Exception as e:
+        listed, asc_err = [], str(e)[:200]
+    for d in listed:
+        a = d["attributes"]
+        added = datetime.datetime.strptime(a["addedDate"][:10], "%Y-%m-%d") if a.get("addedDate") else None
+        devices.append(dict(id=d["id"], name=a.get("name", ""), model=a.get("model") or a.get("deviceClass", ""), udid=a.get("udid", ""),
+                            on=a.get("status") == "ENABLED", added=added, me=a.get("udid") == me,
+                            used=f"Last used {ago(seen[a['udid']])}" if a.get("udid") in seen else "Not seen yet"))
+    devices.sort(key=lambda d: (not d["on"], -(d["added"].timestamp() if d["added"] else 0)))
+    configs = [dict(name=n, label=lbl, text=conf(n).read_text() if conf(n).exists() else "", custom=(CONFIG / n).exists()) for n, lbl in EDITABLE.items()]
+    return page(ADMIN_CSS + """<style>.mg label{display:flex;flex-direction:column;gap:4px;font-weight:700} .mg small{font-weight:400} .mg textarea{min-height:96px}
+.done{color:#2f7d32;font-weight:700}</style>
+{% if done %}<p class="c done">{{ done }}</p>{% endif %}{% if err %}<p class="c err">{{ err }}</p>{% endif %}
+<h3 class=hdr>iPhones</h3>
+{% if asc_err %}<p class="c err">Apple's developer service didn't answer. Try again in a few minutes.<small>{{ asc_err }}</small></p>{% else %}
+<div class=g>{% for d in devices %}<div class="row{{ '' if d.on else ' off' }}"><div><b>{{ d.name }}</b>{% if d.me %} · this iPhone{% endif %}
+<small>{{ d.model }}{% if d.added %} · added {{ d.added.strftime('%b %-d, %Y') }}{% endif %}</small><small>{{ d.used }}{% if not d.on %} · disabled{% endif %}</small></div>
+<form method=post action=/admin/device data-name="{{ d.name }}" onsubmit="{% if d.on %}if(!confirm('Disable '+this.dataset.name+'? Its apps stop opening.'))return false;{% endif %}this.querySelector('button').textContent='Saving…'">
+<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=id value="{{ d.id }}"><input type=hidden name=status value="{{ 'DISABLED' if d.on else 'ENABLED' }}">
+<button class="act{{ ' red' if d.on }}">{{ 'DISABLE' if d.on else 'ENABLE' }}</button></form></div>{% endfor %}</div>
+<p class=ftr>{{ devices|selectattr('on')|list|length }} enabled, {{ devices|rejectattr('on')|list|length }} disabled. Disabling takes an iPhone out of the profile, so its apps stop opening.
+Apple still counts it toward the 100 until your membership renews, when you can remove it at developer.apple.com.</p>{% endif %}
+
+<h3 class=hdr id=files>Files for friends</h3>
+{% if files %}<div class=g>{% for f in files %}<div class=row><div>{{ f.name }}<small>{{ f.stat().st_size|filesizeformat }}</small></div>
+<form method=post action=/admin/files/delete data-name="{{ f.name }}" onsubmit="if(!confirm('Delete '+this.dataset.name+'?'))return false">
+<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=name value="{{ f.name }}"><button class="act red">DELETE</button></form></div>{% endfor %}</div>{% endif %}
+<form class="c mg" method=post action=/admin/files enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Uploading…'">
+<input type=hidden name=csrf value="{{ csrf }}">
+<input type=file name=files id=upf multiple class=vh onchange="upl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Files'">
+<label class="b grey" for=upf id=upl>Choose Files</label><button>Upload</button>
+<small>Listed under Files on everyone's Apps tab. A file with the same name is replaced.</small></form>
+
+<h3 class=hdr>Apps and iFizBox</h3>
+{% for c in configs %}<form class="c mg" method=post action=/admin/config>
+<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=name value="{{ c.name }}">
+<label>{{ c.label }}<textarea name=text autocapitalize=none autocorrect=off spellcheck=false>{{ c.text }}</textarea>
+<small>{{ c.name }}{% if c.custom %}, changed here; the repo's copy is the default{% elif c.text %}, the repo's default{% else %}, not set{% endif %}.</small></label>
+<button>Save</button>{% if c.custom %}<button class=grey name=reset value=1 onclick="return confirm('Go back to the default?')">Use Default</button>{% endif %}</form>{% endfor %}
+<p class=ftr>Sources: an AltStore source URL per line, then the bundle IDs to take from it (none = all). iFizBox's sources: a URL per line.
+iFizBox settings: a JSON object it imports on first launch. Lines that aren't URLs are ignored.</p>
+
+<h3 class=hdr>Signing</h3>
+<form class="c mg" method=post action=/admin/signing enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Saving…'">
+<input type=hidden name=csrf value="{{ csrf }}">
+<input type=file name=files id=sigf multiple class=vh onchange="sigl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Signing Files'">
+<label class="b grey" for=sigf id=sigl>Choose Signing Files</label>
+<small>Replace the certificate or the API key: cert.p12, AuthKey_….p8 and a password.txt, loose or in a .zip.</small>
+{% if 'P12_PASSWORD' not in env %}<label>P12 Password<input type=password name=p12_password autocomplete=off><small>Leave empty to try a password.txt, or none.</small></label>{% endif %}
+{% if 'ASC_KEY_ID' not in env %}<label>Key ID<input name=asc_key_id value="{{ s.asc_key_id or '' }}" autocapitalize=characters autocomplete=off><small>Read from AuthKey_&lt;Key ID&gt;.p8 if empty.</small></label>{% endif %}
+{% if 'ASC_ISSUER_ID' not in env %}<label>Issuer ID<input name=asc_issuer_id value="{{ s.asc_issuer_id or '' }}" autocapitalize=none autocomplete=off></label>{% endif %}
+{% if 'BUNDLE_ID' not in env %}<label>App ID (BUNDLE_ID)<input name=bundle_id value="{{ s.bundle_id or '' }}" placeholder="com.you.*" autocapitalize=none autocomplete=off></label>{% endif %}
+<button>Save</button><small>A new certificate makes a new profile and signs every app again; installed apps keep working until it does.</small></form>""",
+                back=MORE, title="Manage", devices=devices, asc_err=asc_err, csrf=session["csrf"], files=shared_files(), configs=configs,
+                env=ENV_SET, s=load_json(SETUP), err=err, done=DONE.get(request.args.get("done", "")))
+
+
+def resign_all():
+    """After new signing files: a profile for the new certificate, then every app signed with both."""
+    try:
+        with lock:
+            if PROFILE.exists():  # none yet = nobody registered; the first registration makes it
+                regen_profile()
+                resign(force=True)
+    except Exception as e:
+        print("re-signing after new signing files failed:", e, flush=True)
+
+
+@app.post("/admin/signing")
+def admin_signing():
+    admin_check()
+    f, s = request.form, load_json(SETUP)
+    bid = f.get("bundle_id", "").strip()
+    if bid and "BUNDLE_ID" not in ENV_SET and not re.fullmatch(r"[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(\.\*)?", bid):
+        return manage_page("That App ID doesn't look right: com.you.* or com.you.sideload.")
+    err = take_signing_files(f, request.files.getlist("files"), s)
+    save_json(SETUP, s)
+    apply_setup()
+    if err:
+        return manage_page(err)
+    threading.Thread(target=resign_all, daemon=True).start()
+    return redirect("/admin?done=signing")
+
+
+@app.post("/admin/config")
+def admin_config():
+    global SOURCES
+    admin_check()
+    name, text = request.form.get("name", ""), request.form.get("text", "").replace("\r\n", "\n")
+    if name not in EDITABLE or len(text) > 64 << 10:
+        abort(400)
+    CONFIG.mkdir(parents=True, exist_ok=True)
+    if request.form.get("reset"):
+        (CONFIG / name).unlink(missing_ok=True)
+    else:
+        if name.endswith(".json") and text.strip():
+            try:
+                if not isinstance(json.loads(text), dict):
+                    raise ValueError
+            except ValueError:
+                return manage_page(f"{EDITABLE[name]}: that isn't a JSON object, like {{\"key\": \"value\"}}.")
+        (CONFIG / name).write_text(text.strip() + "\n" if text.strip() else "")
+    if name in (IFIZBOX_SOURCES, IFIZBOX_SETTINGS):  # they're inside iFizBox: sign it again (next page load) so new installs get them
+        if (APPS / f"{IFIZBOX_ID}.ipa").exists():
+            (SIGNED / f"{IFIZBOX_ID}.ipa").unlink(missing_ok=True)
+    else:
+        SOURCES = [(u, ids, False) for u, ids in read_sources("mirror-sources.txt")] + \
+                  [(u, ids, True) for u, ids in read_sources("third-party-sources.txt")]
+        threading.Thread(target=sync_if_stale, args=(0,), daemon=True).start()  # fetch the new sources' apps now
+    return redirect("/admin?done=" + ("default" if request.form.get("reset") else "sources"))
+
+
+@app.post("/admin/files")
+def admin_files():
+    admin_check()
+    FILES.mkdir(parents=True, exist_ok=True)
+    for u in request.files.getlist("files"):
+        name = re.sub(r"[/\\\x00-\x1f]", "", (u.filename or "").rsplit("/", 1)[-1]).strip().lstrip(".")
+        if name:
+            tmp = FILES / f".{name}.part"
+            u.save(tmp)  # streamed to disk, so big files are fine
+            tmp.replace(FILES / name)
+    return redirect("/admin?done=files")
+
+
+@app.post("/admin/files/delete")
+def admin_file_delete():
+    admin_check()
+    f = next((p for p in shared_files() if p.name == request.form.get("name")), None)  # only a listed file, never a path
+    if not f:
+        abort(404)
+    f.unlink()
+    return redirect("/admin?done=deleted")
+
+
+@app.get("/f/<name>")
+def shared_file(name):
+    check_sig()
+    if name.startswith("."):
+        abort(404)
+    return send_from_directory(FILES, name, as_attachment=True)  # handles Range, so downloads resume
 
 
 def signed_stamp():

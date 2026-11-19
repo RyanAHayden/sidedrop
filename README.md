@@ -16,7 +16,7 @@ The **Changes** tab lists apps by release date, Cydia style. Tapping INSTALL rec
 
 ## Editing on GitHub
 
-These files can be edited on github.com; a server running `deploy.sh` picks up changes within 5 minutes:
+These files can be edited on github.com; a server running `deploy.sh` picks up changes within 5 minutes (the sources can also be changed on **Manage**, which then wins over the repo, below):
 
 - `ifizbox-sources.txt`: the sources iFizBox starts with, one URL per line
 - `mirror-sources.txt`: AltStore sources whose apps are downloaded, signed and listed
@@ -60,7 +60,12 @@ docker compose up -d --build
 
 **HTTPS with a real certificate is required.** iOS won't install profiles or apps over plain HTTP or with a self-signed cert. Put the site behind a reverse proxy, Cloudflare Tunnel or `tailscale funnel 8080`, and set `PUBLIC_URL` to match.
 
-With an admin password (from the setup screen or `ADMIN_PASSWORD`), **Settings → Manage** (on a registered iPhone) lists the account's iPhones with when each was added and last used, and can disable or re-enable them. Apple has no API to delete a device: disabling takes it out of the profile so its apps stop opening, but its slot only frees up at renewal.
+With an admin password (from the setup screen or `ADMIN_PASSWORD`), sign in with it instead of the friends' password, on the sign-in screen or as `?password=<admin password>`, and **Settings → Manage** appears. Friends never see it. It can:
+
+- list the account's iPhones with when each was added and last used, and disable or re-enable them. Apple has no API to delete a device: disabling takes it out of the profile so its apps stop opening, but its slot only frees up at renewal.
+- upload **Files for friends**, listed under **Files** on everyone's Apps tab (kept in `files/` in the data folder; signed links like the app files).
+- edit `mirror-sources.txt`, `third-party-sources.txt`, iFizBox's starting sources and its settings (a JSON object it imports on first launch). Edits are saved in `config/` in the data folder and win over the repo's files, which stay the defaults; **Use Default** goes back to them.
+- replace the signing certificate or API key, with the same **Choose Signing Files** as the setup screen. A new certificate gets a new profile and every app is signed again.
 
 ## Limits
 

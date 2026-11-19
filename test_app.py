@@ -86,7 +86,7 @@ assert b"Welcome to sidedrop" in html and b"Ryan Hayden (Fizlo)</a>" in html and
 assert b">Help</a>" in html and b"getElementById('sign')" in html and b'class="tile reg"' not in html and b"go('changes')" not in html
 assert b'href="itms-services' not in c.get("/?enrolled=1").data and b'href="itms-services' not in c.get("/?enrolled=00008130-AAAA.x").data
 html = c.get(r.location.replace("https://x.test", ""), base_url="https://localhost").data
-assert b"This iPhone is registered" in html and b"href=/admin" in html and b"/static/sdp1.jpg" in html
+assert b"This iPhone is registered" in html and b"href=/admin" not in html and b"/static/sdp1.jpg" in html  # Manage is the admin's only
 assert b'class="tile reg"' in html and b"go('changes')" in html and b"id=setupT" not in html and b"id=setup " not in html  # registered: Changes and the green tile
 c.get("/logout", base_url="https://localhost"); c.post("/login", data={"password": "hunter2-but-longer"}, base_url="https://localhost")
 assert b"This iPhone is registered" in c.get("/", base_url="https://localhost").data
@@ -222,7 +222,7 @@ assert "Download the game disc" in html and "labels.txt" not in html
 
 # Manage and Sign open as pages pushed in place; pressed looks come from JS (.is-pressed), never :active, which iOS leaves stuck
 html = c.get("/").data.decode()
-assert "href=/admin data-push" in html and "action=/sign enctype=multipart/form-data data-push" in html and ":active{" not in html and ":active," not in html
+assert "action=/sign enctype=multipart/form-data data-push" in html and ":active{" not in html and ":active," not in html
 # the inline scripts parse (a syntax error kills every button on the page)
 import shutil, subprocess
 if shutil.which("node"):
@@ -279,6 +279,70 @@ locked = A.app.test_client(); locked.post("/login", data={"password": "hunter2-b
 for _ in range(5): locked.post("/admin", data={"password": "nope"})
 assert b"Too many wrong passwords" in locked.post("/admin", data={"password": "admin-pass-also-long"}).data
 A.admin_fails.clear()
+
+# admin through the friends' login link: Manage edits sources (saved in the data folder, the repo copy stays the default),
+# uploads a file friends see and can fetch without a login, and replaces the signing files; a friend gets neither Manage nor its posts
+boss = A.app.test_client()
+r = boss.get("/?password=admin-pass-also-long")
+assert r.status_code == 302 and r.location == "/"
+html = boss.get("/").data.decode()
+assert "href=/admin data-push" in html and "Register iPhone" in html
+html = boss.get("/admin").data.decode()
+assert "Choose Signing Files" in html and "Files for friends" in html and "iFizBox&#39;s starting sources" in html and "Admin password" not in html
+csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
+synced = []
+A.sync_sources = lambda: synced.append(list(A.SOURCES))
+repo_mirror = (Path(A.__file__).parent / "mirror-sources.txt").read_text()
+r = boss.post("/admin/config", data={"csrf": csrf, "name": "mirror-sources.txt", "text": "https://src.test/a.json com.a.b\r\n"})
+assert r.location == "/admin?done=sources" and (tmp / "config" / "mirror-sources.txt").read_text() == "https://src.test/a.json com.a.b\n"
+assert A.SOURCES == [("https://src.test/a.json", ["com.a.b"], False)] + [s for s in A.SOURCES if s[2]]
+assert (Path(A.__file__).parent / "mirror-sources.txt").read_text() == repo_mirror  # the repo file is untouched
+assert "src.test/a.json" in boss.get("/admin").data.decode() and "Use Default" in boss.get("/admin").data.decode()
+boss.post("/admin/config", data={"csrf": csrf, "name": A.IFIZBOX_SOURCES, "text": "https://one.test/s.json\nhttps://two.test/s.json"})
+assert A.read_urls(A.IFIZBOX_SOURCES) == ["https://one.test/s.json", "https://two.test/s.json"]
+assert b"isn&#39;t a JSON object" in boss.post("/admin/config", data={"csrf": csrf, "name": A.IFIZBOX_SETTINGS, "text": "[1]"}).data
+boss.post("/admin/config", data={"csrf": csrf, "name": A.IFIZBOX_SETTINGS, "text": '{"theme": "dark"}'})
+import gzip, base64, json
+link_d = A.ifizbox_transfer().split("d=")[1]
+payload = json.loads(gzip.decompress(base64.urlsafe_b64decode(link_d + "=" * (-len(link_d) % 4))))
+assert payload["sources"] == ["https://one.test/s.json", "https://two.test/s.json"] and payload["settings"] == {"theme": "dark"}
+assert boss.post("/admin/config", data={"csrf": csrf, "name": "../secret.key", "text": "x"}).status_code == 400
+r = boss.post("/admin/config", data={"csrf": csrf, "name": "mirror-sources.txt", "text": "", "reset": "1"})
+assert r.location == "/admin?done=default" and not (tmp / "config" / "mirror-sources.txt").exists()
+assert [u for u, _, t in A.SOURCES if not t] == [u for u, _ in A.read_sources("mirror-sources.txt")]
+r = boss.post("/admin/files", data={"csrf": csrf, "files": [(io.BytesIO(b"hello friends"), "notes v2.txt"), (io.BytesIO(b"x"), "../.hidden")]},
+              content_type="multipart/form-data")
+assert r.location == "/admin?done=files" and (tmp / "files" / "notes v2.txt").read_bytes() == b"hello friends"
+assert sorted(p.name for p in (tmp / "files").iterdir()) == ["hidden", "notes v2.txt"]  # no paths, no dotfiles
+friend = A.app.test_client(); friend.get("/?password=hunter2-but-longer")
+html = friend.get("/").data.decode()
+assert "notes v2.txt" in html and "href=/admin" not in html, "a friend sees the file and not Manage"
+dl = re.search(r'href="(https://x\.test/f/notes%20v2\.txt\?[^"]+)"', html).group(1).replace("&amp;", "&")
+assert A.app.test_client().get(path_qs(dl)).data == b"hello friends"  # no login needed, like the app files
+assert A.app.test_client().get("/f/notes%20v2.txt").status_code == 403
+assert b"Admin password" in friend.get("/admin").data  # a friend's Manage is only the old unlock form
+for url, data in (("/admin/config", {"name": "mirror-sources.txt", "text": "https://evil.test/x.json"}), ("/admin/files", {}),
+                  ("/admin/files/delete", {"name": "notes v2.txt"}), ("/admin/signing", {})):
+    assert friend.post(url, data=dict(data, csrf=csrf)).status_code == 403
+    assert boss.post(url, data=dict(data, csrf="wrong")).status_code == 403
+assert (tmp / "files" / "notes v2.txt").exists() and not (tmp / "config" / "mirror-sources.txt").exists()
+assert boss.post("/admin/files/delete", data={"csrf": csrf, "name": "../secret.key"}).status_code == 404
+assert boss.post("/admin/files/delete", data={"csrf": csrf, "name": "hidden"}).location == "/admin?done=deleted" and not (tmp / "files" / "hidden").exists()
+# new signing files, the same upload as the setup screen; a new certificate means a new profile and every app signed again
+from cryptography.hazmat.primitives.serialization import pkcs12 as P12x
+p12_new = P12x.serialize_key_and_certificates(b"sd", k, crt, None, S.BestAvailableEncryption(b"new-p12-pw"))
+resign_all_orig, resigns, A.resign_all = A.resign_all, [], lambda: resigns.append(1)
+r = boss.post("/admin/signing", data={"csrf": csrf, "p12_password": "wrong", "files": [(io.BytesIO(p12_new), "cert.p12")]}, content_type="multipart/form-data")
+assert b"didn&#39;t open" in r.data and A.P12.read_bytes() != p12_new and resigns == []
+r = boss.post("/admin/signing", data={"csrf": csrf, "p12_password": "new-p12-pw", "bundle_id": "com.me.*", "files": [(io.BytesIO(p12_new), "cert.p12")]},
+              content_type="multipart/form-data")
+assert r.location == "/admin?done=signing" and A.P12.read_bytes() == p12_new and A.P12_PASSWORD == "new-p12-pw" and resigns == [1]
+assert b"Apps are being signed" in boss.get(r.location).data
+regens, A.regen_profile = [], lambda: regens.append(1)
+A.resign_all = resign_all_orig
+A.resign_all(); assert regens == [1]
+A.regen_profile, A.SOURCES = fake_regen, []
+boss.get("/logout")
 assert b'og:image content="https://x.test/static/og.png"' in A.app.test_client().get("/").data  # link preview on the login page too
 assert c.get("/static/sdp1.jpg").status_code == 200  # setup screenshots served
 assert A.app.test_client().post("/refresh").status_code == 403 and c.post("/refresh").status_code == 204  # Reload button
@@ -362,6 +426,12 @@ for M in (F, boot(first)):  # and after a restart
     assert v.post("/admin", data={"password": "admin-pass-x"}).location == "/admin"  # admin unlocked
     M.admin_fails.clear()
 assert w.get("/setup").location == "/"  # done: the splash is gone for the one who set it up too
+F.asc = fake_asc; fa = F.app.test_client(); assert fa.get("/?password=admin-pass-x").location == "/"  # the saved admin password signs in through the link too
+html = fa.get("/admin").data.decode(); csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
+assert "App ID (BUNDLE_ID)" in html and b"doesn&#39;t look right" in fa.post("/admin/signing", data={"csrf": csrf, "bundle_id": "com.me.* x"}).data
+assert fa.post("/admin/signing", data={"csrf": csrf, "bundle_id": "com.me.sideload"}).status_code == 302 and F.BUNDLE_ID == "com.me.sideload"
+assert "pbkdf2_sha256$" in (first / "setup.json").read_text()  # Manage's save keeps the saved passwords
+F.BUNDLE_ID = "com.me.*"; s = F.load_json(F.SETUP); s["bundle_id"] = "com.me.*"; F.save_json(F.SETUP, s)
 assert boot(first, BUNDLE_ID="com.env.*").BUNDLE_ID == "com.env.*"  # .env still wins over the saved setup
 # .env-configured start skips the splash; the default password is just a wrong one
 E = boot(tmp / "envd", PASSWORD="env-pass-long", SECRET_KEY="e" * 32)
