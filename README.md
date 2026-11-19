@@ -74,15 +74,10 @@ graph TD
 What a friend sees: a local run with demo data (made-up apps, iPhones and account; nothing from a real server) at the
 iPhone 18 Pro's screen size, framed in its bezel. [`docs/readme_shots.py`](docs/readme_shots.py) makes them again.
 
-<p align="center">
-  <img src="docs/img/apps.png" alt="Apps: this iPhone's tile, iFizBox, the apps and their install state" width="24%">
-  <img src="docs/img/changes.png" alt="Changes: new versions by date, the update waiting for this iPhone on top" width="24%">
-  <img src="docs/img/install.png" alt="An app install: GET opens the steps of an app that needs a file" width="24%">
-  <img src="docs/img/settings.png" alt="Settings: this iPhone's status, the slots used and when the apps stop working" width="24%">
-</p>
-
-**Apps** with install state · **Changes** with the update waiting on top · **an install** that brings a file ·
-**Settings** with this iPhone's status
+| | | | |
+|:-:|:-:|:-:|:-:|
+| <img src="docs/img/apps.png" alt="Apps: this iPhone's tile, iFizBox, the apps and their install state" width="200"> | <img src="docs/img/changes.png" alt="Changes: new versions by date, the update waiting for this iPhone on top" width="200"> | <img src="docs/img/install.png" alt="An app install: GET opens the steps of an app that needs a file" width="200"> | <img src="docs/img/settings.png" alt="Settings: this iPhone's status, the slots used and when the apps stop working" width="200"> |
+| **Apps** with install state | **Changes** with the update waiting on top | **An install** that brings a file | **Settings** with this iPhone's status |
 
 ## Quick start
 
