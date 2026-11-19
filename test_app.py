@@ -273,16 +273,70 @@ assert b"Admin password" in c.get("/admin").data and c.post("/admin/device", dat
 assert b"Wrong admin password" in c.post("/admin", data={"password": "nope"}).data
 patched, devs = [], [{"id": "D1", "attributes": {"name": "Sam <b>", "udid": "00008130-AAAA", "status": "ENABLED", "addedDate": "2026-11-03T10:00:00.000+0000", "model": "iPhone 15"}}]
 A.asc = lambda m, path, **kw: (patched.append((m, path, kw)), {"data": devs if m == "GET" and path == "/devices" and "filter[udid]" not in kw.get("params", {}) else []})[1]
+recorder = A.asc
 assert c.post("/admin", data={"password": "admin-pass-also-long"}).status_code == 302
-html = c.get("/admin").data.decode()
-assert "Sam &lt;b&gt;" in html and "this iPhone" in html and "added Nov 3, 2026" in html and "Last used today" in html
+# F10: Manage is a menu that asks Apple nothing, so it opens at once with Apple hanging or down; each row pushes its page
+hang = threading.Event()
+def slow_asc(*a, **k):
+    hang.wait(5); raise RuntimeError("App Store Connect GET /devices: timed out")
+down = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("App Store Connect GET /devices: 500"))
+A.asc = slow_asc
+t0 = time.monotonic(); html = c.get("/admin").data.decode()
+assert time.monotonic() - t0 < 1, "Manage waited on Apple"
+for p in ("iphones", "signing", "passwords", "files", "sources", "ifizbox"):
+    assert f"href=/admin/{p} data-push" in html, p
+assert html.count("<img class=rico src=\"data:image/svg+xml,%3Csvg") == 6 and "Files for Friends" in html and "App Sources" in html
+assert A.tile_svg("general").startswith('<svg xmlns="http://www.w3.org/2000/svg" width="29" height="29"') and 'fill="#8c9097"' in A.tile_svg("general")
+t0 = time.monotonic(); html = c.get("/admin/iphones").data.decode()  # nothing saved yet: the loading row, and the refresh's script
+assert time.monotonic() - t0 < 1 and "Loading from Apple…" in html and "/admin/devices.json" in html and "No iPhones" not in html
+hang.set()
+A.asc = down
+assert c.get("/admin").status_code == 200
+j = c.get("/admin/devices.json").get_json()
+assert not j["ok"] and "didn't answer" in j["html"] and "500" in j["error"]
+A.asc = recorder
+j = c.get("/admin/devices.json").get_json()
+assert j["ok"] and j["devices"][0]["name"] == "Sam <b>" and j["devices"][0]["added"] == "2026-11-03"
+assert "Sam &lt;b&gt;" in j["html"] and "this iPhone" in j["html"] and "1 of 100 slots used. Disabled iPhones still count" in j["html"]
+assert "Loading from Apple" not in j["html"] and "Delete" not in j["html"] and A.load_json(A.DEVICES)["data"] == devs  # saved for next time
+A.asc = down  # the saved list shows at once, Apple down or not, under a loading row that the refresh replaces
+html = c.get("/admin/iphones").data.decode()
+assert "Sam &lt;b&gt;" in html and "Loading from Apple…" in html and 'data-id="D1"' in html and " checked " in html
+assert "<span class=val>1</span>" in c.get("/admin").data.decode()  # the menu's count is the saved list's
+html = c.get("/admin/iphone/D1").data.decode()
+assert "iPhone 15" in html and "Nov 3, 2026" in html and "Last Used</div><span class=val>Today · this iPhone" in html and "00008130-AAAA" in html and "this iPhone" in html
+assert "Rename" in html and b"isn't in the saved list" in c.get("/admin/iphone/NOPE").data
 csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
+A.asc = recorder
 assert c.post("/admin/device", data={"id": "D1", "status": "DISABLED", "csrf": "x"}).status_code == 403
 assert c.post("/admin/device", data={"id": "../x", "status": "DISABLED", "csrf": csrf}).status_code == 400
-assert c.post("/admin/device", data={"id": "D1", "status": "DISABLED", "csrf": csrf}).status_code == 302
-assert ("PATCH", "/devices/D1") in [(m, p) for m, p, _ in patched]
-A.asc = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("App Store Connect GET /devices: 500"))
-assert b"didn't answer" in c.get("/admin").data
+resign_all_real, dev_resigns = A.resign_all, []
+A.resign_all = lambda: dev_resigns.append(1)
+j = c.post("/admin/device", data={"id": "D1", "status": "DISABLED", "csrf": csrf, "json": "1"}).get_json()
+assert j["ok"] and "<h3 class=hdr>Disabled</h3>" in j["html"] and 'data-id="D1"' in j["html"] and " checked " not in j["html"]
+assert ("PATCH", "/devices/D1") in [(m, p) for m, p, _ in patched] and A.load_json(A.DEVICES)["data"][0]["attributes"]["status"] == "DISABLED"
+deadline = time.monotonic() + 5
+while not dev_resigns and time.monotonic() < deadline: threading.Event().wait(.01)
+assert dev_resigns, "turning an iPhone off makes a new profile and signs again, in the background"
+assert c.post("/admin/device", data={"id": "D1", "status": "ENABLED", "csrf": csrf}).location == "/admin/iphones"  # without JS
+A.asc = down
+r = c.post("/admin/device", data={"id": "D1", "status": "DISABLED", "csrf": csrf, "json": "1"})
+assert r.status_code == 502 and "500" in r.get_json()["error"] and A.load_json(A.DEVICES)["data"][0]["attributes"]["status"] == "ENABLED"
+assert b"didn&#39;t rename" in c.post("/admin/iphone/D1", data={"csrf": csrf, "name": "x"}).data
+A.asc = recorder
+assert b"1 to 50 characters" in c.post("/admin/iphone/D1", data={"csrf": csrf, "name": "  "}).data
+assert c.post("/admin/iphone/D1", data={"csrf": "x", "name": "y"}).status_code == 403
+r = c.post("/admin/iphone/D1", data={"csrf": csrf, "name": "  Sam's   phone "})
+assert r.location == "/admin/iphone/D1?done=renamed"
+assert ("PATCH", "/devices/D1", {"data": {"type": "devices", "id": "D1", "attributes": {"name": "Sam's phone"}}}) in [(m, p, kw.get("json")) for m, p, kw in patched]
+html = c.get(r.location).data.decode()
+assert "Renamed." in html and "Sam&#39;s phone" in html and A.load_json(A.DEVICES)["data"][0]["attributes"]["name"] == "Sam's phone"
+A.resign_all = resign_all_real
+for p in ("/admin/iphones", "/admin/iphone/D1", "/admin/signing", "/admin/passwords", "/admin/files", "/admin/sources", "/admin/ifizbox"):
+    assert plain.get(p).location == "/" and A.app.test_client().get(p).status_code == 302
+assert plain.get("/admin/devices.json").status_code == 403
+# passwords set in .env aren't changed here
+assert b"set in .env" in c.get("/admin/passwords").data and b"Type a new password" in c.post("/admin/passwords", data={"csrf": csrf, "password": "x" * 9}).data
 A.asc = fake_asc
 locked = A.app.test_client(); locked.post("/login", data={"password": "hunter2-but-longer"})
 for _ in range(5): locked.post("/admin", data={"password": "nope"})
@@ -296,17 +350,22 @@ r = boss.get("/?password=admin-pass-also-long")
 assert r.status_code == 302 and r.location == "/"
 html = boss.get("/").data.decode()
 assert "href=/admin data-push" in html and "Register iPhone" in html
+assert "push(a.href,{},a,!!L)" in html and 'L.querySelectorAll(".page script")' in html  # Manage's rows push over Manage; their scripts run
 html = boss.get("/admin").data.decode()
-assert "Choose Signing Files" in html and "Files for friends" in html and "iFizBox&#39;s starting sources" in html and "Admin password" not in html
+assert "Files for Friends" in html and "Admin password" not in html
+assert "iFizBox&#39;s starting sources" in boss.get("/admin/ifizbox").data.decode() and "Sources" in boss.get("/admin/sources").data.decode()
+html = boss.get("/admin/signing").data.decode()
+assert "Choose Signing Files" in html and "Upload cert.p12 Instead" in html and "Make New Certificate" in html and "Choose API Key" in html
 csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
 synced = []
 A.sync_sources = lambda: synced.append(list(A.SOURCES))
 repo_mirror = (Path(A.__file__).parent / "mirror-sources.txt").read_text()
 r = boss.post("/admin/config", data={"csrf": csrf, "name": "mirror-sources.txt", "text": "https://src.test/a.json com.a.b\r\n"})
-assert r.location == "/admin?done=sources" and (tmp / "config" / "mirror-sources.txt").read_text() == "https://src.test/a.json com.a.b\n"
+assert r.location == "/admin/sources?done=sources" and (tmp / "config" / "mirror-sources.txt").read_text() == "https://src.test/a.json com.a.b\n"
 assert A.SOURCES == [("https://src.test/a.json", ["com.a.b"], False)] + [s for s in A.SOURCES if s[2]]
 assert (Path(A.__file__).parent / "mirror-sources.txt").read_text() == repo_mirror  # the repo file is untouched
-assert "src.test/a.json" in boss.get("/admin").data.decode() and "Use Default" in boss.get("/admin").data.decode()
+assert "src.test/a.json" in boss.get("/admin/sources").data.decode() and "Use Default" in boss.get("/admin/sources").data.decode()
+assert f"<span class=val>{1 + len(A.read_sources('third-party-sources.txt'))}</span>" in boss.get("/admin").data.decode().split("App Sources")[1][:40]  # the menu counts the sources
 boss.post("/admin/config", data={"csrf": csrf, "name": A.IFIZBOX_SOURCES, "text": "https://one.test/s.json\nhttps://two.test/s.json"})
 assert A.read_urls(A.IFIZBOX_SOURCES) == ["https://one.test/s.json", "https://two.test/s.json"]
 assert b"isn&#39;t a JSON object" in boss.post("/admin/config", data={"csrf": csrf, "name": A.IFIZBOX_SETTINGS, "text": "[1]"}).data
@@ -317,11 +376,11 @@ payload = json.loads(gzip.decompress(base64.urlsafe_b64decode(link_d + "=" * (-l
 assert payload["sources"] == ["https://one.test/s.json", "https://two.test/s.json"] and payload["settings"] == {"theme": "dark"}
 assert boss.post("/admin/config", data={"csrf": csrf, "name": "../secret.key", "text": "x"}).status_code == 400
 r = boss.post("/admin/config", data={"csrf": csrf, "name": "mirror-sources.txt", "text": "", "reset": "1"})
-assert r.location == "/admin?done=default" and not (tmp / "config" / "mirror-sources.txt").exists()
+assert r.location == "/admin/sources?done=default" and not (tmp / "config" / "mirror-sources.txt").exists()
 assert [u for u, _, t in A.SOURCES if not t] == [u for u, _ in A.read_sources("mirror-sources.txt")]
 r = boss.post("/admin/files", data={"csrf": csrf, "files": [(io.BytesIO(b"hello friends"), "notes v2.txt"), (io.BytesIO(b"x"), "../.hidden")]},
               content_type="multipart/form-data")
-assert r.location == "/admin?done=files" and (tmp / "files" / "notes v2.txt").read_bytes() == b"hello friends"
+assert r.location == "/admin/files?done=files" and "notes v2.txt" in boss.get(r.location).data.decode() and (tmp / "files" / "notes v2.txt").read_bytes() == b"hello friends"
 assert sorted(p.name for p in (tmp / "files").iterdir()) == ["hidden", "notes v2.txt"]  # no paths, no dotfiles
 friend = A.app.test_client(); friend.get("/?password=hunter2-but-longer")
 html = friend.get("/").data.decode()
@@ -336,7 +395,7 @@ for url, data in (("/admin/config", {"name": "mirror-sources.txt", "text": "http
     assert boss.post(url, data=dict(data, csrf="wrong")).status_code == 403
 assert (tmp / "files" / "notes v2.txt").exists() and not (tmp / "config" / "mirror-sources.txt").exists()
 assert boss.post("/admin/files/delete", data={"csrf": csrf, "name": "../secret.key"}).status_code == 404
-assert boss.post("/admin/files/delete", data={"csrf": csrf, "name": "hidden"}).location == "/admin?done=deleted" and not (tmp / "files" / "hidden").exists()
+assert boss.post("/admin/files/delete", data={"csrf": csrf, "name": "hidden"}).location == "/admin/files?done=deleted" and not (tmp / "files" / "hidden").exists()
 # new signing files, the same upload as the setup screen; a new certificate means a new profile and every app signed again
 from cryptography.hazmat.primitives.serialization import pkcs12 as P12x
 def dist_cert(cn="Apple Distribution: Sam Test (TEAM123456)", days=365, key=k):
@@ -364,8 +423,16 @@ for blob, pw, says in ((p12_of(dcrt), "wrong", b"didn&#39;t open"), (p12_of(dist
 A.P12.write_bytes(p12_of(dist_cert(days=10))); A.P12_PASSWORD = "pw"
 apple = {"/certificates": [], "/bundleIds": []}
 A.asc = lambda m, path, **kw: {"data": apple.get(path, [])}
-html = boss.get("/admin").data.decode()
+if A.cert_bg.get("t"): A.cert_bg["t"].join(5)  # an earlier page's background check, against the old certificate
+t0 = time.monotonic(); html = boss.get("/admin").data.decode()  # Manage's banner: the local checks at once, Apple's in the background
+assert time.monotonic() - t0 < 1 and "expires in 10 days" in html and '<a class="cw" href=/admin/signing data-push>' in html, html
+A.cert_bg["t"].join(5)  # Apple answered: the next page has its findings too
+html = boss.get("/admin").data.decode()  # the banner: the first error, and how many more Signing lists
+assert '<a class="cw bad" href=/admin/signing data-push><div><p>cert.p12 isn&#39;t in your developer account' in html and "And 2 more on Signing." in html, html
+html = boss.get("/admin/signing").data.decode()
 assert "expires in 10 days" in html and "isn&#39;t in your developer account" in html and "The App ID com.me.* isn&#39;t" in html, html
+assert html.index("isn&#39;t in your developer account") < html.index("expires in 10 days")  # errors first
+assert "Apple Distribution" in html and "Sam Test (TEAM123456)" in html and "com.me.*" in html
 _, mine, _ = P12x.load_key_and_certificates(A.P12.read_bytes(), b"pw")
 apple["/certificates"] = [{"id": "C1", "attributes": {"serialNumber": f"{mine.serial_number:X}"}}]
 apple["/bundleIds"] = [{"id": "B1", "attributes": {"identifier": "com.me.*"}}]
@@ -419,7 +486,7 @@ r = boss.post("/admin/signing", data={"csrf": csrf, "p12_password": "wrong", "fi
 assert b"didn&#39;t open" in r.data and A.P12.read_bytes() != p12_new and resigns == []
 r = boss.post("/admin/signing", data={"csrf": csrf, "p12_password": "new-p12-pw", "bundle_id": "com.me.*", "files": [(io.BytesIO(p12_new), "cert.p12")]},
               content_type="multipart/form-data")
-assert r.location == "/admin?done=signing" and A.P12.read_bytes() == p12_new and A.P12_PASSWORD == "new-p12-pw" and resigns == [1]
+assert r.location == "/admin/signing?done=signing" and A.P12.read_bytes() == p12_new and A.P12_PASSWORD == "new-p12-pw" and resigns == [1]
 assert b"Apps are being signed" in boss.get(r.location).data
 regens, A.regen_profile = [], lambda: regens.append(1)
 A.resign_all = resign_all_orig
@@ -511,10 +578,23 @@ for M in (F, boot(first)):  # and after a restart
     M.admin_fails.clear()
 assert w.get("/setup").location == "/"  # done: the splash is gone for the one who set it up too
 F.asc = fake_asc; fa = F.app.test_client(); assert fa.get("/?password=admin-pass-x").location == "/"  # the saved admin password signs in through the link too
-html = fa.get("/admin").data.decode(); csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
+html = fa.get("/admin/signing").data.decode(); csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
 assert "App ID (BUNDLE_ID)" in html and b"doesn&#39;t look right" in fa.post("/admin/signing", data={"csrf": csrf, "bundle_id": "com.me.* x"}).data
 assert fa.post("/admin/signing", data={"csrf": csrf, "bundle_id": "com.me.sideload"}).status_code == 302 and F.BUNDLE_ID == "com.me.sideload"
 assert "pbkdf2_sha256$" in (first / "setup.json").read_text()  # Manage's save keeps the saved passwords
+# Manage → Passwords changes the saved ones (hashed), both or one
+html = fa.get("/admin/passwords").data.decode()
+assert "Friends' Password" in html and "Admin Password" in html and "set in .env" not in html
+pw_post = lambda **f: fa.post("/admin/passwords", data=dict(f, csrf=csrf))
+assert b"Type a new password" in pw_post().data and b"at least 8" in pw_post(password="short").data
+assert b"different ones" in pw_post(password="admin-pass-x").data and b"different ones" in pw_post(password="same-pass-x", admin_password="same-pass-x").data
+assert b"different ones" in pw_post(admin_password="sidedrop").data and fa.post("/admin/passwords", data={"password": "friends-new-pass"}).status_code == 403
+assert pw_post(password="friends-new-pass").location == "/admin/passwords?done=passwords"
+assert F.password_ok("friends-new-pass") and not F.password_ok("friends-pass") and F.password_ok("admin-pass-x", admin=True)
+assert pw_post(password="friends-pass", admin_password="admin-new-pass").location == "/admin/passwords?done=passwords"
+assert F.password_ok("friends-pass") and F.password_ok("admin-new-pass", admin=True) and not F.password_ok("admin-pass-x", admin=True)
+assert "admin-new-pass" not in (first / "setup.json").read_text() and b"Saved." in fa.get("/admin/passwords?done=passwords").data
+assert pw_post(admin_password="admin-pass-x").status_code == 302  # back, for the restarts below
 F.BUNDLE_ID = "com.me.*"; s = F.load_json(F.SETUP); s["bundle_id"] = "com.me.*"; F.save_json(F.SETUP, s)
 assert boot(first, BUNDLE_ID="com.env.*").BUNDLE_ID == "com.env.*"  # .env still wins over the saved setup
 # .env-configured start skips the splash; the default password is just a wrong one
@@ -586,8 +666,9 @@ assert G.ensure_app_id("com.me.*") and len(apple.caps) == 3 and not G.ensure_app
 # Manage: Make New Certificate with the account full lists the certificates and revokes nothing; the pick is revoked, then a new one made
 apple.add_cert(dist_cert("Apple Distribution: Old Mac (TEAM123456)"), "Old Mac"); apple.add_cert(dist_cert(days=40), "Elsewhere")
 ga = G.app.test_client(); assert ga.get("/?password=admin-pass-x").location == "/"
-html = ga.get("/admin").data.decode(); csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
-assert "Make New Certificate" in html and "Choose API Key" in html and "Manual setup" in html
+html = ga.get("/admin/signing").data.decode(); csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
+assert "Make New Certificate" in html and "Choose API Key" in html and "Upload cert.p12 Instead" in html and "AuthKey_KEYID12345.p8" in html
+assert re.search(r"Role</div><span class=val>Admin<", html), "the key made a certificate at setup: Admin"
 r = ga.post("/admin/signing", data={"csrf": csrf, "make": "1"}).data.decode()
 assert "as many Apple Distribution certificates" in r and "stop opening" in r and r.count('name=revoke value=') == 3
 assert "Old Mac" in r and "Elsewhere" in r and r.count("sidedrop's certificate") == 1 and "expires" in r and "made " in r
@@ -595,14 +676,14 @@ assert [m for m, p, _ in apple.calls].count("DELETE") == 0 and (tmp / "apikey" /
 assert "isn&#39;t in your account" in ga.post("/admin/signing", data={"csrf": csrf, "make": "1", "revoke": "nope"}).data.decode()
 old = next(i for i, c in apple.certs.items() if c["attributes"]["name"] == "Old Mac")
 r = ga.post("/admin/signing", data={"csrf": csrf, "make": "1", "revoke": old})
-assert r.location == "/admin?done=signing" and [p for m, p, _ in apple.calls if m == "DELETE"] == [f"/certificates/{old}"]
+assert r.location == "/admin/signing?done=signing" and [p for m, p, _ in apple.calls if m == "DELETE"] == [f"/certificates/{old}"]
 assert old not in apple.certs and len(apple.certs) == 3 and (tmp / "apikey" / "cert.p12").read_bytes() != made_p12
 assert G.cert_problems((tmp / "apikey" / "cert.p12").read_bytes(), G.P12_PASSWORD) == [] and len(apple.bundles) == 2  # App ID kept
 # the manual path still takes an uploaded cert.p12 on Manage, and asks Apple for nothing
 before = len(apple.calls)
 r = ga.post("/admin/signing", data={"csrf": csrf, "p12_password": "p12-secret", "files": [(io.BytesIO(p12), "cert.p12")]}, content_type="multipart/form-data")
-assert r.location == "/admin?done=signing" and (tmp / "apikey" / "cert.p12").read_bytes() == p12 and G.P12_PASSWORD == "p12-secret"
+assert r.location == "/admin/signing?done=signing" and (tmp / "apikey" / "cert.p12").read_bytes() == p12 and G.P12_PASSWORD == "p12-secret"
 assert all(m == "GET" for m, _, _ in apple.calls[before:])
-assert ga.post("/admin/signing", data={"csrf": csrf, "bundle_id": "com.me.other"}).location == "/admin?done=signing"  # a new App ID is made
+assert ga.post("/admin/signing", data={"csrf": csrf, "bundle_id": "com.me.other"}).location == "/admin/signing?done=signing"  # a new App ID is made
 assert [b["attributes"]["identifier"] for b in apple.bundles.values()] == ["com.me.sideload", "com.me.*", "com.me.other"]
 print("ok")

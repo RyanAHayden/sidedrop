@@ -971,44 +971,45 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <svg width=0 height=0 style="position:absolute" aria-hidden=true><linearGradient id=taboff x1=0 y1=0 x2=0 y2=1><stop offset=0 stop-color="#9d9d9d"/><stop offset=1 stop-color="#595959"/></linearGradient><linearGradient id=tabglow x1=.37 y1=0 x2=.63 y2=1><stop offset=0 stop-color="#d9e5f9"/><stop offset=.473 stop-color="#77b5eb"/><stop offset=.488 stop-color="#0091e5"/><stop offset=1 stop-color="#0fbff7"/></linearGradient></svg>
 <script>
 /* tabs keep their place (scroll, and a page pushed on Settings) and add no history, as in an iOS app; tapping the open tab pops its page, then scrolls to the top */
-let cur=null,pos={},L=null,cache={},STAMP={{ stamp }};
+let cur=null,pos={},L=null,LS=[],cache={},STAMP={{ stamp }};  // LS: the pushed pages, bottom first; L is the top one
 function go(t){history.replaceState(history.state,"","#"+t);dispatchEvent(new HashChangeEvent("hashchange"))}  // replaceState fires no hashchange of its own
 function show(){let t=location.hash.slice(1);if(t=="more")t="settings";/* more: Home Screen links from before */if(!document.getElementById("t-"+t))t="apps";if(cur&&cur!=t)pos[cur]=scr.scrollTop;
  document.querySelectorAll("#scr>.page").forEach(p=>p.hidden=p.id!="t-"+t);
  document.querySelectorAll(".tabs a").forEach(a=>a.getAttribute("href")=="#"+t?a.setAttribute("aria-current","page"):a.removeAttribute("aria-current"));
- navT.textContent=document.getElementById("t-"+t).dataset.title;if(cur!=t)scr.scrollTo(0,pos[t]||0);cur=t;if(L)L.hidden=L.dataset.tab!=t;navR()}
+ navT.textContent=document.getElementById("t-"+t).dataset.title;if(cur!=t)scr.scrollTo(0,pos[t]||0);cur=t;LS.forEach(l=>l.hidden=l.dataset.tab!=t);navR()}
 document.querySelectorAll(".tabs a").forEach(a=>a.addEventListener("click",e=>{e.preventDefault();let t=a.getAttribute("href").slice(1);
  if(t!=cur)return go(t);if(L)history.back();else scr.scrollTo({top:0,behavior:"smooth"})}));
 /* a pushed page: fetched and drawn over the tab (its own nav with Back), one history entry, so Back, iOS's edge swipe and forward all work.
    The server still serves each page whole (a reload, or no JS, gets the old full-page screen); anything unexpected falls back to that. */
 function parsePage(r,h){if(!r.ok||new URL(r.url).pathname=="/")return null;let d=new DOMParser().parseFromString(h,"text/html"),s=d.querySelector("section.page"),n=d.querySelector(".nav h1");return s&&n?{title:n.textContent,body:s.innerHTML,url:r.url}:null}
 function fetchPage(url,init){return fetch(url,Object.assign({credentials:"same-origin"},init)).then(r=>r.text().then(h=>parsePage(r,h))).catch(()=>null)}
-function fill(p){L.url=p.url;L.querySelector("h1").textContent=p.title;L.querySelector(".page").innerHTML=p.body;L.querySelector(".lscroll").scrollTop=0}
+function fill(p){L.url=p.url;L.querySelector("h1").textContent=p.title;L.querySelector(".page").innerHTML=p.body;L.querySelector(".lscroll").scrollTop=0;
+ L.querySelectorAll(".page script").forEach(s=>{let n=document.createElement("script");n.textContent=s.textContent;s.replaceWith(n)})}  // innerHTML leaves scripts dead; a page's own script (Manage → iPhones' refresh) runs as on a full load
 const EASE="cubic-bezier(.36,.66,.04,1)";
-function slide(l,from,to,done){  /* p: 0 the tab alone, 1 the pushed page l in place */
- let o={duration:350,easing:EASE,fill:"forwards"},base=[document.querySelector(".nav"),document.getElementById("t-"+cur)],sh=document.createElement("div");sh.className="shade";l.before(sh);
+function slide(l,from,to,done,under){  /* p: 0 the tab (or the pushed page under) alone, 1 the pushed page l in place */
+ let o={duration:350,easing:EASE,fill:"forwards"},base=under?[under]:[document.querySelector(".nav"),document.getElementById("t-"+cur)],sh=document.createElement("div");sh.className="shade";l.before(sh);
  let an=[l.animate([{transform:`translate3d(${(1-from)*100}%,0,0)`},{transform:`translate3d(${(1-to)*100}%,0,0)`}],o),sh.animate([{opacity:.1*from},{opacity:.1*to}],o),
   ...base.map(b=>b.animate([{transform:`translate3d(${-30*from}%,0,0)`},{transform:`translate3d(${-30*to}%,0,0)`}],o))];
  an[0].finished.then(()=>{an.forEach(a=>a.cancel());sh.remove();done&&done()})}
-function open(p,from,anim){
- L=document.createElement("div");L.className="layer";L.dataset.tab=cur;
+function open(p,from,anim,id){let under=L;
+ L=document.createElement("div");L.className="layer";L.dataset.tab=cur;L.pid=id;LS.push(L);
  L.innerHTML='<header class=nav><button type=button class="bar back"></button><h1></h1><span></span></header><div class=lscroll><section class=page></section></div>';
- L.querySelector(".back").textContent=navT.textContent;L.querySelector(".back").onclick=()=>history.back();L.sel=from;fill(p);document.body.append(L);
- if(anim)slide(L,0,1,()=>from&&from.classList.remove("sel"));else if(from)from.classList.remove("sel")}
-function close(anim){let l=L;if(!l)return;L=null;if(!anim||l.hidden)return l.remove();
+ L.querySelector(".back").textContent=(under?under.querySelector("h1"):navT).textContent;L.querySelector(".back").onclick=()=>history.back();L.sel=from;fill(p);document.body.append(L);
+ if(anim)slide(L,0,1,()=>from&&from.classList.remove("sel"),under);else if(from)from.classList.remove("sel")}
+function close(anim){let l=LS.pop();L=LS[LS.length-1]||null;if(!l)return;if(!anim||l.hidden)return l.remove();
  /* the row that opened it fades from blue as the page slides off (a copy over it, so only opacity animates) */
  let el=l.sel,g=null;if(el&&el.offsetParent){g=el.cloneNode(true);g.removeAttribute("href");g.classList.add("sel","ghost");
   Object.assign(g.style,{left:el.offsetLeft+"px",top:el.offsetTop+"px",width:el.offsetWidth+"px",height:el.offsetHeight+"px"});el.parentElement.style.position="relative";el.parentElement.append(g);
   g.animate([{opacity:1},{opacity:0}],{duration:350,easing:EASE,fill:"forwards"})}
- slide(l,1,0,()=>{l.remove();g&&g.remove()})}
-function push(url,init,from){return fetchPage(url,init).then(p=>{if(!p)return false;let id=Date.now();cache[id]=p;
- if(L){fill(p);history.replaceState({push:id},"");return true}  // a form on the pushed page: its answer replaces it (the server redirects back to the same page)
- history.pushState({push:id},"");open(p,from,true);return true})}
+ slide(l,1,0,()=>{l.remove();g&&g.remove()},L)}
+function push(url,init,from,nest){return fetchPage(url,init).then(p=>{if(!p)return false;let id=Date.now();cache[id]=p;
+ if(L&&!nest){fill(p);L.pid=id;history.replaceState({push:id},"");return true}  // a form on the pushed page: its answer replaces it (the server redirects back to the same page)
+ history.pushState({push:id},"");open(p,from,true,id);return true})}  // nest: a row on a pushed page pushes another over it (Manage → iPhones → an iPhone)
 if(history.state&&history.state.push)history.replaceState(null,"");  // a reload forgets pushed pages
-addEventListener("popstate",e=>{let id=e.state&&e.state.push,anim=!e.hasUAVisualTransition;  // iOS's edge swipe animates it already
- if(id&&!L&&cache[id])open(cache[id],null,anim);else if(!id&&L)close(anim)});
-document.addEventListener("click",e=>{let a=e.target.closest("a[data-push]");if(!a||e.defaultPrevented)return;e.preventDefault();if(L)return;
- a.classList.add("sel");push(a.href,{},a).then(ok=>{if(!ok)location.href=a.href})});
+addEventListener("popstate",e=>{let id=e.state&&e.state.push,anim=!e.hasUAVisualTransition,i=id?LS.findIndex(l=>l.pid==id):-1;  // iOS's edge swipe animates it already
+ if(id&&i<0){if(cache[id])open(cache[id],null,anim,id)}else for(let n=LS.length-i-1;n>0;n--)close(anim&&n==1)});  // back pops down to that page (the last one slides); forward opens it again
+document.addEventListener("click",e=>{let a=e.target.closest("a[data-push]");if(!a||e.defaultPrevented)return;e.preventDefault();if(L&&!L.contains(a)||a.classList.contains("sel"))return;
+ a.classList.add("sel");push(a.href,{},a,!!L).then(ok=>{if(!ok)location.href=a.href})});
 document.querySelectorAll("form button").forEach(b=>b.dataset.t=b.textContent);
 /* a form with no action posts to its own page: on a pushed page that's the page's URL, not / */
 document.addEventListener("submit",e=>{let f=e.target;if(e.defaultPrevented||!(f.matches("[data-push]")||f.closest(".layer")))return;e.preventDefault();
@@ -1563,6 +1564,7 @@ def make_certificate(s, revoke=""):
     P12.write_bytes(pkcs12.serialize_key_and_certificates(b"sidedrop", key, cert, None, enc))
     P12.chmod(0o600)
     s["p12_password"] = pw
+    s["asc_role"] = "admin"  # the key made a certificate: Manage → Signing shows its role
     print(f"made Apple Distribution certificate {made['data'].get('id')} through the API", flush=True)
     return None, []
 
@@ -1688,22 +1690,30 @@ def admin():
         return page(ADMIN_CSS + """
 <form class=c method=post><input type=password name=password placeholder="Admin password" aria-label="Admin password" autofocus required
  oninput="this.form.querySelector('button').disabled=!this.value"><script>addEventListener("pageshow",()=>{let i=document.querySelector("input[name=password]");i.oninput()})</script>
-{% if err %}<p class=err>{{ err }}</p>{% endif %}<button disabled>Unlock</button></form>""", back=MORE, title="Manage iPhones", err=err)
-    return manage_page()
+{% if err %}<p class=err>{{ err }}</p>{% endif %}<button disabled>Unlock</button></form>""", back=MORE, title="Manage", err=err)
+    return manage_menu()
 
 
 @app.post("/admin/device")
 def admin_device():
+    """Turn an iPhone on or off at Apple. The new profile and the re-signing run in the background, so the switch answers as soon
+    as Apple does; json=1 (the iPhones page's switch) gets the list drawn again."""
     if not is_admin() or not hmac.compare_digest(request.form.get("csrf", ""), session["csrf"]):
         abort(403)
     did, status = request.form.get("id", ""), request.form.get("status")
     if not re.fullmatch(r"[A-Za-z0-9]{1,40}", did) or status not in ("ENABLED", "DISABLED"):
         abort(400)
-    with lock:
+    try:
         asc("PATCH", f"/devices/{did}", json={"data": {"type": "devices", "id": did, "attributes": {"status": status}}})
-        regen_profile()
-        resign(force=True)
-    return redirect("/admin")
+    except Exception as e:
+        if request.form.get("json"):
+            return {"ok": False, "error": str(e)[:200]}, 502
+        raise
+    update_cached_device(did, status=status)
+    threading.Thread(target=resign_all, daemon=True).start()  # a profile without (or with) it, then every app signed with that
+    if request.form.get("json"):
+        return {"ok": True, "html": device_list_html(device_rows(cached_devices()[0]))}
+    return redirect("/admin/iphones")
 
 
 # --- Manage, beyond the iPhones: signing files, sources and iFizBox settings (overrides in DATA/config), files for friends ---
@@ -1711,7 +1721,7 @@ def admin_device():
 EDITABLE = {"mirror-sources.txt": "Sources", "third-party-sources.txt": "Third-party sources",
             IFIZBOX_SOURCES: "iFizBox's starting sources", IFIZBOX_SETTINGS: "iFizBox settings"}
 DONE = {"signing": "Saved. Apps are being signed with the new files.", "sources": "Saved.", "default": "Back to the default.",
-        "files": "Uploaded.", "deleted": "Deleted."}
+        "files": "Uploaded.", "deleted": "Deleted.", "renamed": "Renamed.", "passwords": "Saved."}
 
 
 def shared_files():
@@ -1723,78 +1733,436 @@ def admin_check():
         abort(403)
 
 
-def manage_page(err=None, certs=None):
-    seen, me = load_json(SEEN), token_udid(request.cookies.get("device", ""))
-    now = time.time()
-    def ago(t):
-        days = int((now - t) // 86400)
-        return "today" if days < 1 else "yesterday" if days < 2 else f"{days} days ago" if days < 60 else time.strftime("%b %-d, %Y", time.localtime(t))
-    devices, asc_err = [], None
-    try:
-        listed = asc("GET", "/devices", params={"filter[platform]": "IOS", "limit": 200})["data"]
-    except Exception as e:
-        listed, asc_err = [], str(e)[:200]
-    for d in listed:
-        a = d["attributes"]
-        added = datetime.datetime.strptime(a["addedDate"][:10], "%Y-%m-%d") if a.get("addedDate") else None
-        devices.append(dict(id=d["id"], name=a.get("name", ""), model=a.get("model") or a.get("deviceClass", ""), udid=a.get("udid", ""),
-                            on=a.get("status") == "ENABLED", added=added, me=a.get("udid") == me,
-                            used=f"Last used {ago(seen[a['udid']])}" if a.get("udid") in seen else "Not seen yet"))
-    devices.sort(key=lambda d: (not d["on"], -(d["added"].timestamp() if d["added"] else 0)))
-    configs = [dict(name=n, label=lbl, text=conf(n).read_text() if conf(n).exists() else "", custom=(CONFIG / n).exists()) for n, lbl in EDITABLE.items()]
-    return page(ADMIN_CSS + """<style>.mg label{display:flex;flex-direction:column;gap:4px;font-weight:700} .mg small{font-weight:400} .mg textarea{min-height:96px}
-.done{color:#2f7d32;font-weight:700}</style>
-{% for lvl, t in cert %}<p class="c {{ 'err' if lvl == 'error' else 'warn' }}" style="font-weight:700{{ '' if lvl == 'error' else ';color:#a35a00' }}">{{ t }}</p>{% endfor %}
-{% if done %}<p class="c done">{{ done }}</p>{% endif %}{% if err %}<p class="c err">{{ err }}</p>{% endif %}
-<h3 class=hdr>iPhones</h3>
-{% if asc_err %}<p class="c err">Apple's developer service didn't answer. Try again in a few minutes.<small>{{ asc_err }}</small></p>{% else %}
-<div class=g>{% for d in devices %}<div class="row{{ '' if d.on else ' off' }}"><div><b>{{ d.name }}</b>{% if d.me %} · this iPhone{% endif %}
-<small>{{ d.model }}{% if d.added %} · added {{ d.added.strftime('%b %-d, %Y') }}{% endif %}</small><small>{{ d.used }}{% if not d.on %} · disabled{% endif %}</small></div>
-<form method=post action=/admin/device data-name="{{ d.name }}" onsubmit="{% if d.on %}if(!confirm('Disable '+this.dataset.name+'? Its apps stop opening.'))return false;{% endif %}this.querySelector('button').textContent='Saving…'">
-<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=id value="{{ d.id }}"><input type=hidden name=status value="{{ 'DISABLED' if d.on else 'ENABLED' }}">
-<button class="act{{ ' red' if d.on }}">{{ 'DISABLE' if d.on else 'ENABLE' }}</button></form></div>{% endfor %}</div>
-<p class=ftr>{{ devices|selectattr('on')|list|length }} enabled, {{ devices|rejectattr('on')|list|length }} disabled. Disabling takes an iPhone out of the profile, so its apps stop opening.
-Apple still counts it toward the 100 until your membership renews, when you can remove it at developer.apple.com.</p>{% endif %}
+# --- Manage (F10): a menu of grouped rows that asks Apple nothing, so it opens at once; each row pushes its own page. Apple's
+# answers are kept in the data folder (devices.json) or in memory (cert_cache) and refreshed in the background ---
 
-<h3 class=hdr id=files>Files for friends</h3>
-{% if files %}<div class=g>{% for f in files %}<div class=row><div>{{ f.name }}<small>{{ f.stat().st_size|filesizeformat }}</small></div>
+DEVICES, devices_lock = DATA / "devices.json", threading.Lock()  # {"at": time, "data": [...]}: Apple's last /devices answer
+ADMIN_BACK = ("Manage", "/admin")  # back button for Manage's pages
+SLOTS = 100  # iPhones Apple lets an account register per membership year
+cert_bg = {}  # {"t": the thread refreshing cert_status in the background}
+
+
+def _rowicon_gear():
+    import math
+    pts = []
+    for i in range(32):  # 8 teeth of 4 points, as rowicons.js gear()
+        a = i / 32 * math.pi * 2 - math.pi / 2 + math.pi / 32
+        r = 10.5 if i % 4 < 2 else 7.9
+        pts.append(f"{12 + r * math.cos(a):.2f} {12 + r * math.sin(a):.2f}")
+    return "M" + "L".join(pts) + "zM12 8.4a3.6 3.6 0 1 0 0 7.2a3.6 3.6 0 0 0 0-7.2z"
+
+
+# iOS 6 Settings' 29pt row icons as iFizBox draws them (its web/app/icons/rowicons.js, F205): a flat tile in one colour, 6pt corners,
+# a white glyph on a 24-unit square drawn 19pt across. Copied from that file's ROW_ICONS/GLYPHS and tileSvg into this one; nothing
+# is loaded from iFizBox. Parts: ("f", d) filled, ("e", d) filled even-odd, ("s", d, width) stroked.
+ROW_ICONS = {
+    "device": ("#8c9097", [("e", "M7.6 1.5h8.8a2.1 2.1 0 0 1 2.1 2.1v16.8a2.1 2.1 0 0 1-2.1 2.1H7.6a2.1 2.1 0 0 1-2.1-2.1V3.6a2.1 2.1 0 0 1 2.1-2.1z"
+                                   "M7.7 4.3v13.6h8.6V4.3zM12 18.9a1.2 1.2 0 1 0 0 2.4a1.2 1.2 0 0 0 0-2.4z")]),
+    "syncCert": ("#f08b1d", [("f", "M7.8 13.6 5.4 22l3.3-1.5 2.2 2.3 1.2-7.1zM16.2 13.6l2.4 8.4-3.3-1.5-2.2 2.3-1.2-7.1z"),
+                             ("e", "M12 1.6a7 7 0 1 1 0 14a7 7 0 0 1 0-14zM12 4.6a4 4 0 1 0 0 8a4 4 0 0 0 0-8z")]),
+    "signInKey": ("#e8ad1a", [("e", "M14.6 2.6a6.2 6.2 0 1 1-2.2 12l-1.6 1.6H8.4v2.4H6v2.4H2.6v-3.6l6.9-6.9a6.2 6.2 0 0 1 5.1-7.9z"
+                                    "M16 6.2a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 0 0 0-3.6z")]),
+    "fromFile": ("#22a6b5", [("e", "M5 2.5h9.2L19 7.3v14.2H5zM13.2 4.2v4.1h4.1z")]),
+    "sources": ("#3f80e0", [("f", "M3.3 5.5a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0-3.8 0zM9.3 4.2h11.6v2.6H9.3z"
+                                  "M3.3 12a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0-3.8 0zM9.3 10.7h11.6v2.6H9.3z"
+                                  "M3.3 18.5a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0-3.8 0zM9.3 17.2h11.6v2.6H9.3z")]),
+    "general": ("#8c9097", [("e", _rowicon_gear())]),
+}
+
+
+def tile_svg(name):
+    """rowicons.js tileSvg: the 29pt tile as SVG text."""
+    colour, parts = ROW_ICONS[name]
+    glyph = "".join(f'<path d="{p[1]}" fill="none" stroke="#fff" stroke-width="{p[2]}" stroke-linecap="round" stroke-linejoin="round"/>'
+                    if p[0] == "s" else f'<path d="{p[1]}" fill="#fff"' + (' fill-rule="evenodd"' if p[0] == "e" else "") + "/>" for p in parts)
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="29" height="29" viewBox="0 0 29 29"><rect width="29" height="29" rx="6" fill="{colour}"/>'
+            f'<g transform="translate(5 5) scale({19 / 24})">{glyph}</g></svg>')
+
+
+def row_icon(name):
+    from markupsafe import Markup
+    return Markup('<img class=rico src="data:image/svg+xml,%s" alt="" width=29 height=29>' % quote(tile_svg(name), safe=""))
+
+
+def fmt_day(t):
+    return f"{t:%b} {t.day}, {t.year}" if t else ""
+
+
+def ago(t):
+    days = int((time.time() - t) // 86400)
+    return "today" if days < 1 else "yesterday" if days < 2 else f"{days} days ago" if days < 60 else time.strftime("%b %-d, %Y", time.localtime(t))
+
+
+def cached_devices():
+    """Apple's last device list and when it came, or (None, None) before the first fetch."""
+    d = load_json(DEVICES)
+    return d.get("data"), d.get("at")
+
+
+def fetch_devices():
+    listed = asc("GET", "/devices", params={"filter[platform]": "IOS", "limit": 200})["data"]
+    with devices_lock:
+        save_json(DEVICES, {"at": time.time(), "data": listed})
+    return listed
+
+
+def update_cached_device(did, **attrs):
+    """After a PATCH Apple accepted: the saved list says so too, without asking Apple for the whole list again."""
+    with devices_lock:
+        d = load_json(DEVICES)
+        for x in d.get("data") or []:
+            if x.get("id") == did:
+                x.setdefault("attributes", {}).update(attrs)
+        if d:
+            save_json(DEVICES, d)
+
+
+def device_rows(listed):
+    seen, me = load_json(SEEN), token_udid(request.cookies.get("device", ""))
+    out = []
+    for d in listed or []:
+        a = d.get("attributes") or {}
+        added = datetime.datetime.strptime(a["addedDate"][:10], "%Y-%m-%d") if a.get("addedDate") else None
+        out.append(dict(id=d["id"], name=a.get("name", ""), model=a.get("model") or a.get("deviceClass", ""), udid=a.get("udid", ""),
+                        on=a.get("status") == "ENABLED", added=added, me=bool(me) and a.get("udid") == me,
+                        last=ago(seen[a["udid"]]).capitalize() if a.get("udid") in seen else "Not seen yet"))
+    out.sort(key=lambda d: (not d["on"], -(d["added"].timestamp() if d["added"] else 0)))
+    return out
+
+
+def cert_status_cached():
+    """cert_status without waiting on Apple: its last answer (any age) or, before the first, the local checks; a stale or missing
+    answer is refreshed in the background, for the next page."""
+    if not P12.exists():
+        return []
+    key = (P12.stat().st_mtime, P12_PASSWORD, BUNDLE_ID)
+    fresh = cert_cache.get("key") == key and time.time() - cert_cache.get("at", 0) <= 3600
+    if not fresh and not (cert_bg.get("t") and cert_bg["t"].is_alive()):
+        cert_bg["t"] = threading.Thread(target=cert_status, daemon=True)
+        cert_bg["t"].start()
+    out = cert_cache["problems"] if cert_cache.get("key") == key else cert_problems(P12.read_bytes(), P12_PASSWORD)
+    return sorted(out, key=lambda p: p[0] != "error")
+
+
+def cert_info():
+    """What Signing shows about cert.p12, read from the file: {kind, holder, team, expires} or None."""
+    try:
+        _, cert, _ = pkcs12.load_key_and_certificates(P12.read_bytes(), P12_PASSWORD.encode() or None)
+    except Exception:
+        return None
+    if cert is None:
+        return None
+    name = lambda oid: ", ".join(a.value for a in cert.subject.get_attributes_for_oid(oid))
+    cn, ou = name(x509.oid.NameOID.COMMON_NAME), name(x509.oid.NameOID.ORGANIZATIONAL_UNIT_NAME)
+    m = re.fullmatch(r"(.+?): (.*?)(?: \(([A-Z0-9]{10})\))?", cn)  # "Apple Distribution: Sam Test (TEAM123456)"
+    team = ou or (m and m.group(3)) or ""
+    holder = m.group(2) if m else ""
+    return dict(kind=m.group(1) if m else cn or "Unknown", team=f"{holder} ({team})" if holder and team else holder or team,
+                expires=cert.not_valid_after_utc)
+
+
+def admin_gate():
+    """Manage's pages: a redirect for anyone not unlocked as admin, else None."""
+    if not admin_enabled():
+        abort(404)
+    if not logged_in():
+        return redirect("/")
+    if not is_admin():
+        return redirect("/admin")
+    return None
+
+
+MANAGE_CSS = """<style>.mg label{display:flex;flex-direction:column;gap:4px;font-weight:700} .mg small{font-weight:400} .mg textarea{min-height:96px}
+.done{color:#2f7d32;font-weight:700} .gap{margin-top:20px} .g a.row{color:inherit}
+/* iFizBox's row icons (F205): the tile 7pt in from the row's edge, the label 11pt after it */
+.rico{flex:none;display:block;width:29px;height:29px} .row:has(>.rico){padding-left:7px;gap:11px}
+.mrow:after{content:"";flex:none;width:9px;height:13px;margin-right:.5px;background:var(--chev) center/contain no-repeat}
+.mrow.is-pressed:after,.mrow.sel:after{filter:brightness(0) invert(1)}
+.g a.row.sel,.dark .g a.row.sel{background:var(--select);color:#fff;text-shadow:none} .g a.row.sel *{color:#fff}
+/* a row's value on the right, UITableViewCellStyleValue1's blue-grey */
+.val{flex:none;max-width:60%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:#385487} .dark .val{color:var(--sub)}
+.kvr>div{flex:none!important} .kvr .val{flex:1;max-width:none;text-align:right;white-space:normal;overflow-wrap:anywhere}
+.cw{display:flex;gap:10px;align-items:center;margin:0 0 6px;padding:10px 12px;border-radius:9.5px;background:#fff8e1;border:1px solid #e6cf7a;color:#7a4b00;font-size:15px;font-weight:700}
+.cw.bad{background:#fdecec;border-color:#e3a1a1;color:#b00012} .cw>div{flex:1;min-width:0} .cw p{margin:0} .cw p+p{margin-top:6px}
+a.cw:after{content:"";flex:none;width:9px;height:13px;background:var(--chev) center/contain no-repeat} .cw small{display:block;margin-top:4px;font-size:13px;font-weight:400;color:inherit}
+.dark .cw{background:#3a3220;border-color:#6b5a26;color:#f0c870} .dark .cw.bad{background:#3a2020;border-color:#6b2626;color:#ff8a8a}
+.drow .dl{flex:1;min-width:0;display:block;color:inherit} .drow b{display:block;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.load{color:var(--sub);font-size:15px} .load .spin{width:20px;height:20px} [data-devs].busy{opacity:.6;pointer-events:none}
+.udid{font:13px/1.4 ui-monospace,Menlo,monospace;-webkit-user-select:all;user-select:all}
+.g details>summary{color:var(--acc)} .g details>form{display:flex;flex-direction:column;gap:10px}
+/* the switch (as the Settings tab's; repeated here for Manage's pages opened on their own) */
+.sw{position:relative;flex:none;width:77px;height:27px;--x:0px} .sw:has(input:checked){--x:50px}
+.sw input{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;opacity:0;cursor:pointer;z-index:2}
+.sw i{position:absolute;inset:0;border:1px solid #a7a7a7;border-radius:13.5px;overflow:hidden;background:linear-gradient(#e6e6e6,#fefefe);box-shadow:inset 0 2px 3px rgba(0,0,0,.3);font-size:16px;font-weight:700;line-height:25px;font-style:normal}
+.sw i:before{content:"ON";position:absolute;inset:0 auto 0 0;width:77px;padding-left:25.5px;box-sizing:border-box;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
+ background:linear-gradient(#1b68d8,#3f8cf3 55%,#5da1f6);transform:translateX(calc(var(--x) - 63.5px));transition:transform .2s}
+.sw i:after{content:"OFF";position:absolute;right:12px;color:#808080;transform:translateX(var(--x));transition:transform .2s}
+.sw .k{position:absolute;top:1px;left:1px;width:25px;height:25px;border-radius:50%;background:linear-gradient(#cfcfcf,#fcfcfc);border:1px solid rgba(0,0,0,.42);box-sizing:border-box;
+ box-shadow:0 1px 2px rgba(0,0,0,.3);transform:translateX(var(--x));transition:transform .2s;pointer-events:none}</style>
+{% if done %}<p class="c done">{{ done }}</p>{% endif %}{% if err and not certs %}<p class="c err">{{ err }}</p>{% endif %}"""
+
+
+def admin_page(body, title, back=ADMIN_BACK, **ctx):
+    ctx.setdefault("err", None)
+    ctx.setdefault("certs", [])
+    return page(MANAGE_CSS + body, back=back, title=title, csrf=session["csrf"], done=DONE.get(request.args.get("done", "")),
+                icon=row_icon, fmt_day=fmt_day, **ctx)
+
+
+MANAGE_MENU = """{% if cert %}<a class="cw{{ ' bad' if cert[0][0] == 'error' }}" href=/admin/signing data-push><div><p>{{ cert[0][1] }}</p>
+{% if cert|length > 1 %}<small>And {{ cert|length - 1 }} more on Signing.</small>{% endif %}</div></a>{% endif %}
+<div class=g>
+<a class="row mrow" href=/admin/iphones data-push>{{ icon('device') }}<div>iPhones</div><span class=val>{{ n_dev }}</span></a>
+<a class="row mrow" href=/admin/signing data-push>{{ icon('syncCert') }}<div>Signing</div><span class=val>{{ expiry }}</span></a>
+<a class="row mrow" href=/admin/passwords data-push>{{ icon('signInKey') }}<div>Passwords</div></a></div>
+<div class="g gap">
+<a class="row mrow" href=/admin/files data-push>{{ icon('fromFile') }}<div>Files for Friends</div><span class=val>{{ n_files }}</span></a>
+<a class="row mrow" href=/admin/sources data-push>{{ icon('sources') }}<div>App Sources</div><span class=val>{{ n_sources }}</span></a>
+<a class="row mrow" href=/admin/ifizbox data-push>{{ icon('general') }}<div>iFizBox</div></a></div>"""
+
+
+def manage_menu():
+    """Manage's first page. Nothing here waits on Apple: the iPhone count is the saved list's (or the profile's), the
+    certificate's date is read from cert.p12, and the banner is cert_status's last answer."""
+    listed, _ = cached_devices()
+    try:
+        n_dev = len(listed) if listed is not None else len(profile_udids())
+    except Exception:
+        n_dev = 0
+    info = cert_info()
+    expiry = ("Expired" if info["expires"] < datetime.datetime.now(datetime.timezone.utc) else fmt_day(info["expires"])) if info else "Not set up"
+    return page(MANAGE_CSS + MANAGE_MENU, back=MORE, title="Manage", cert=cert_status_cached(), n_dev=n_dev, expiry=expiry,
+                n_files=len(shared_files()), n_sources=len(read_sources("mirror-sources.txt")) + len(read_sources("third-party-sources.txt")),
+                icon=row_icon, done=DONE.get(request.args.get("done", "")), err=None, certs=[])
+
+
+SPINNER = """<svg class=spin viewBox="0 0 24 24" aria-hidden=true><g stroke="#7f7f7f" stroke-width="2.2" stroke-linecap="round">{% for i in range(12) %}
+<line x1=12 y1=2.5 x2=12 y2=7 transform="rotate({{ i * 30 }} 12 12)" opacity="{{ '%.2f' % (1 - i * 0.07) }}" />{% endfor %}</g></svg>"""
+DEVICE_LIST = """{% macro dev(d) %}<div class="row drow"><a class=dl href="/admin/iphone/{{ d.id }}" data-push><b>{{ d.name }}</b><small>{{ d.model }}{% if d.me %} · this iPhone{% endif %}</small></a>
+<label class=sw><input type=checkbox{{ ' checked' if d.on }} data-id="{{ d.id }}" data-name="{{ d.name }}" aria-label="{{ d.name }}" onchange="devSw(this)"><i></i><span class=k></span></label></div>{% endmacro %}
+{% set on = devices|selectattr('on')|list %}{% set off = devices|rejectattr('on')|list %}
+{% if loading or on %}<div class=g>{% if loading %}<div class="row load">""" + SPINNER + """<div>Loading from Apple…</div></div>{% endif %}{% for d in on %}{{ dev(d) }}{% endfor %}</div>{% endif %}
+{% if failed %}<p class="c err">Apple's developer service didn't answer, so this is the list saved {{ saved }}. Try again in a few minutes.<small>{{ failed }}</small></p>{% endif %}
+{% if off %}<h3 class=hdr>Disabled</h3><div class=g>{% for d in off %}{{ dev(d) }}{% endfor %}</div>{% endif %}
+{% if devices %}<p class=ftr>{{ devices|length }} of {{ slots }} slots used. Disabled iPhones still count until your membership renews.</p>
+{% elif not loading %}<p class=ftr>No iPhones registered yet.</p>{% endif %}"""
+
+
+def device_list_html(rows, loading=False, failed=None):
+    at = cached_devices()[1]
+    return render_template_string(DEVICE_LIST, devices=rows, loading=loading, failed=failed, slots=SLOTS,
+                                  saved=ago(at) if at else "never")
+
+
+IPHONES = """<div data-devs data-csrf="{{ csrf }}">{{ list|safe }}</div>
+<script>(function(){let box=document.currentScript.previousElementSibling;
+/* each switch turns an iPhone on or off at Apple (POST /admin/device); the answer is the list drawn again */
+window.devSw=function(i){let b=i.closest("[data-devs]"),on=i.checked;
+ if(!on&&!confirm("Turn off "+i.dataset.name+"? Its apps stop opening.")){i.checked=true;return}
+ let f=new FormData();f.append("csrf",b.dataset.csrf);f.append("id",i.dataset.id);f.append("status",on?"ENABLED":"DISABLED");f.append("json","1");b.classList.add("busy");
+ fetch("/admin/device",{method:"POST",body:f,credentials:"same-origin"}).then(r=>r.json()).then(d=>{if(d.html==null)throw d.error;b.innerHTML=d.html})
+  .catch(e=>{i.checked=!on;alert("Apple didn't answer. Try again in a few minutes."+(e?"\\n\\n"+e:""))}).finally(()=>b.classList.remove("busy"))};
+/* the saved list shows at once; Apple's answer replaces it when it comes */
+fetch("/admin/devices.json",{credentials:"same-origin",cache:"no-store"}).then(r=>r.json()).then(d=>{if(d.html==null)throw 0;box.innerHTML=d.html})
+ .catch(()=>{let l=box.querySelector(".load");if(l)l.lastElementChild.textContent="Couldn't reach sidedrop. Showing the saved list."})})()</script>"""
+
+
+@app.get("/admin/iphones")
+def admin_iphones():
+    if r := admin_gate():
+        return r
+    listed, _ = cached_devices()
+    return admin_page(IPHONES, "iPhones", list=device_list_html(device_rows(listed), loading=True))
+
+
+@app.get("/admin/devices.json")
+def admin_devices_json():
+    """Apple's device list, fetched now and saved for the next page: the iPhones page's background refresh."""
+    if not is_admin():
+        abort(403)
+    try:
+        listed, failed = fetch_devices(), None
+    except Exception as e:
+        listed, failed = cached_devices()[0] or [], str(e)[:200]
+    rows = device_rows(listed)
+    return {"ok": not failed, "error": failed, "html": device_list_html(rows, failed=failed),
+            "devices": [dict(d, added=d["added"].strftime("%Y-%m-%d") if d["added"] else None) for d in rows]}
+
+
+IPHONE = """<div class=g><div class="row kvr"><div>Model</div><span class=val>{{ d.model or 'Unknown' }}</span></div>
+<div class="row kvr"><div>Added</div><span class=val>{{ d.added.strftime('%b %-d, %Y') if d.added else 'Unknown' }}</span></div>
+<div class="row kvr"><div>Last Used</div><span class=val>{{ d.last }}{% if d.me %} · this iPhone{% endif %}</span></div>
+<div class="row kvr"><div>Status</div><span class=val>{{ 'On' if d.on else 'Off' }}</span></div>
+<div class=row><div>UDID<small class=udid>{{ d.udid }}</small></div></div></div>
+<h3 class=hdr>Rename</h3>
+<form class="c mg" method=post action="/admin/iphone/{{ d.id }}" onsubmit="this.querySelector('button').textContent='Renaming…'">
+<input type=hidden name=csrf value="{{ csrf }}"><input name=name value="{{ d.name }}" maxlength=50 aria-label=Name autocomplete=off required>
+<button>Rename</button><small>The name in your developer account, at developer.apple.com → Devices.</small></form>"""
+
+
+@app.route("/admin/iphone/<did>", methods=["GET", "POST"])
+def admin_iphone(did):
+    """One iPhone's details from the saved list, and Rename (PATCH /v1/devices name)."""
+    if r := admin_gate():
+        return r
+    if not re.fullmatch(r"[A-Za-z0-9]{1,40}", did):
+        abort(404)
+    err = None
+    if request.method == "POST":
+        admin_check()
+        name = " ".join(request.form.get("name", "").split())
+        if not 1 <= len(name) <= 50:
+            err = "A name is 1 to 50 characters."
+        else:
+            try:
+                asc("PATCH", f"/devices/{did}", json={"data": {"type": "devices", "id": did, "attributes": {"name": name}}})
+                update_cached_device(did, name=name)
+                return redirect(f"/admin/iphone/{did}?done=renamed")
+            except Exception as e:
+                err = f"Apple didn't rename it: {str(e)[:200]}"
+    d = next((x for x in device_rows(cached_devices()[0]) if x["id"] == did), None)
+    if not d:
+        return admin_page('<p class="c m">This iPhone isn\'t in the saved list. Go back to iPhones to load it from Apple.</p>', "iPhone",
+                          back=("iPhones", "/admin/iphones"), err=err)
+    return admin_page(IPHONE, d["name"] or "iPhone", back=("iPhones", "/admin/iphones"), d=d, err=err)
+
+
+SIGNING = """{% for lvl, t in cert %}<div class="cw{{ ' bad' if lvl == 'error' }}"><p>{{ t }}</p></div>{% endfor %}
+<h3 class=hdr>Certificate</h3>
+{% if info %}<div class=g><div class="row kvr"><div>Type</div><span class=val>{{ info.kind }}</span></div>
+<div class="row kvr"><div>Expires</div><span class=val>{{ fmt_day(info.expires) }}</span></div>
+{% if info.team %}<div class="row kvr"><div>Team</div><span class=val>{{ info.team }}</span></div>{% endif %}
+<div class="row kvr"><div>App ID</div><span class=val>{{ bundle or 'Not set' }}</span></div></div>
+{% else %}<p class="c m">No certificate yet. Make one with the API key, or upload a cert.p12 under Manual.</p>{% endif %}
+<form class="c mg" method=post action=/admin/signing onsubmit="{{ confirm }}this.querySelector('button').textContent='Making…'" style="margin-top:12px">
+<input type=hidden name=csrf value="{{ csrf }}">{% if certs %}<p class=err>{{ err }}</p>{% endif %}""" + CERT_PICKER + """
+<button name=make value=1>Make New Certificate</button>
+<small>Apple makes an Apple Distribution certificate with the API key (and the App ID, if missing). A new certificate makes a new profile and signs every app again; installed apps keep working until it does.</small></form>
+<h3 class=hdr>API Key</h3>
+<div class=g><div class="row kvr"><div>File</div><span class=val>{{ key_file or 'None' }}</span></div>
+<div class="row kvr"><div>Role</div><span class=val>{{ role }}</span></div></div>
+<form class="c mg" method=post action=/admin/signing enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Saving…'" style="margin-top:12px">
+<input type=hidden name=csrf value="{{ csrf }}">
+<input type=file name=files id=keyf multiple class=vh onchange="keyl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose API Key'">
+<label class="b grey" for=keyf id=keyl>Choose API Key</label>
+<small>AuthKey_….p8 from App Store Connect → Users and Access → Integrations, loose or in a .zip. Role Admin to make certificates.</small>
+{% if 'ASC_KEY_ID' not in env %}<label>Key ID<input name=asc_key_id value="{{ s.asc_key_id or '' }}" autocapitalize=characters autocomplete=off><small>Read from AuthKey_&lt;Key ID&gt;.p8 if empty.</small></label>{% endif %}
+{% if 'ASC_ISSUER_ID' not in env %}<label>Issuer ID<input name=asc_issuer_id value="{{ s.asc_issuer_id or '' }}" autocapitalize=none autocomplete=off></label>{% endif %}
+{% if 'BUNDLE_ID' not in env %}<label>App ID (BUNDLE_ID)<input name=bundle_id value="{{ s.bundle_id or '' }}" placeholder="com.you.sideload" autocapitalize=none autocomplete=off></label>{% endif %}
+<button>Save</button></form>
+<h3 class=hdr>Manual</h3>
+<div class=g><details{% if p12_open %} open{% endif %}><summary>Upload cert.p12 Instead</summary>
+<form class=mg method=post action=/admin/signing enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Uploading…'">
+<input type=hidden name=csrf value="{{ csrf }}">
+<small>A certificate you made yourself (<a href="{{ docs }}">the manual steps</a>): cert.p12 and a password.txt, loose or in a .zip.</small>
+<input type=file name=files id=sigf multiple class=vh onchange="sigl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Signing Files'">
+<label class="b grey" for=sigf id=sigl>Choose Signing Files</label>
+{% if 'P12_PASSWORD' not in env %}<label>P12 Password<input type=password name=p12_password autocomplete=off><small>Leave empty to try a password.txt, or none.</small></label>{% endif %}
+<button>Upload</button></form></details></div>"""
+
+
+def signing_page(err=None, certs=None, manual=False):
+    s, key_id = load_json(SETUP), os.environ.get("ASC_KEY_ID", "")
+    key_file = (f"AuthKey_{key_id}.p8" if key_id else "asc.p8") if ASC_KEY.exists() else ""
+    role = {"admin": "Admin", "limited": "Not Admin"}.get(s.get("asc_role", ""), "Not checked yet" if key_file else "")
+    return admin_page(SIGNING, "Signing", err=err, certs=certs or [], cert=cert_status_cached(), info=cert_info(), bundle=BUNDLE_ID,
+                      key_file=key_file, role=role, env=ENV_SET, s=s, confirm=REVOKE_CONFIRM, docs=MANUAL_DOCS, p12_open=manual)
+
+
+@app.get("/admin/signing")
+def admin_signing_page():
+    if r := admin_gate():
+        return r
+    return signing_page()
+
+
+PASSWORDS = """{% if both_env %}<p class="c m">Both passwords are set in .env on the server; change them there.</p>{% else %}
+<form class="c mg" method=post action=/admin/passwords onsubmit="this.querySelector('button').textContent='Saving…'">
+<input type=hidden name=csrf value="{{ csrf }}">
+{% if 'PASSWORD' not in env %}<label>Friends' Password<input type=password name=password autocomplete=new-password minlength=8>
+<small>What friends type to sign in. Friends already signed in stay signed in.</small></label>{% endif %}
+{% if 'ADMIN_PASSWORD' not in env %}<label>Admin Password<input type=password name=admin_password autocomplete=new-password minlength=8>
+<small>Unlocks Manage. Keep it different from the friends' one.</small></label>{% endif %}
+<button>Save</button><small>Leave one empty to keep it. At least 8 characters.</small></form>
+{% if env %}<p class=ftr>{{ "The friends'" if 'PASSWORD' in env else 'The admin' }} password is set in .env on the server.</p>{% endif %}{% endif %}"""
+
+
+@app.route("/admin/passwords", methods=["GET", "POST"])
+def admin_passwords():
+    """Change the friends' and the admin password, the ones the setup splash saved (hashed); .env's stay as they are."""
+    if r := admin_gate():
+        return r
+    env = {k for k in ("PASSWORD", "ADMIN_PASSWORD") if k in ENV_SET}
+    err = None
+    if request.method == "POST":
+        admin_check()
+        pw = "" if "PASSWORD" in env else request.form.get("password", "")
+        admin_pw = "" if "ADMIN_PASSWORD" in env else request.form.get("admin_password", "")
+        if not pw and not admin_pw:
+            err = "Type a new password."
+        elif any(0 < len(p) < 8 for p in (pw, admin_pw)):
+            err = "Passwords need at least 8 characters."
+        elif DEFAULT_PASSWORD in (pw, admin_pw) or (pw and pw == admin_pw) or (pw and password_ok(pw, admin=True)) or \
+                (admin_pw and password_ok(admin_pw)):
+            err = "Choose new passwords, and different ones for friends and for the admin."
+        else:
+            s = load_json(SETUP)
+            if pw:
+                s["password"] = hash_password(pw)
+            if admin_pw:
+                s["admin_password"] = hash_password(admin_pw)
+            save_json(SETUP, s)
+            return redirect("/admin/passwords?done=passwords")
+    return admin_page(PASSWORDS, "Passwords", err=err, env=env, both_env=len(env) == 2)
+
+
+FILES_PAGE = """{% if files %}<div class=g>{% for f in files %}<div class=row><div>{{ f.name }}<small>{{ f.stat().st_size|filesizeformat }}</small></div>
 <form method=post action=/admin/files/delete data-name="{{ f.name }}" onsubmit="if(!confirm('Delete '+this.dataset.name+'?'))return false">
-<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=name value="{{ f.name }}"><button class="act red">DELETE</button></form></div>{% endfor %}</div>{% endif %}
-<form class="c mg" method=post action=/admin/files enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Uploading…'">
+<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=name value="{{ f.name }}"><button class="act red">DELETE</button></form></div>{% endfor %}</div>
+{% else %}<p class=ftr>No files yet.</p>{% endif %}
+<form class="c mg" method=post action=/admin/files enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Uploading…'" style="margin-top:12px">
 <input type=hidden name=csrf value="{{ csrf }}">
 <input type=file name=files id=upf multiple class=vh onchange="upl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Files'">
 <label class="b grey" for=upf id=upl>Choose Files</label><button>Upload</button>
-<small>Listed under Files on everyone's Apps tab. A file with the same name is replaced.</small></form>
+<small>Listed under Files on everyone's Apps tab. A file with the same name is replaced.</small></form>"""
 
-<h3 class=hdr>Apps and iFizBox</h3>
-{% for c in configs %}<form class="c mg" method=post action=/admin/config>
+
+@app.get("/admin/files")
+def admin_files_page():
+    if r := admin_gate():
+        return r
+    return admin_page(ADMIN_CSS + FILES_PAGE, "Files for Friends", files=shared_files())
+
+
+CONFIG_FORMS = """{% for c in configs %}<form class="c mg" method=post action=/admin/config>
 <input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=name value="{{ c.name }}">
 <label>{{ c.label }}<textarea name=text autocapitalize=none autocorrect=off spellcheck=false>{{ c.text }}</textarea>
 <small>{{ c.name }}{% if c.custom %}, changed here; the repo's copy is the default{% elif c.text %}, the repo's default{% else %}, not set{% endif %}.</small></label>
 <button>Save</button>{% if c.custom %}<button class=grey name=reset value=1 onclick="return confirm('Go back to the default?')">Use Default</button>{% endif %}</form>{% endfor %}
-<p class=ftr>Sources: an AltStore source URL per line, then the bundle IDs to take from it (none = all). iFizBox's sources: a URL per line.
-iFizBox settings: a JSON object it imports on first launch. Lines that aren't URLs are ignored.</p>
+<p class=ftr>{{ note }}</p>"""
+CONFIG_PAGES = {  # Manage's pages of EDITABLE files: (path, title, files, footer)
+    "sources": ("/admin/sources", "App Sources", ("mirror-sources.txt", "third-party-sources.txt"),
+                "An AltStore source URL per line, then the bundle IDs to take from it (none = all). Third-party apps are listed apart. "
+                "Lines that aren't URLs are ignored."),
+    "ifizbox": ("/admin/ifizbox", "iFizBox", (IFIZBOX_SOURCES, IFIZBOX_SETTINGS),
+                "Signed into iFizBox for new installs. Its sources: a URL per line. Its settings: a JSON object it imports on first launch."),
+}
 
-<h3 class=hdr id=signing>Signing</h3>
-<form class="c mg" method=post action=/admin/signing enctype=multipart/form-data onsubmit="{{ confirm }}this.querySelector('button').textContent='Saving…'">
-<input type=hidden name=csrf value="{{ csrf }}">{% if certs %}<p class=err>{{ err }}</p>{% endif %}""" + CERT_PICKER + """
-<input type=file name=files id=keyf multiple class=vh onchange="keyl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose API Key'">
-<label class="b grey" for=keyf id=keyl>Choose API Key</label>
-<small>Replace the API key: AuthKey_….p8, role Admin to make certificates, loose or in a .zip.</small>
-{% if 'ASC_KEY_ID' not in env %}<label>Key ID<input name=asc_key_id value="{{ s.asc_key_id or '' }}" autocapitalize=characters autocomplete=off><small>Read from AuthKey_&lt;Key ID&gt;.p8 if empty.</small></label>{% endif %}
-{% if 'ASC_ISSUER_ID' not in env %}<label>Issuer ID<input name=asc_issuer_id value="{{ s.asc_issuer_id or '' }}" autocapitalize=none autocomplete=off></label>{% endif %}
-{% if 'BUNDLE_ID' not in env %}<label>App ID (BUNDLE_ID)<input name=bundle_id value="{{ s.bundle_id or '' }}" placeholder="com.you.sideload" autocapitalize=none autocomplete=off></label>{% endif %}
-<button>Save</button><button class=grey name=make value=1>Make New Certificate</button>
-<small>Make New Certificate has Apple make an Apple Distribution certificate with the API key (and the App ID, if missing). A new certificate makes a new profile and signs every app again; installed apps keep working until it does.</small>
-<details><summary style="color:var(--acc);font-weight:700">Manual setup</summary>
-<small>Upload a certificate you made yourself (<a href="{{ docs }}">the manual steps</a>): cert.p12 and a password.txt, loose or in a .zip.</small>
-<input type=file name=files id=sigf multiple class=vh onchange="sigl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Signing Files'">
-<label class="b grey" for=sigf id=sigl>Choose Signing Files</label>
-{% if 'P12_PASSWORD' not in env %}<label>P12 Password<input type=password name=p12_password autocomplete=off><small>Leave empty to try a password.txt, or none.</small></label>{% endif %}
-</details></form>""",
-                back=MORE, title="Manage", devices=devices, asc_err=asc_err, csrf=session["csrf"], files=shared_files(), configs=configs,
-                env=ENV_SET, s=load_json(SETUP), err=err, done=DONE.get(request.args.get("done", "")), cert=cert_status(),
-                certs=certs or [], confirm=REVOKE_CONFIRM, docs=MANUAL_DOCS)
+
+def config_page(which, err=None):
+    _, title, names, note = CONFIG_PAGES[which]
+    configs = [dict(name=n, label=EDITABLE[n], text=conf(n).read_text() if conf(n).exists() else "", custom=(CONFIG / n).exists()) for n in names]
+    return admin_page(CONFIG_FORMS, title, configs=configs, note=note, err=err)
+
+
+@app.get("/admin/sources")
+def admin_sources_page():
+    return admin_gate() or config_page("sources")
+
+
+@app.get("/admin/ifizbox")
+def admin_ifizbox_page():
+    return admin_gate() or config_page("ifizbox")
 
 
 def resign_all():
@@ -1814,13 +2182,17 @@ def admin_signing():
     f, s = request.form, load_json(SETUP)
     bid = f.get("bundle_id", "").strip()
     if bid and "BUNDLE_ID" not in ENV_SET and not re.fullmatch(r"[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(\.\*)?", bid):
-        return manage_page("That App ID doesn't look right: com.you.* or com.you.sideload.")
-    old_bid = BUNDLE_ID
-    err = take_signing_files(f, request.files.getlist("files"), s)
+        return signing_page("That App ID doesn't look right: com.you.* or com.you.sideload.")
+    old_bid, key_at = BUNDLE_ID, ASC_KEY.stat().st_mtime if ASC_KEY.exists() else None
+    uploads = request.files.getlist("files")
+    manual = bool(f.get("p12_password")) or any((u.filename or "").lower().endswith((".p12", ".pfx")) for u in uploads)
+    err = take_signing_files(f, uploads, s)
+    if (ASC_KEY.stat().st_mtime if ASC_KEY.exists() else None) != key_at:
+        s.pop("asc_role", None)  # a new key: its role isn't known until it makes (or is refused) a certificate
     save_json(SETUP, s)
     apply_setup()
     if err:
-        return manage_page(err)
+        return signing_page(err, manual=manual)
     if BUNDLE_ID != old_bid and not f.get("make"):  # a new App ID: made if missing; the banner says so if Apple refused
         try:
             ensure_app_id(BUNDLE_ID)
@@ -1828,15 +2200,17 @@ def admin_signing():
             print(f"couldn't make App ID {BUNDLE_ID}:", e, flush=True)
     if f.get("make") or f.get("revoke") or not P12.exists():  # Make New Certificate, or a pick from its revoke list
         if not ASC_KEY.exists() or not BUNDLE_ID or not (os.environ.get("ASC_KEY_ID") and os.environ.get("ASC_ISSUER_ID")):
-            return manage_page("Add the API key, its Key ID and Issuer ID, and the App ID first.")
+            return signing_page("Add the API key, its Key ID and Issuer ID, and the App ID first.")
         err, certs = api_signing(s, f.get("revoke", ""))
         if err:
-            return manage_page(err, certs)
+            if "Admin role" in err:  # Apple's 403: Signing's API Key group says so
+                save_json(SETUP, dict(load_json(SETUP), asc_role="limited"))
+            return signing_page(err, certs)
         save_json(SETUP, s)
         apply_setup()
         cert_cache.clear()
     threading.Thread(target=resign_all, daemon=True).start()
-    return redirect("/admin?done=signing")
+    return redirect("/admin/signing?done=signing")
 
 
 @app.post("/admin/config")
@@ -1855,7 +2229,8 @@ def admin_config():
                 if not isinstance(json.loads(text), dict):
                     raise ValueError
             except ValueError:
-                return manage_page(f"{EDITABLE[name]}: that isn't a JSON object, like {{\"key\": \"value\"}}.")
+                return config_page(next(k for k, v in CONFIG_PAGES.items() if name in v[2]),
+                                   f"{EDITABLE[name]}: that isn't a JSON object, like {{\"key\": \"value\"}}.")
         (CONFIG / name).write_text(text.strip() + "\n" if text.strip() else "")
     if name in (IFIZBOX_SOURCES, IFIZBOX_SETTINGS):  # they're inside iFizBox: sign it again (next page load) so new installs get them
         if (APPS / f"{IFIZBOX_ID}.ipa").exists():
@@ -1864,7 +2239,8 @@ def admin_config():
         SOURCES = [(u, ids, False) for u, ids in read_sources("mirror-sources.txt")] + \
                   [(u, ids, True) for u, ids in read_sources("third-party-sources.txt")]
         threading.Thread(target=sync_if_stale, args=(0,), daemon=True).start()  # fetch the new sources' apps now
-    return redirect("/admin?done=" + ("default" if request.form.get("reset") else "sources"))
+    page_url = next(v[0] for v in CONFIG_PAGES.values() if name in v[2])
+    return redirect(page_url + "?done=" + ("default" if request.form.get("reset") else "sources"))
 
 
 @app.post("/admin/files")
@@ -1877,7 +2253,7 @@ def admin_files():
             tmp = FILES / f".{name}.part"
             u.save(tmp)  # streamed to disk, so big files are fine
             tmp.replace(FILES / name)
-    return redirect("/admin?done=files")
+    return redirect("/admin/files?done=files")
 
 
 @app.post("/admin/files/delete")
@@ -1887,7 +2263,7 @@ def admin_file_delete():
     if not f:
         abort(404)
     f.unlink()
-    return redirect("/admin?done=deleted")
+    return redirect("/admin/files?done=deleted")
 
 
 @app.get("/f/<name>")
