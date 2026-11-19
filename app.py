@@ -2234,22 +2234,23 @@ function said(j){if(j.err)return j.err;let u=unit(j.size),p=j.size?Math.floor(10
 function row(j){let l=list();if(!l)return null;let r=l.querySelector('[data-up="'+j.id+'"]');
  if(!r){r=document.createElement("div");r.className="row uprow";r.dataset.up=j.id;r.innerHTML="<div><span></span><div class=ptrack><div class=pfill></div></div><small></small></div>";
   r.firstChild.firstChild.textContent=j.name;let b=document.createElement("button");b.type="button";b.className="act";b.textContent="RETRY";b.onclick=()=>send(j);
-  let x=document.createElement("button");x.type="button";x.className="act grey";x.textContent="CLEAR";x.onclick=()=>{Q.jobs=Q.jobs.filter(o=>o!=j);r.remove();empty()};r.append(b,x);
+  let x=document.createElement("button");x.type="button";x.className="act grey";x.textContent="CLEAR";x.onclick=()=>{Q.jobs=Q.jobs.filter(o=>o!=j);r.remove();empty()};
+  let c=document.createElement("button");c.type="button";c.className="act red";c.dataset.k="cancel";c.textContent="CANCEL";c.onclick=()=>{if(j.x)j.x.abort();x.onclick()};r.append(b,x,c);
   l.prepend(r);l.hidden=false;let n=document.getElementById("fnone");if(n)n.hidden=true}
  return r}
 function draw(j){let r=row(j);if(!r)return;r.classList.toggle("bad",!!j.err);r.querySelector(".ptrack").hidden=!!j.err;
- r.querySelector(".pfill").style.transform="scaleX("+(j.size?j.loaded/j.size:1)+")";r.querySelector("small").textContent=said(j);r.querySelectorAll(".act").forEach(b=>b.hidden=!j.err)}
+ r.querySelector(".pfill").style.transform="scaleX("+(j.size?j.loaded/j.size:1)+")";r.querySelector("small").textContent=said(j);r.querySelectorAll(".act").forEach(b=>b.hidden=b.dataset.k=="cancel"?!!j.err||j.size>0&&j.loaded>=j.size:!j.err)}  // CANCEL while it uploads, where DELETE goes; gone once the server is saving it
 function empty(){let l=list(),n=document.getElementById("fnone");if(l&&!l.children.length){l.hidden=true;if(n)n.hidden=false}}
 function finish(j,html){Q.jobs=Q.jobs.filter(o=>o!=j);let l=list();if(!l)return;let r=l.querySelector('[data-up="'+j.id+'"]');
  l.querySelectorAll(".row[data-file]").forEach(o=>{if(o.dataset.file==j.saved)o.remove()});  // a file with the same name was replaced
  let t=document.createElement("template");t.innerHTML=html;let n=t.content.firstElementChild;if(r)r.replaceWith(n);else l.prepend(n);l.hidden=false}
 function send(j){j.err=null;j.loaded=0;draw(j);let f=new FormData();f.append("csrf",j.csrf);f.append("json","1");f.append("files",j.file,j.name);
- let x=new XMLHttpRequest();x.open("POST","/admin/files");x.withCredentials=true;
+ let x=j.x=new XMLHttpRequest();x.open("POST","/admin/files");x.withCredentials=true;
  x.upload.onprogress=e=>{if(e.total)j.loaded=Math.round(j.size*e.loaded/e.total);draw(j)};  // e.total counts the form's own bytes too: scaled to the file's
  x.onload=()=>{let d=null;try{d=JSON.parse(x.responseText)}catch(e){}
   if(x.status==200&&d&&d.html){j.saved=d.name;return finish(j,d.html)}
   j.err=d&&d.error||(x.status==403?"Signed out of Manage. Open Manage again, then Retry.":x.status==413?"Too big for the server.":"Upload failed (HTTP "+x.status+").");draw(j)};
- x.onerror=()=>{j.err="Couldn't reach sidedrop. Check the connection, then Retry.";draw(j)};x.send(f)}
+ x.onerror=()=>{j.err="Couldn't reach sidedrop. Check the connection, then Retry.";draw(j)};x.onabort=()=>{Q.jobs=Q.jobs.filter(o=>o!=j)};x.send(f)}
 window.upAdd=function(i){let csrf=i.form.dataset.csrf;[...i.files].forEach(file=>{let j={id:++Q.n,file,name:file.name,size:file.size,loaded:0,csrf};Q.jobs.push(j);send(j)});i.value=""};
 Q.jobs.forEach(draw)})()</script>"""
 

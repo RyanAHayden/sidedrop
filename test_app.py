@@ -399,7 +399,7 @@ assert (tmp / "files" / "disc.iso").read_bytes() == b"big" * 1000 and not (tmp /
 r = boss.post("/admin/files", data={"csrf": csrf, "json": "1"}, content_type="multipart/form-data")
 assert r.status_code == 400 and r.json["error"], r.data
 html = boss.get("/admin/files").data.decode()
-assert "upAdd(this)" in html and "window.upQ" in html and "upload.onprogress" in html and "<noscript><button>Upload</button></noscript>" in html
+assert "upAdd(this)" in html and "window.upQ" in html and "upload.onprogress" in html and 'textContent="CANCEL"' in html and "j.x.abort()" in html and "<noscript><button>Upload</button></noscript>" in html
 (tmp / "files" / "disc.iso").unlink()
 friend = A.app.test_client(); friend.get("/?password=hunter2-but-longer")
 html = friend.get("/").data.decode()
