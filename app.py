@@ -23,9 +23,21 @@ IFIZBOX_ID = "com.ryha.ifizbox"  # signed with our certificate and sources insid
 INSTALLS = {}  # ponytail: in memory (one gunicorn worker); {token: {"at", "manifest", "started"}}: iOS's requests, for the install page
 PROFILE = DATA / "adhoc.mobileprovision"
 P12, ASC_KEY = DATA / "cert.p12", DATA / "asc.p8"
-PASSWORD = os.environ["PASSWORD"]
+
+
+def data_secret():
+    """SECRET_KEY left empty: one random key, made on first start and kept in the data folder so logins survive restarts."""
+    f = DATA / "secret.key"
+    if not f.exists():
+        DATA.mkdir(parents=True, exist_ok=True)
+        f.write_text(secrets.token_hex(32))
+        f.chmod(0o600)
+    return f.read_text().strip().encode()
+
+
+PASSWORD = os.environ.get("PASSWORD", "")  # unset: the first sign-in uses DEFAULT_PASSWORD and sets it on the setup splash (/setup)
 PUBLIC_URL = os.environ["PUBLIC_URL"].rstrip("/")  # must be https with a real cert, iOS refuses otherwise
-SECRET = os.environ["SECRET_KEY"].encode()
+SECRET = os.environ.get("SECRET_KEY", "").encode() or data_secret()  # unset: made once and kept in the data folder
 P12_PASSWORD = os.environ.get("P12_PASSWORD", "")
 BUNDLE_ID = os.environ.get("BUNDLE_ID", "")  # wildcard like com.you.*; apps outside it get re-IDed to fit
 PROFILE_NAME = os.environ.get("PROFILE_NAME", "sidedrop adhoc")
@@ -586,10 +598,14 @@ def page(body, back=None, title="sidedrop", **ctx):
 def home():
     if "password" in request.args:  # shareable ?password= link; redirect drops it from the address bar
         return login()
+    if needs_setup() and session.get("setup"):
+        return redirect("/setup")
     if not logged_in():
         return page("""<form class=c method=post action=/login>
 <label>Password<input type=password name=password autofocus required></label>
-{% if err %}<p class=err>Wrong password.</p>{% endif %}<button>Sign in</button></form>""", err=request.args.get("err"))
+{% if err %}<p class=err>Wrong password.</p>{% endif %}<button>Sign in</button></form>
+{% if first %}<p class=ftr>New server: sign in with the default password, <b>{{ first }}</b>, to set it up.</p>{% endif %}""",
+                    err=request.args.get("err"), first=needs_setup() and DEFAULT_PASSWORD)
     tok = request.args.get("enrolled") or request.cookies.get("device", "")  # ?enrolled= is the 301 after the profile install
     enrolled = token_udid(tok) in profile_udids()
     if enrolled:
@@ -1003,7 +1019,7 @@ try{if(localStorage.sdp)sdpDone()}catch(e){}
 function nudge(){go("apps");let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();darkSw.checked=document.documentElement.classList.contains("dark")});
-</script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=bool(ADMIN_PASSWORD), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
+</script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=admin_enabled(), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
         ifz_m=signed_url(f"/m/{ifz['name']}.plist") if ifz else "",
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
@@ -1020,7 +1036,11 @@ def touch_icon():
 
 @app.post("/login")
 def login():
-    if not hmac.compare_digest(request.values.get("password", "").encode(), PASSWORD.encode()):
+    pw = request.values.get("password", "")
+    if needs_setup() and hmac.compare_digest(pw.encode(), DEFAULT_PASSWORD.encode()):  # first run: only the setup splash
+        session.permanent, session["setup"] = True, True
+        return redirect("/setup")
+    if not password_ok(pw):
         time.sleep(2)  # ponytail: slows guessing per request, add per-IP lockout if this ever gets hammered
         return redirect("/?err=1")
     session.permanent, session["ok"] = True, True
@@ -1073,13 +1093,189 @@ def mark_installed():
     return "", 204
 
 
+# --- first-run setup: with no PASSWORD in .env, the first sign-in uses DEFAULT_PASSWORD and lands on a splash that sets the passwords
+# and takes the signing files. Saved in the data folder (passwords hashed); anything set in .env still wins. ---
+
+SETUP = DATA / "setup.json"  # {password, admin_password: pbkdf2 hashes; p12_password, asc_key_id, asc_issuer_id, bundle_id}
+DEFAULT_PASSWORD = "sidedrop"  # documented in the README; signs in only while setup is pending, and only to /setup
+SETUP_KEYS = ("PASSWORD", "ADMIN_PASSWORD", "P12_PASSWORD", "ASC_KEY_ID", "ASC_ISSUER_ID", "BUNDLE_ID")
+ENV_SET = {k for k in SETUP_KEYS if os.environ.get(k)}  # what .env set at start; the splash leaves these alone
+
+
+def hash_password(pw, salt=None, n=200_000):
+    salt = salt or secrets.token_hex(16)
+    return f"pbkdf2_sha256${n}${salt}${hashlib.pbkdf2_hmac('sha256', pw.encode(), bytes.fromhex(salt), n).hex()}"
+
+
+def password_ok(pw, admin=False):
+    """The .env password if set, else the hash the splash saved."""
+    env = ADMIN_PASSWORD if admin else PASSWORD
+    if env:
+        return hmac.compare_digest(pw.encode(), env.encode())
+    saved = load_json(SETUP).get("admin_password" if admin else "password", "")
+    try:
+        _, n, salt, _ = saved.split("$")
+        return bool(pw) and hmac.compare_digest(hash_password(pw, salt, int(n)), saved)
+    except ValueError:
+        return False
+
+
+def needs_setup():
+    return not PASSWORD and not load_json(SETUP).get("password")
+
+
+def admin_enabled():
+    return bool(ADMIN_PASSWORD or load_json(SETUP).get("admin_password"))
+
+
+def apply_setup():
+    """Fill in what .env left empty from the saved setup (.env wins)."""
+    global P12_PASSWORD, BUNDLE_ID
+    s = load_json(SETUP)
+    if "P12_PASSWORD" not in ENV_SET and "p12_password" in s:
+        P12_PASSWORD = s["p12_password"]
+    if "BUNDLE_ID" not in ENV_SET and s.get("bundle_id"):
+        BUNDLE_ID = s["bundle_id"]
+    for k in ("ASC_KEY_ID", "ASC_ISSUER_ID"):  # asc() reads these from the environment
+        if k not in ENV_SET and s.get(k.lower()):
+            os.environ[k] = s[k.lower()]
+
+
+apply_setup()
+
+
+def p12_opens(blob, pw):
+    try:
+        pkcs12.load_key_and_certificates(blob, pw.encode() or None)
+        return True
+    except Exception:
+        return False
+
+
+def password_guesses(text, name=""):
+    """Lines of a text file as p12 password guesses, as iFizBox's certfiles.js: "password: x" first, then a password file's
+    first line, then every short line without spaces."""
+    lines = [l.strip() for l in text.splitlines() if l.strip() and len(l.strip()) <= 128]
+    labelled = [m.group(1).strip() for l in lines if (m := re.match(r"(?i)^(?:p12\s*)?(?:password|pass|pwd|密码)\s*[:=：-]\s*(.+)$", l))]
+    first = lines[:1] if re.search(r"(?i)pass(word)?", name) else []
+    plain = [l for l in lines if not re.search(r"\s", l) or len(lines) == 1]
+    return list(dict.fromkeys(labelled + first + plain))
+
+
+def sort_signing_files(files):
+    """files: [(name, bytes)], loose or in .zips (as iFizBox takes them). Returns the .p12, the .p8 and guesses: p12 passwords
+    from .txt files, the key ID from AuthKey_<ID>.p8, the issuer ID from a UUID in a text file."""
+    import io
+    out = {"p12": None, "p8": None, "passwords": [], "key_id": "", "issuer_id": ""}
+    queue = list(files)
+    while queue:
+        name, data = queue.pop(0)
+        base = name.rsplit("/", 1)[-1]
+        ext = base.lower().rsplit(".", 1)[-1] if "." in base else ""
+        if name.startswith("__MACOSX/") or base.startswith("._") or not base:
+            continue
+        if ext == "zip":
+            try:
+                with zipfile.ZipFile(io.BytesIO(data)) as z:  # ponytail: certificate zips are tiny; 4 MB cap per entry
+                    queue += [(i.filename, z.read(i)) for i in z.infolist() if not i.is_dir() and i.file_size <= 4 << 20]
+            except zipfile.BadZipFile:
+                pass
+        elif ext in ("p12", "pfx") and not out["p12"]:
+            out["p12"] = data
+        elif ext == "p8" and not out["p8"]:
+            out["p8"] = data
+            if m := re.match(r"AuthKey_([A-Z0-9]{10})\.p8$", base):
+                out["key_id"] = m.group(1)
+        elif ext in ("txt", "md", ""):
+            text = data.decode("utf-8", "replace")
+            out["passwords"] += password_guesses(text, base)
+            if not out["issuer_id"] and (m := re.search(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", text, re.I)):
+                out["issuer_id"] = m.group(0).lower()
+    return out
+
+
+@app.route("/setup", methods=["GET", "POST"])
+def setup():
+    """The first-run splash: only after signing in with DEFAULT_PASSWORD, only until it's saved."""
+    if not needs_setup() or not session.get("setup"):
+        return redirect("/")
+    s, err = load_json(SETUP), None
+    if request.method == "POST":
+        f = request.form
+        got = sort_signing_files([(u.filename or "", u.read()) for u in request.files.getlist("files") if u.filename])
+        pw, admin_pw = f.get("password", ""), f.get("admin_password", "")
+        if got["p12"]:  # a working certificate is kept even if something else is wrong, so a retry needn't pick it again
+            typed = [f["p12_password"]] if f.get("p12_password") else []
+            p12_pw = next((g for g in typed + got["passwords"] + [""] if p12_opens(got["p12"], g)), None)  # "" too: many have none
+            if p12_pw is None:
+                err = "The certificate's password didn't open cert.p12. Type it in P12 Password."
+            else:
+                P12.write_bytes(got["p12"])
+                s["p12_password"] = p12_pw
+        elif f.get("p12_password") and P12.exists() and "P12_PASSWORD" not in ENV_SET:
+            if p12_opens(P12.read_bytes(), f["p12_password"]):
+                s["p12_password"] = f["p12_password"]
+            else:
+                err = "That password doesn't open cert.p12."
+        if got["p8"]:
+            try:
+                serialization.load_pem_private_key(got["p8"], None)
+                ASC_KEY.write_bytes(got["p8"])
+            except (ValueError, TypeError):
+                err = err or "The .p8 isn't an App Store Connect API key."
+        for k, guess in (("asc_key_id", got["key_id"]), ("asc_issuer_id", got["issuer_id"]), ("bundle_id", "")):
+            if k.upper() not in ENV_SET and (v := f.get(k, "").strip() or guess):
+                s[k] = v
+        save_json(SETUP, {k: v for k, v in s.items() if k not in ("password", "admin_password")})
+        apply_setup()
+        need = lambda k: k not in ENV_SET and not s.get(k.lower())
+        if err:
+            pass
+        elif len(pw) < 8 or (not ADMIN_PASSWORD and len(admin_pw) < 8):
+            err = "Passwords need at least 8 characters."
+        elif pw == DEFAULT_PASSWORD or admin_pw == DEFAULT_PASSWORD or pw == admin_pw:
+            err = "Choose new passwords, and different ones for friends and for the admin."
+        elif not P12.exists() or (need("P12_PASSWORD") and "p12_password" not in s):
+            err = "Add the certificate (cert.p12) and its password."
+        elif not ASC_KEY.exists():
+            err = "Add the App Store Connect API key (.p8)."
+        elif need("ASC_KEY_ID") or need("ASC_ISSUER_ID"):
+            err = "Fill in the API key's Key ID and Issuer ID."
+        elif need("BUNDLE_ID") or "BUNDLE_ID" not in ENV_SET and not re.fullmatch(r"[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(\.\*)?", BUNDLE_ID):
+            err = "Fill in the App ID (BUNDLE_ID), such as com.you.* or com.you.sideload."
+        else:
+            s["password"] = hash_password(pw)
+            if not ADMIN_PASSWORD:
+                s["admin_password"] = hash_password(admin_pw)
+            save_json(SETUP, s)
+            apply_setup()
+            session.pop("setup")
+            session.permanent, session["ok"] = True, True
+            return redirect("/")
+    return page("""<style>.setup label{display:flex;flex-direction:column;gap:4px;font-weight:700} .setup small{font-weight:400}</style>
+<p class=ftr>Welcome to sidedrop. Set the passwords and add your Apple signing files once; they're kept on the server.</p>
+<form class="c setup" method=post action=/setup enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Saving…'">
+{% if err %}<p class=err>{{ err }}</p>{% endif %}
+{% if 'PASSWORD' not in env %}<label>Password for friends<input type=password name=password autocomplete=new-password minlength=8 required></label>{% endif %}
+{% if 'ADMIN_PASSWORD' not in env %}<label>Admin password<input type=password name=admin_password autocomplete=new-password minlength=8 required>
+<small>Unlocks Settings → Manage. Keep it different from the friends' one.</small></label>{% endif %}
+<input type=file name=files id=sigf multiple class=vh onchange="sigl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Signing Files'">
+<label class="b grey" for=sigf id=sigl>Choose Signing Files</label>
+<small>cert.p12, AuthKey_….p8 and a password.txt, loose or in a .zip.{% if p12 %} cert.p12 is saved.{% endif %}{% if p8 %} The .p8 is saved.{% endif %}</small>
+{% if 'P12_PASSWORD' not in env %}<label>P12 Password<input type=password name=p12_password autocomplete=off><small>Leave empty to try a password.txt, or none.</small></label>{% endif %}
+{% if 'ASC_KEY_ID' not in env %}<label>Key ID<input name=asc_key_id value="{{ s.asc_key_id or '' }}" autocapitalize=characters autocomplete=off><small>Read from AuthKey_&lt;Key ID&gt;.p8 if empty.</small></label>{% endif %}
+{% if 'ASC_ISSUER_ID' not in env %}<label>Issuer ID<input name=asc_issuer_id value="{{ s.asc_issuer_id or '' }}" autocapitalize=none autocomplete=off></label>{% endif %}
+{% if 'BUNDLE_ID' not in env %}<label>App ID (BUNDLE_ID)<input name=bundle_id value="{{ s.bundle_id or '' }}" placeholder="com.you.*" autocapitalize=none autocomplete=off></label>{% endif %}
+<button>Save</button></form>""", title="Set Up sidedrop", err=err, s=s, env=ENV_SET, p12=P12.exists(), p8=ASC_KEY.exists())
+
+
 # --- admin: list the developer account's iPhones, disable the ones that shouldn't have apps any more ---
 
 admin_fails = []  # times of recent wrong admin passwords; a right one unlocks admin on that device for as long as its login lasts
 
 
 def is_admin():
-    return bool(ADMIN_PASSWORD) and logged_in() and bool(session.get("admin")) and bool(session.get("csrf"))
+    return admin_enabled() and logged_in() and bool(session.get("admin")) and bool(session.get("csrf"))
 
 
 MORE = ("Settings", "/#settings")  # back button for screens pushed from the Settings tab
@@ -1089,7 +1285,7 @@ ADMIN_CSS = """<style>.act{flex:none;width:auto;min-width:76px;padding:5px 10px;
 
 @app.route("/admin", methods=["GET", "POST"])
 def admin():
-    if not ADMIN_PASSWORD:
+    if not admin_enabled():
         abort(404)
     if not logged_in():
         return redirect("/")
@@ -1098,7 +1294,7 @@ def admin():
         admin_fails[:] = [t for t in admin_fails if time.time() - t < 900]
         if len(admin_fails) >= 5:  # ponytail: global lockout, not per IP; friends could lock the admin out for 15 min at worst
             err = "Too many wrong passwords. Try again in 15 minutes."
-        elif hmac.compare_digest(request.form.get("password", "").encode(), ADMIN_PASSWORD.encode()):
+        elif password_ok(request.form.get("password", ""), admin=True):
             session["admin"], session["csrf"] = time.time(), secrets.token_urlsafe(32)
             return redirect("/admin")
         else:

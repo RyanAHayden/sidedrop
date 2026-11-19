@@ -37,9 +37,18 @@ cert.p12        Apple Distribution certificate + private key (export from Keycha
 apps/*.ipa      unsigned or dev-signed IPAs to share (or list AltStore sources in mirror-sources.txt)
 ```
 
-`signed/` and `adhoc.mobileprovision` are generated.
+`signed/` and `adhoc.mobileprovision` are generated, and so are `setup.json` (the setup screen below) and `secret.key` (when `SECRET_KEY` is empty).
 
-Copy `.env.example` to `.env` and fill it in. `BUNDLE_ID` must be a wildcard App ID that already exists in the developer portal, such as `com.you.*`. One profile then covers every app: apps whose bundle ID falls outside it are re-IDed at signing (`com.other.game` becomes `com.you.game`). Apps that need entitlements like push or App Groups won't work this way.
+Copy `.env.example` to `.env` and set `PUBLIC_URL`. The rest can stay empty and be set up on your iPhone:
+
+1. Start the server and open the site. While no password is set, sign in with the default password, **`sidedrop`**. It opens only the setup screen.
+2. Set the password for friends and the admin password (they're saved hashed in `setup.json` in the data folder).
+3. Tap **Choose Signing Files** and pick `cert.p12`, `AuthKey_<Key ID>.p8` and a `password.txt` with the certificate's password, loose or in one `.zip`. The files are sorted by type, the `.p12`'s password is tried from the text file (or type it), and the Key ID comes from the `.p8`'s name and the Issuer ID from a UUID in the text file; check or fill in both, and the App ID (`BUNDLE_ID`).
+4. **Save**. The files go into the data folder, so everything survives restarts, and the default password stops working.
+
+Anything set in `.env` wins over the setup screen, and with `PASSWORD` set there is no setup screen, so a server can be configured without an iPhone: put `asc.p8` and `cert.p12` in the data folder and fill in `.env`. An empty `SECRET_KEY` is made once and kept in `secret.key` in the data folder.
+
+`BUNDLE_ID` must be a wildcard App ID that already exists in the developer portal, such as `com.you.*`. One profile then covers every app: apps whose bundle ID falls outside it are re-IDed at signing (`com.other.game` becomes `com.you.game`). Apps that need entitlements like push or App Groups won't work this way.
 
 Or set `BUNDLE_ID` to an explicit App ID with Push Notifications (plus App Groups and Associated Domains) turned on, such as `com.you.sideload`. Every app is then signed under that one App ID but keeps its own bundle ID in Info.plist, which iOS doesn't check against the profile and registers for push with, so apps like YouTube get their developer's notifications. Apps signed under a wildcard before install again as separate apps; delete the old copies.
 
@@ -49,7 +58,7 @@ docker compose up -d --build
 
 **HTTPS with a real certificate is required.** iOS won't install profiles or apps over plain HTTP or with a self-signed cert. Put the site behind a reverse proxy, Cloudflare Tunnel or `tailscale funnel 8080`, and set `PUBLIC_URL` to match.
 
-With `ADMIN_PASSWORD` set, **Settings → Manage** (on a registered iPhone) lists the account's iPhones with when each was added and last used, and can disable or re-enable them. Apple has no API to delete a device: disabling takes it out of the profile so its apps stop opening, but its slot only frees up at renewal.
+With an admin password (from the setup screen or `ADMIN_PASSWORD`), **Settings → Manage** (on a registered iPhone) lists the account's iPhones with when each was added and last used, and can disable or re-enable them. Apple has no API to delete a device: disabling takes it out of the profile so its apps stop opening, but its slot only frees up at renewal.
 
 ## Limits
 

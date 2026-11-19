@@ -304,4 +304,65 @@ def gone(*a, **k): raise WebPushException("gone", response=type("R", (), {"statu
 A.webpush = gone
 release("1.5", "10"); A.notify_upgrades()
 assert A.load_json(A.PUSH) == {}
+
+# first run: no PASSWORD/ADMIN_PASSWORD in .env -> default password -> setup splash -> new passwords work, default refused
+import importlib.util, io, sys
+from cryptography.hazmat.primitives.serialization import pkcs12 as P12
+def boot(data, **env):
+    """A fresh start of the app on a data folder, with only these .env values."""
+    for k in A.SETUP_KEYS + ("SECRET_KEY",):
+        os.environ.pop(k, None)
+    os.environ.update(DATA=str(data), PUBLIC_URL="https://x.test", **env)
+    name = f"app_boot{len(sys.modules)}"
+    spec = importlib.util.spec_from_file_location(name, Path(A.__file__))
+    m = sys.modules[name] = importlib.util.module_from_spec(spec)
+    threading.Thread.start = lambda self: None
+    spec.loader.exec_module(m)
+    threading.Thread.start = start
+    return m
+p12 = P12.serialize_key_and_certificates(b"sd", k, crt, None, S.BestAvailableEncryption(b"p12-secret"))
+p8 = ec.generate_private_key(ec.SECP256R1()).private_bytes(S.Encoding.PEM, S.PrivateFormat.PKCS8, S.NoEncryption())
+bundle = io.BytesIO()
+with zipfile.ZipFile(bundle, "w") as z:
+    z.writestr("certs/cert.p12", p12); z.writestr("certs/AuthKey_ABCDE12345.p8", p8)
+    z.writestr("certs/password.txt", "Password: p12-secret\nissuer 69a6de7e-1111-47e3-e053-5b8c7c11a4d1\n"); z.writestr("__MACOSX/._cert.p12", b"x")
+first = tmp / "first"
+F = boot(first)
+assert F.needs_setup() and (first / "secret.key").exists()
+w = F.app.test_client()
+assert b"default password, <b>sidedrop</b>" in w.get("/").data
+assert "err=1" in w.post("/login", data={"password": "nope"}).location
+assert w.post("/login", data={"password": "sidedrop"}).location == "/setup"
+assert w.get("/").location == "/setup" and w.post("/check").status_code == 403  # the default password only opens the splash
+assert b"Choose Signing Files" in w.get("/setup").data and F.app.test_client().get("/setup").location == "/"
+up = lambda **f: w.post("/setup", data=dict(f, files=[(io.BytesIO(bundle.getvalue()), "signing.zip")]), content_type="multipart/form-data")
+assert b"at least 8" in up(password="short", admin_password="admin-pass-x").data
+assert (first / "cert.p12").read_bytes() == p12 and F.P12_PASSWORD == "p12-secret" and os.environ["ASC_KEY_ID"] == "ABCDE12345"  # kept for a retry
+assert os.environ["ASC_ISSUER_ID"] == "69a6de7e-1111-47e3-e053-5b8c7c11a4d1" and (first / "asc.p8").read_bytes() == p8
+assert b"App ID" in w.post("/setup", data={"password": "friends-pass", "admin_password": "admin-pass-x"}).data  # no BUNDLE_ID yet
+assert b"different ones" in w.post("/setup", data={"password": "same-pass-x", "admin_password": "same-pass-x", "bundle_id": "com.me.*"}).data
+bad = io.BytesIO(); zipfile.ZipFile(bad, "w").writestr("cert.p12", p12)
+assert b"didn&#39;t open" in w.post("/setup", data={"password": "friends-pass", "admin_password": "admin-pass-x", "bundle_id": "com.me.*",
+                                                    "files": [(io.BytesIO(bad.getvalue()), "c.zip")]}, content_type="multipart/form-data").data
+r = w.post("/setup", data={"password": "friends-pass", "admin_password": "admin-pass-x", "bundle_id": "com.me.*"})
+assert r.location == "/" and b"Register iPhone" in w.get("/").data and not F.needs_setup() and F.BUNDLE_ID == "com.me.*"
+saved = (first / "setup.json").read_text()
+assert "friends-pass" not in saved and "admin-pass-x" not in saved and "pbkdf2_sha256$" in saved
+for M in (F, boot(first)):  # and after a restart
+    assert M.P12_PASSWORD == "p12-secret" and M.BUNDLE_ID == "com.me.*" and os.environ["ASC_KEY_ID"] == "ABCDE12345"
+    v = M.app.test_client()
+    assert b"default password" not in v.get("/").data and "err=1" in v.post("/login", data={"password": "sidedrop"}).location
+    assert v.get("/setup").location == "/" and b"Register iPhone" not in v.get("/").data
+    assert v.post("/login", data={"password": "friends-pass"}).location == "/" and b"Register iPhone" in v.get("/").data
+    assert b"Wrong admin password" in v.post("/admin", data={"password": "friends-pass"}).data
+    assert v.post("/admin", data={"password": "admin-pass-x"}).location == "/admin"  # admin unlocked
+    M.admin_fails.clear()
+assert w.get("/setup").location == "/"  # done: the splash is gone for the one who set it up too
+assert boot(first, BUNDLE_ID="com.env.*").BUNDLE_ID == "com.env.*"  # .env still wins over the saved setup
+# .env-configured start skips the splash; the default password is just a wrong one
+E = boot(tmp / "envd", PASSWORD="env-pass-long", SECRET_KEY="e" * 32)
+v = E.app.test_client()
+assert not E.needs_setup() and b"default password" not in v.get("/").data and "err=1" in v.post("/login", data={"password": "sidedrop"}).location
+assert v.post("/login", data={"password": "env-pass-long"}).location == "/" and b"Register iPhone" in v.get("/").data and E.app.test_client().get("/setup").location == "/"
+assert not E.admin_enabled() and v.get("/admin").status_code == 404
 print("ok")
