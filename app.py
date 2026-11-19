@@ -2203,15 +2203,50 @@ def admin_passwords():
                       ask=PW_ASK, go=PW_GO)
 
 
-FILES_PAGE = """{% if files %}<div class=g>{% for f in files %}<div class=row><div>{{ f.name }}<small>{{ f.stat().st_size|filesizeformat }}</small></div>
+FILE_ROW = """<div class=row data-file="{{ f.name }}"><div>{{ f.name }}<small>{{ f.stat().st_size|filesizeformat }}</small></div>
 <form method=post action=/admin/files/delete data-name="{{ f.name }}" onsubmit="if(!confirm('Delete '+this.dataset.name+'?'))return false">
-<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=name value="{{ f.name }}"><button class="act red">DELETE</button></form></div>{% endfor %}</div>
-{% else %}<p class=ftr>No files yet.</p>{% endif %}
-<form class="c mg" method=post action=/admin/files enctype=multipart/form-data onsubmit="this.querySelector('button').textContent='Uploading…'" style="margin-top:12px">
+<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=name value="{{ f.name }}"><button class="act red">DELETE</button></form></div>"""
+# F13: picking files uploads them at once, one XMLHttpRequest each (upload.onprogress gives the bytes), as iFizBox's asynchronous
+# installs: each file is a row with Cydia's progress bar (iFizBox progress.css's .progress-track/.progress-fill, drawn in the row's
+# grey instead of the console's white) until the server's own row (json=1's answer) replaces it, or a red row with Retry. The queue
+# lives on window (window.upQ), so leaving the page doesn't stop it and the page, opened again, shows its rows.
+FILES_PAGE = """<style>.ptrack{height:12px;padding:3px;margin:5px 0 3px;border:1px solid var(--sub);border-radius:6px;box-sizing:border-box}
+.pfill{height:4px;width:100%;border-radius:2px;background:var(--sub);transform-origin:left;transform:scaleX(0);transition:transform .2s linear}
+.uprow.bad small{color:#d70015} .uprow .act{margin-left:4px} #flist[hidden],.uprow [hidden]{display:none}</style>
+<div class=g id=flist{% if not files %} hidden{% endif %}>{% for f in files %}""" + FILE_ROW + """{% endfor %}</div>
+<p class=ftr id=fnone{% if files %} hidden{% endif %}>No files yet.</p>
+<form class="c mg" method=post action=/admin/files enctype=multipart/form-data data-csrf="{{ csrf }}" style="margin-top:12px">
 <input type=hidden name=csrf value="{{ csrf }}">
-<input type=file name=files id=upf multiple class=vh onchange="upl.textContent=this.files.length?[...this.files].map(f=>f.name).join(', '):'Choose Files'">
-<label class="b grey" for=upf id=upl>Choose Files</label><button>Upload</button>
-<small>Listed under Files on everyone's Apps tab. A file with the same name is replaced.</small></form>"""
+<input type=file name=files id=upf multiple class=vh onchange="upAdd(this)">
+<label class="b grey" for=upf id=upl>Choose Files</label><noscript><button>Upload</button></noscript>
+<small>Listed under Files on everyone's Apps tab. A file with the same name is replaced. Uploads go on while you use the rest of sidedrop.</small></form>
+<script>(function(){let Q=window.upQ=window.upQ||{jobs:[],n:0};
+const list=()=>{let l=document.getElementById("flist");return l&&l.isConnected?l:null};
+function unit(t){return t>=1e9?[1e9,"GB"]:t>=1e6?[1e6,"MB"]:[1e3,"KB"]}
+function amt(b,u,t){let v=b/u[0];return t/u[0]>=10?Math.round(v):v.toFixed(1)}
+function said(j){if(j.err)return j.err;let u=unit(j.size),p=j.size?Math.floor(100*j.loaded/j.size):100;
+ return j.loaded>=j.size&&j.size?"Saving "+amt(j.size,u,j.size)+" "+u[1]+"…":"Uploading "+p+"% · "+amt(j.loaded,u,j.size)+" of "+amt(j.size,u,j.size)+" "+u[1]}
+function row(j){let l=list();if(!l)return null;let r=l.querySelector('[data-up="'+j.id+'"]');
+ if(!r){r=document.createElement("div");r.className="row uprow";r.dataset.up=j.id;r.innerHTML="<div><span></span><div class=ptrack><div class=pfill></div></div><small></small></div>";
+  r.firstChild.firstChild.textContent=j.name;let b=document.createElement("button");b.type="button";b.className="act";b.textContent="RETRY";b.onclick=()=>send(j);
+  let x=document.createElement("button");x.type="button";x.className="act grey";x.textContent="CLEAR";x.onclick=()=>{Q.jobs=Q.jobs.filter(o=>o!=j);r.remove();empty()};r.append(b,x);
+  l.prepend(r);l.hidden=false;let n=document.getElementById("fnone");if(n)n.hidden=true}
+ return r}
+function draw(j){let r=row(j);if(!r)return;r.classList.toggle("bad",!!j.err);r.querySelector(".ptrack").hidden=!!j.err;
+ r.querySelector(".pfill").style.transform="scaleX("+(j.size?j.loaded/j.size:1)+")";r.querySelector("small").textContent=said(j);r.querySelectorAll(".act").forEach(b=>b.hidden=!j.err)}
+function empty(){let l=list(),n=document.getElementById("fnone");if(l&&!l.children.length){l.hidden=true;if(n)n.hidden=false}}
+function finish(j,html){Q.jobs=Q.jobs.filter(o=>o!=j);let l=list();if(!l)return;let r=l.querySelector('[data-up="'+j.id+'"]');
+ l.querySelectorAll(".row[data-file]").forEach(o=>{if(o.dataset.file==j.saved)o.remove()});  // a file with the same name was replaced
+ let t=document.createElement("template");t.innerHTML=html;let n=t.content.firstElementChild;if(r)r.replaceWith(n);else l.prepend(n);l.hidden=false}
+function send(j){j.err=null;j.loaded=0;draw(j);let f=new FormData();f.append("csrf",j.csrf);f.append("json","1");f.append("files",j.file,j.name);
+ let x=new XMLHttpRequest();x.open("POST","/admin/files");x.withCredentials=true;
+ x.upload.onprogress=e=>{if(e.total)j.loaded=Math.round(j.size*e.loaded/e.total);draw(j)};  // e.total counts the form's own bytes too: scaled to the file's
+ x.onload=()=>{let d=null;try{d=JSON.parse(x.responseText)}catch(e){}
+  if(x.status==200&&d&&d.html){j.saved=d.name;return finish(j,d.html)}
+  j.err=d&&d.error||(x.status==403?"Signed out of Manage. Open Manage again, then Retry.":x.status==413?"Too big for the server.":"Upload failed (HTTP "+x.status+").");draw(j)};
+ x.onerror=()=>{j.err="Couldn't reach sidedrop. Check the connection, then Retry.";draw(j)};x.send(f)}
+window.upAdd=function(i){let csrf=i.form.dataset.csrf;[...i.files].forEach(file=>{let j={id:++Q.n,file,name:file.name,size:file.size,loaded:0,csrf};Q.jobs.push(j);send(j)});i.value=""};
+Q.jobs.forEach(draw)})()</script>"""
 
 
 @app.get("/admin/files")
@@ -2332,8 +2367,15 @@ def admin_config():
 
 @app.post("/admin/files")
 def admin_files():
+    """The Files page's upload. json=1 (the page's background upload, one file per request) answers {"name", "size", "html": the
+    file's row} or {"error"} with a 4xx/5xx status; without it, the old form post: back to the page."""
     admin_check()
-    FILES.mkdir(parents=True, exist_ok=True)
+    as_json = request.form.get("json") == "1"
+    saved = None
+    try:
+        FILES.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass  # the save below says why
     for u in request.files.getlist("files"):
         name = re.sub(r"[/\\\x00-\x1f]", "", (u.filename or "").rsplit("/", 1)[-1]).strip().lstrip(".")
         if name:
@@ -2341,10 +2383,18 @@ def admin_files():
             try:
                 u.save(tmp)  # streamed to disk, so big files are fine
                 tmp.replace(FILES / name)
+                saved = FILES / name
             except OSError as e:  # e.g. a files/ folder made by another user: say so instead of a 500
                 print("file upload failed:", e, flush=True)
-                return admin_page(ADMIN_CSS + FILES_PAGE, "Files for Friends", files=shared_files(),
-                                  err=f"Couldn't save {name}: the server can't write to the data folder's files/ ({e.strerror}).")
+                err = f"Couldn't save {name}: the server can't write to the data folder's files/ ({e.strerror})."
+                if as_json:
+                    return {"error": err}, 500
+                return admin_page(ADMIN_CSS + FILES_PAGE, "Files for Friends", files=shared_files(), err=err)
+    if as_json:
+        if not saved:
+            return {"error": "No file came with the upload."}, 400
+        return {"name": saved.name, "size": saved.stat().st_size,
+                "html": render_template_string(FILE_ROW, f=saved, csrf=session["csrf"])}
     return redirect("/admin/files?done=files")
 
 

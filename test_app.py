@@ -391,6 +391,16 @@ r = boss.post("/admin/files", data={"csrf": csrf, "files": [(io.BytesIO(b"hello 
               content_type="multipart/form-data")
 assert r.location == "/admin/files?done=files" and "notes v2.txt" in boss.get(r.location).data.decode() and (tmp / "files" / "notes v2.txt").read_bytes() == b"hello friends"
 assert sorted(p.name for p in (tmp / "files").iterdir()) == ["hidden", "notes v2.txt"]  # no paths, no dotfiles
+# F13: the page's background upload (json=1) answers JSON with the file's row; picking files is enough (no Upload button)
+r = boss.post("/admin/files", data={"csrf": csrf, "json": "1", "files": [(io.BytesIO(b"big" * 1000), "disc.iso")]}, content_type="multipart/form-data")
+assert r.status_code == 200 and r.json["name"] == "disc.iso" and r.json["size"] == 3000, r.data
+assert 'data-file="disc.iso"' in r.json["html"] and "3.0 kB" in r.json["html"] and "DELETE" in r.json["html"] and csrf in r.json["html"]
+assert (tmp / "files" / "disc.iso").read_bytes() == b"big" * 1000 and not (tmp / "files" / ".disc.iso.part").exists()
+r = boss.post("/admin/files", data={"csrf": csrf, "json": "1"}, content_type="multipart/form-data")
+assert r.status_code == 400 and r.json["error"], r.data
+html = boss.get("/admin/files").data.decode()
+assert "upAdd(this)" in html and "window.upQ" in html and "upload.onprogress" in html and "<noscript><button>Upload</button></noscript>" in html
+(tmp / "files" / "disc.iso").unlink()
 friend = A.app.test_client(); friend.get("/?password=hunter2-but-longer")
 html = friend.get("/").data.decode()
 assert "notes v2.txt" in html and "href=/admin" not in html, "a friend sees the file and not Manage"
@@ -753,8 +763,10 @@ assert 'getElementById("rbarT")' in html and 'class="row load"' not in html
 # an upload the server can't write shows an error on the page, not a 500
 fd = envd / "files"; fd.mkdir(exist_ok=True); fd.chmod(0o500)
 r = boss.post("/admin/files", data={"csrf": csrf, "files": [(io.BytesIO(b"x"), "a.txt")]}, content_type="multipart/form-data")
+rj = boss.post("/admin/files", data={"csrf": csrf, "json": "1", "files": [(io.BytesIO(b"x"), "a.txt")]}, content_type="multipart/form-data")
 fd.chmod(0o700)
 assert r.status_code == 200 and b"can&#39;t write to the data folder" in r.data, r.status_code
+assert rj.status_code == 500 and "can't write to the data folder" in rj.json["error"], rj.data  # F13: the upload row shows it, with Retry
 # the manual certificate steps are on the page, not a link out
 html = boss.get("/admin/signing").data.decode()
 assert "openssl pkcs12 -export" in html and "Apple Distribution" in html and "docs/developer-account.md" not in html
