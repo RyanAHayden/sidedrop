@@ -143,7 +143,9 @@ you do put in `.env` (passwords, API key IDs, `BUNDLE_ID`) wins over both.
 Use an explicit App ID such as `com.you.sideload`. SideDrop gives it Push and every other capability Apple's API
 allows, and signs each app under it while the app keeps its own bundle ID: it replaces the original app rather than
 sitting beside it, and the app's own notifications arrive (Apple delivers them to the bundle ID, whichever team
-signed). A wildcard (`com.you.*`) still works, but it renames apps and gets no notifications.
+signed). Some apps, such as Discord, also need app groups and communication and time-sensitive notifications, which
+only developer.apple.com sets: [Capabilities](docs/developer-account.md#capabilities). A wildcard (`com.you.*`) still
+works, but it renames apps and gets no notifications.
 
 <p align="center"><img src="docs/img/crop-signing.png" alt="Signing's Certificate group: type, expiry, team and App ID" width="239"></p>
 

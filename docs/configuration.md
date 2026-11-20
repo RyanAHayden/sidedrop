@@ -34,6 +34,10 @@ profile again when it adds one), or a wildcard such as `com.you.*`, which
 re-IDs apps outside it (`com.other.game` becomes `com.you.game`) and can't carry entitlements like push. Apps signed
 under a wildcard install again as separate apps after a switch.
 
+The API's capabilities aren't all an app may need for notifications: app groups and communication and
+time-sensitive notifications are set on developer.apple.com, then the profile is made again
+([Capabilities](developer-account.md#capabilities)).
+
 ## The data folder
 
 ```

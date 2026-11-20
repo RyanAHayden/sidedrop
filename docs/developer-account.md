@@ -4,8 +4,9 @@ How to set up a developer account so SideDrop signs apps the way paid signing se
 bundle ID (so it replaces the original, not a copy beside it) and gets its own notifications. iOS checks the
 entitlements' `application-identifier` against the profile, but never the app's Info.plist bundle ID, and registers
 the app for push under the Info.plist one. Apple delivers a notification to that bundle ID whichever team signed the
-app, so the app's own servers reach it as long as the profile has `aps-environment`. iFizBox confirmed it on a stock
-iPhone 15 Pro.
+app, so the app's own servers reach it as long as the profile has `aps-environment`, plus, for some apps, the app
+groups and notification capabilities that only developer.apple.com sets ([Capabilities](#capabilities)). iFizBox
+confirmed it on a stock iPhone 15 Pro.
 
 SideDrop needs three things from the account: an App Store Connect API key (`asc.p8`), an Apple Distribution
 certificate (`cert.p12` and its password) and an App ID. You make only the API key: SideDrop makes the certificate and
@@ -69,19 +70,27 @@ and your certificate, and re-signs every app.
 SideDrop makes the profile again when an iPhone registers or is turned on or off, when the signing files change on
 Manage, and when it starts and finds the profile made for another certificate or App ID (you changed `cert.p12`,
 `P12_PASSWORD` or `BUNDLE_ID` on the server) or had to add capabilities to the App ID. A profile holds the
-capabilities the App ID had when it was made. After changing them yourself on developer.apple.com, make it happen:
-**Settings > Manage** (needs the admin password), turn any iPhone off, then on again.
+capabilities the App ID had when it was made, and any change to the App ID's capabilities or groups on
+developer.apple.com marks the existing profile **Invalid**. After changing them yourself, make it again: **Settings >
+Manage** (needs the admin password), turn any iPhone off, then on again. That makes a new profile and signs every app
+again; apps already on a phone get the new entitlements once installed again from the site.
+
+iFizBox signed by SideDrop carries the new profile inside it, but iFizBox keeps a signing identity it already has:
+friends who had iFizBox before import the new profile in iFizBox (Settings › Installation & Signing) to sign with it.
 
 Apple allows 100 iPhones per account per membership year; turning one off takes it out of the profile, but its slot
 frees up only at renewal.
 
-Check the profile has Push:
+Check the profile:
 
 ```sh
-openssl smime -inform der -verify -noverify -in data/adhoc.mobileprovision | grep -A1 aps-environment
+openssl smime -inform der -verify -noverify -in data/adhoc.mobileprovision \
+  | grep -A3 -E 'aps-environment|application-groups|usernotifications'
 ```
 
-It should say `production`.
+`aps-environment` should say `production`, `com.apple.security.application-groups` should list your groups (not be
+empty), and `com.apple.developer.usernotifications.communication` and `.time-sensitive` should be there (see
+[Capabilities](#capabilities)).
 
 ### How apps are signed
 
@@ -107,9 +116,26 @@ every capability App Store Connect's API accepts for an App ID.
 - ClassKit, AutoFill Credential Provider, Low-Latency HLS, Sign in with Apple, Wallet, In-App Purchase
 - Inter-App Audio, Wireless Accessory Configuration, Data Protection (complete), Maps, Apple Pay
 
-The API has no way to turn on time-sensitive or communication notifications, WeatherKit, App Attest, fonts, the
-memory-limit entitlements or multitasking camera access. Tick those on developer.apple.com if you want them; SideDrop
-leaves capabilities it didn't add alone. An app that asks for one the profile lacks goes without it.
+That list is not enough for every app's notifications. The API turns App Groups on but can't make groups or assign
+them, so the profile carries an empty `com.apple.security.application-groups`, and it can't turn on communication or
+time-sensitive notifications at all. Apps with a notification service extension, such as a modded Discord, then get
+no notifications. Add these on developer.apple.com, all together (which one an app needs varies):
+
+1. [Identifiers](https://developer.apple.com/account/resources/identifiers/list) > the filter at the top right >
+   **App Groups** > **+**: make a few groups, such as `group.com.yourname.sideload.1` to `.5`. Apps use whatever
+   groups the profile gives them.
+2. Open the App ID (`BUNDLE_ID`) > **App Groups** > **Configure**, select every group, **Save**.
+3. On the same App ID's **Capabilities** tab, tick **Communication Notifications** and **Time Sensitive
+   Notifications**, then **Save**.
+
+While you're there you can also tick the other ones the API can't set: App Attest, Fonts, Extended Virtual
+Addressing, Increased Memory Limit and Increased Debugging Memory Limit (Capabilities), and WeatherKit (App
+Services). Skip Multitasking Camera Access and the HealthKit estimates: Apple grants those only on request, and apps
+don't need them. SideDrop leaves capabilities it didn't add alone; an app that asks for one the profile lacks goes
+without it.
+
+Then make the profile again ([step 4](#4-iphones-and-the-profile)) and check it. A profile made this way matches
+what paid signing services hand out.
 
 ## 5. Switching from a wildcard
 
@@ -163,9 +189,10 @@ Turn it into `cert.p12`:
 
 - **Explicit**, an ID of your own such as `com.yourname.sideload`. Not a wildcard (`com.yourname.*`): Apple gives
   wildcards no Push.
-- Tick **Push Notifications**. SideDrop adds the rest of [Capabilities](#capabilities) itself when the API key may
-  (App Manager can); an app that asks for one the App ID lacks just goes without it.
-- Continue, Register.
+- Tick **Push Notifications**, **Communication Notifications** and **Time Sensitive Notifications**. SideDrop adds
+  the rest of the API's list itself when the API key may (App Manager can); an app that asks for one the App ID lacks
+  just goes without it.
+- Continue, Register. Then make app groups and assign them to the App ID, as in [Capabilities](#capabilities).
 
 ### M3. Upload them
 
@@ -200,7 +227,10 @@ Then restart SideDrop (`docker compose up -d`, or `deploy.sh -f`).
 - **The app installs but won't open**: Developer Mode is off (Settings > Privacy & Security > Developer Mode), or the
   certificate expired or was revoked.
 - **No notifications**: the profile has no `aps-environment` (Push wasn't on the App ID when the profile was made:
-  step 4), `BUNDLE_ID` is still a wildcard, or the app was never allowed to send notifications.
+  step 4), `BUNDLE_ID` is still a wildcard, or the app was never allowed to send notifications. If Push is there but
+  an app such as Discord still gets nothing, the profile lacks app groups or communication and time-sensitive
+  notifications: add them as in [Capabilities](#capabilities), make the profile again and install the app again.
+  Testing with Discord: it pushes to the phone only while its desktop and web clients are inactive.
 - **Signing fails after changing `BUNDLE_ID`**: on the manual path the App ID must already exist on
   developer.apple.com, spelled exactly as in `.env`. A new App ID saved on Manage is made if the account lacks it
   and the key may make App IDs; the banner at the top of Manage says when it's still missing.
