@@ -2,7 +2,6 @@
 
 ### Next
 
-- [ ] **B22** Settings rubber-bands even when it all fits: drop F29's #t-settings{min-height:0} so it gets the shared .page min-height:calc(100% + 1px) like the other tabs. Check: test_app.py asserts no #t-settings{min-height:0}. | files: app.py, test_app.py
 - [ ] **C2** SideDrop no longer manages updates or tracks installs: remove all update logic and installed/not-installed detection (Apps row states up/inst, Update badges/buttons, mkItems and the F27 /installed hold route, recorded versions, update push/notify of new versions, Updates counts) and the Apps rows' hold sheets/submenus entirely (B18 just restyled that sheet: remove it, keep the action-sheet CSS only if something else uses it). Every Apps row just offers Install. Delete dead helpers, stored state readers and tests for them. Check: test_app.py passes with the removed tests gone; grep app.py for installed/update/mkItems/hold finds nothing left of it; screenshot Apps at 375px. | files: app.py, test_app.py | after: B20
 ### Follow-ups
 

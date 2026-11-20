@@ -388,7 +388,8 @@ assert "This iPhone</h3>" not in settings_tab and "Admin Settings" not in settin
 assert re.findall(r"<h3 class=hdr>([^<]+)</h3>", settings_tab) == ["Preferences"] and settings_tab.index("Preferences</h3>") < settings_tab.index("<div>Theme</div>")
 # B20: Settings scrolls: F29's overscroll-behavior-y:none on #scr (by :has while Settings showed) left it not scrolling on the iPhone, so
 # Admin Login and Sign Out were out of reach. No rule for #scr or #t-settings may set overflow:hidden, a height or overscroll-behavior:none
-assert "#t-settings{min-height:0}" in html and "overscroll-behavior-y:none" not in html and ":has(>#t-settings" not in html
+# B22: and it rubber-bands even when it all fits: no min-height override, so it keeps .page's min-height:calc(100% + 1px)
+assert "#t-settings{min-height" not in html and ".page{min-height:calc(100% + 1px)}" in html and "overscroll-behavior-y:none" not in html and ":has(>#t-settings" not in html
 page_css = re.sub(r"/\*.*?\*/", "", "".join(re.findall(r"<style>(.*?)</style>", html, re.S)), flags=re.S)
 scr_rules = [(s, b) for s, b in re.findall(r"([^{}]*)\{([^{}]*)\}", page_css) if re.search(r"#scr\b|#t-settings\b", s)]
 assert any("overflow-y:auto" in b for s, b in scr_rules), scr_rules

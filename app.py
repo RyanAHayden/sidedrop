@@ -769,10 +769,8 @@ PAGE = """<!doctype html><meta charset=utf-8><meta name=build content=%BUILD%><m
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
 /* always 1px taller than the screen, so short pages still rubber-band like native */
 #scr{scrollbar-width:none} #scr::-webkit-scrollbar{display:none} .page{min-height:calc(100% + 1px)}
-/* F29: a Settings page shorter than the screen doesn't get the 1px that makes it scroll. B20: F29 also turned #scr's vertical overscroll off (by
-   :has, while Settings showed), which left the tab not scrolling at all on the iPhone, so the rows past the fold (Admin Login, Sign Out) were out of
-   reach; Settings now scrolls and bounces like the other tabs. Nothing may set overflow:hidden, a fixed height or overscroll-behavior on it. */
-#t-settings{min-height:0}
+/* B22: Settings gets the 1px too, so it rubber-bands even when it all fits (F29's min-height:0 override on it is gone). B20: nothing may set
+   overflow:hidden, a fixed height or overscroll-behavior on #scr or #t-settings: that left Admin Login and Sign Out out of reach on the iPhone. */
 /* scroll indicator, drawn by us between the nav and tab bar (iOS doesn't show one for a scrolling body) */
 /* UIKit's UIScrollerIndicatorDefault: 5pt black at 50% with a 1pt 15% white ring, fully rounded (7pt overall) */
 #sb{position:fixed;right:2px;z-index:6;width:5px;border-radius:3px;background:rgba(0,0,0,.5);box-shadow:0 0 0 1px rgba(255,255,255,.15);opacity:0;transition:opacity .3s,width .1s;pointer-events:none;will-change:transform}
