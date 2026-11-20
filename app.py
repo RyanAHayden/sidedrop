@@ -769,8 +769,10 @@ PAGE = """<!doctype html><meta charset=utf-8><meta name=build content=%BUILD%><m
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
 /* always 1px taller than the screen, so short pages still rubber-band like native */
 #scr{scrollbar-width:none} #scr::-webkit-scrollbar{display:none} .page{min-height:calc(100% + 1px)}
-/* F29: Settings doesn't rubber-band: dragging it down showed a gap of pinstripes above its first group (and it has nothing to pull-reload) */
-#scr:has(>#t-settings:not([hidden])){overscroll-behavior-y:none} #t-settings{min-height:0}
+/* F29: a Settings page shorter than the screen doesn't get the 1px that makes it scroll. B20: F29 also turned #scr's vertical overscroll off (by
+   :has, while Settings showed), which left the tab not scrolling at all on the iPhone, so the rows past the fold (Admin Login, Sign Out) were out of
+   reach; Settings now scrolls and bounces like the other tabs. Nothing may set overflow:hidden, a fixed height or overscroll-behavior on it. */
+#t-settings{min-height:0}
 /* scroll indicator, drawn by us between the nav and tab bar (iOS doesn't show one for a scrolling body) */
 /* UIKit's UIScrollerIndicatorDefault: 5pt black at 50% with a 1pt 15% white ring, fully rounded (7pt overall) */
 #sb{position:fixed;right:2px;z-index:6;width:5px;border-radius:3px;background:rgba(0,0,0,.5);box-shadow:0 0 0 1px rgba(255,255,255,.15);opacity:0;transition:opacity .3s,width .1s;pointer-events:none;will-change:transform}
@@ -1290,8 +1292,9 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class="g grp sg" id=sHome><a class="row mrow" href=/home-screen data-push>{{ row_icon('homeScreen') }}<div>Add to Home Screen</div></a></div>
 <p class=ftr>Open SideDrop from your Home Screen like an app.</p>
 <div class="g grp sg" id=sHelp><a class="row mrow" href=/help data-push id=helpRow>{{ row_icon('help') }}<div>Help</div></a></div>
-{# B19: a non-admin's way in: /admin asks for the admin password (admin_fails rate-limits it); not for an invite guest, whom /admin refuses #}
-{% if admin_on and not is_admin and not guest %}<div class="g grp sg" id=sAdmin><a class="row mrow" href=/admin data-push id=adminRow>{{ row_icon('lock') }}<div>Admin Login</div></a></div>{% endif %}
+{# B19: a non-admin's way in: /admin asks for the admin password (admin_fails rate-limits it). B20: an invite guest too (/admin takes the
+   password from a guest session). admin_on: with no admin password /admin is a 404, and setup always asks for one, so it is only off mid-setup #}
+{% if admin_on and not is_admin %}<div class="g grp sg" id=sAdmin><a class="row mrow" href=/admin data-push id=adminRow>{{ row_icon('lock') }}<div>Admin Login</div></a></div>{% endif %}
 {% if not guest %}<a class="b grey out" href=/logout>Sign Out</a>{% endif %}{# F31: an invite guest has no password to sign back in with #}
 <script>/* F26: the Theme row's detail, the theme showing now (THEME_BOOT's themeState); again after Settings > Theme pops, or the iPhone flips */
 const THEME_NAMES={{ theme_names|tojson }};
@@ -3026,7 +3029,9 @@ def join_token():
 
 @app.before_request
 def guests_stay_out():
-    if (request.path == "/admin" or request.path.startswith("/admin/")) and is_guest():
+    # B20: /admin itself is the admin password prompt (Settings > Admin Login): a guest may answer it, and a right password turns the
+    # session into an admin's (pv "a"), like a normal login; everything under /admin/ stays shut to a guest
+    if request.path.startswith("/admin/") and is_guest():
         abort(403)
 
 
