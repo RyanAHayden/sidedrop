@@ -2,7 +2,6 @@
 
 ### Next
 
-- [ ] **F35** Dark theme defaults to Gunmetal instead of OLED Black (user ask, matching iFizBox): in app.py's THEMES make gunmetal the dark default THEME_BOOT/themeState picks when localStorage.darkTheme is unset; stored choices stay. Check: test_app.py passes; fresh browser in dark mode shows Gunmetal.
 - [ ] **B20** Settings fixes after B19, the person still can't see Admin Login: (1) Settings doesn't scroll at all, so rows below the fold (B19's Admin Login row after Help, Sign Out) can't be reached; find what blocks scrolling (overflow/height on the pushed Settings view, likely since B18's action-sheet CSS or a body lock left on) and fix it. (2) B19 hides the row for invite guests (is_guest) and when no admin password is set (admin_enabled); the person expects it for every non-admin: show it to guests too, and make /admin take the password from a guest session (a right password makes that browser admin, like a normal login). Check: test_app.py asserts the row for a guest and a password user, and nothing sets overflow:hidden/height that stops Settings scrolling; screenshot Settings scrolled to the bottom at 375px, both as guest and as non-admin. | files: app.py, test_app.py
 ### Follow-ups
 
