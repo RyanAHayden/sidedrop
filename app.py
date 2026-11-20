@@ -187,12 +187,17 @@ def regen_profile():
         "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle["id"]}},
                           "certificates": rel("certificates", [cert_id()]),
                           "devices": rel("devices", [d["id"] for d in devices])}}})
-    PROFILE.write_bytes(base64.b64decode(created["data"]["attributes"]["profileContent"]))
+    tmp = PROFILE.with_name(PROFILE.name + ".part")  # B17: swapped in whole, since a resign may be reading it
+    tmp.write_bytes(base64.b64decode(created["data"]["attributes"]["profileContent"]))
+    tmp.replace(PROFILE)
+
+
+reg_lock = threading.Lock()  # B17: registrations (and the profile they make) take this, not lock, so one never waits on a resign
 
 
 def register(udid, name, invite=None):
     """invite=(token, sid): through a one-iPhone invite (F16), which the first UDID uses up; a second UDID raises InviteRefused."""
-    with lock:
+    with reg_lock:
         if invite:
             invite_check(invite[0], udid)
         if udid not in profile_udids():
@@ -200,9 +205,45 @@ def register(udid, name, invite=None):
                 asc("POST", "/devices", json={"data": {"type": "devices", "attributes": {
                     "name": name[:50], "udid": udid, "platform": "IOS"}}})
             regen_profile()
-            resign(force=True)
+            resign_later()  # B17: the 301 doesn't wait for every app to be signed again
         if invite:
             invite_use(invite[0], invite[1], udid, name)
+
+
+# B17: a registration's re-sign runs in a thread (under lock as before); one arriving while it runs asks for one more after it.
+# While it is pending, Apps shows the rows signed with the old profile as Signing… (signing_now()).
+resign_bg, resign_bg_lock = {"running": False, "again": False}, threading.Lock()
+
+
+def resign_later():
+    with resign_bg_lock:
+        if resign_bg["running"]:
+            resign_bg["again"] = True
+            return
+        resign_bg["running"] = True
+    threading.Thread(target=resign_bg_loop, daemon=True).start()
+
+
+def resign_bg_loop():
+    while True:
+        try:
+            with lock:
+                resign(force=True)
+        except Exception as e:
+            print("re-signing after a registration failed:", e, flush=True)
+        with resign_bg_lock:
+            if not resign_bg["again"]:
+                resign_bg["running"] = False
+                return
+            resign_bg["again"] = False
+
+
+def signing_now():
+    """The signed apps still on the old profile while a registration's re-sign is pending: {name}, else empty."""
+    if not resign_bg["running"] or not PROFILE.exists() or not SIGNED.exists():
+        return set()
+    t = PROFILE.stat().st_mtime
+    return {p.stem for p in SIGNED.glob("*.ipa") if p.stat().st_mtime < t}
 
 
 PRODUCTS, products_lock = DATA / "products.json", threading.Lock()  # {udid: "iPhone15,2"}: each iPhone's PRODUCT from registration (F15)
@@ -334,11 +375,15 @@ def resign(force=False):
     if not PROFILE.exists():
         return
     SIGNED.mkdir(exist_ok=True)
+    t0, n = time.monotonic(), 0
     for src in sorted(APPS.glob("*.ipa")):
         out = SIGNED / src.name
         deps = [src, PROFILE] + [p for p in [conf(IFIZBOX_SOURCES), conf(IFIZBOX_SETTINGS)] if src.stem == IFIZBOX_ID and p.exists()]  # inside it
         if force or not out.exists() or out.stat().st_mtime < max(d.stat().st_mtime for d in deps):
             sign_ipa(src, out)
+            n += 1
+    if n:  # B17: how long a resign takes, one line
+        print(f"resign: signed {n} app{'s' if n > 1 else ''} in {time.monotonic() - t0:.1f}s{' (forced)' if force else ''}", flush=True)
 
 
 def sync_sources():
@@ -940,10 +985,12 @@ If they sent you an invite link, open it again: it signs you in with no password
         touch_seen(token_udid(tok))
     error = None
     try:
-        with lock:
-            resign()  # ponytail: signs stale IPAs on page load; first visit after an upload waits for it
+        if not resign_bg["running"]:  # B17: never wait on a registration's re-sign; its rows say Signing… instead
+            with lock:
+                resign()  # ponytail: signs stale IPAs on page load; first visit after an upload waits for it
     except Exception as e:
         error = str(e)
+    signing = signing_now()
     apps = [dict(ipa_info(p), name=p.stem, files=sorted(f for f in (APP_FILES / p.stem).glob("*") if f.is_file() and f.name != "labels.txt"))
             for p in sorted(SIGNED.glob("*.ipa"))] if SIGNED.exists() else []
     apps = [a for a in apps if "feather" not in a["name"].lower()]  # iFizBox replaced it; a copy synced before stays on disk, unlisted
@@ -987,7 +1034,8 @@ If they sent you an invite link, open it again: it signs you in with no password
 .get.go{min-width:76px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-color:#2f7a17} .get.go:before{opacity:1}
 .get.blue{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-color:#2b4f8a;background:var(--bluebtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
 .get[aria-expanded=true]{color:#7d8794;background:linear-gradient(#c9ced5,#dfe3e8);box-shadow:inset 0 1px 3px rgba(0,0,0,.3)}
-.locked .get{min-width:44px} .get.done:not(.go){color:#8e959e}  /* iOS 6 App Store: INSTALLED is grey; tapping still reinstalls */
+.get.sgn{cursor:default;color:#8e959e;font-weight:400}  /* B17: re-signing for a new iPhone: no INSTALL of the old build */
+.locked .get{min-width:44px}.get.done:not(.go){color:#8e959e}  /* iOS 6 App Store: INSTALLED is grey; tapping still reinstalls */
 /* UPDATE stands out (F24): iFizBox's "Button (Gloss Blue)" (its Done: sources.css .bar-button.done), the same in both themes; held, its
    darker pressed gloss. border-box so the gradient's light top doesn't tile into the bottom border. Tapped it still arms to the green
    INSTALL (the :before layer paints over this background), and once installed it is the grey INSTALLED again. */
@@ -1129,6 +1177,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <li>Safari opens back here by itself, registered.</li></ol>{% endset %}
 {# sdp_steps, dev_steps and a2hs_steps: Jinja globals (F26, SDP_STEPS etc. in app.py), shared with the Help page #}
 {% macro install(a) %}{% if not enrolled %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>
+{% elif a.name in signing %}<span class="get sgn" aria-label="Signing {{ a.title }}">Signing…</span>
 {% else %}{% set lbl = 'GET' if a.name not in mine else 'INSTALLED' if mine[a.name] == a.vkey else 'UPDATE' %}
 {% set cls = ' done' if lbl == 'INSTALLED' else ' upd' if lbl == 'UPDATE' else '' %}
 {% if a.files %}<button type=button class="get{{ cls }}" data-app="{{ a.name }}" aria-expanded=false onclick="steps(this)">{{ lbl }}</button>
@@ -1172,7 +1221,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>This adds your iPhone to the shared developer account, so the apps here can be signed for it. Registered before but the apps are locked? Register again, it's instant.</small></div></div>{% endif %}
 {% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class="row ifzr{{ ' up' if ifz.name in mine and mine[ifz.name] != ifz.vkey }}">{{ ifz_icon(ifz) }}{{ ubadge(ifz) }}
 <div>{{ ifz.title }}<span class=ifv>{{ ifz.short }}</span></div><small class=rec>Recommended: get update alerts and install more apps</small>
-{% if enrolled %}<a class="get{{ ' done' if mine.get(ifz.name) == ifz.vkey else ' go' }}" data-app="{{ ifz.name }}" aria-label="Install {{ ifz.title }}" href=#ifizbox onclick="return ifzGo(this)">{{ 'INSTALL' if ifz.name not in mine else 'INSTALLED' if mine[ifz.name] == ifz.vkey else 'UPDATE' }}</a>
+{% if enrolled and ifz.name in signing %}<span class="get sgn" aria-label="Signing {{ ifz.title }}">Signing…</span>
+{% elif enrolled %}<a class="get{{ ' done' if mine.get(ifz.name) == ifz.vkey else ' go' }}" data-app="{{ ifz.name }}" aria-label="Install {{ ifz.title }}" href=#ifizbox onclick="return ifzGo(this)">{{ 'INSTALL' if ifz.name not in mine else 'INSTALLED' if mine[ifz.name] == ifz.vkey else 'UPDATE' }}</a>
 {% else %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>{% endif %}</div></div>{% endif %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
@@ -1186,7 +1236,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <section class=page id=t-ifizbox data-title=iFizBox>
 {% if ifz %}<div class=splash>{% if ifz.icon %}<img src="{{ ifz.icon }}" alt="">{% else %}<div class=ico style="width:76px;height:76px;border-radius:15px;background:hsl({{ ifz.name|hue }} 65% 50%)">{{ ifz.title[:1] }}</div>{% endif %}
 <div><h2>{{ ifz.title }}</h2><p>A package manager for your iPhone</p></div></div>
-<div class=c style="margin-top:16px">{% if enrolled %}<button type=button class=gbtn id=ifzb data-app="{{ ifz.name }}" data-m="{{ ifz_m }}" data-title="{{ ifz.title }}" data-v="{{ ifz.short }}" data-n="{{ n_sources }}" onclick="ifzRun()">Install {{ ifz.title }}</button>
+<div class=c style="margin-top:16px">{% if enrolled and ifz.name in signing %}<button type=button class=gbtn disabled>Signing…</button>
+{% elif enrolled %}<button type=button class=gbtn id=ifzb data-app="{{ ifz.name }}" data-m="{{ ifz_m }}" data-title="{{ ifz.title }}" data-v="{{ ifz.short }}" data-n="{{ n_sources }}" onclick="ifzRun()">Install {{ ifz.title }}</button>
 {% else %}<button type=button class=gbtn onclick="nudge()">Register This iPhone First</button>{% endif %}
 <small>Version {{ ifz.short }}, signed for this iPhone. Your certificate and {{ n_sources }} sources come with it.</small></div>
 <h3 class=hdr>Why {{ ifz.title }}</h3><div class="g why">
@@ -1430,7 +1481,7 @@ function firstRunGo(ok){let b=frNext;frNext=null;firstRun.hidden=true;if(!ok)ret
  if(b){if(b.dataset.arm)b.classList.add("go");b.click()}}  // an armed GET installs on click
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();if(window.themeMarks)themeMarks()});  // themeMarks exists only once Settings > Theme was pushed
-</script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=admin_enabled(), updates=updates, open_setup=not enrolled and request.args.get("go") == "setup", just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
+</script>""", error=error, enrolled=enrolled, mine=mine, signing=signing, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=admin_enabled(), updates=updates, open_setup=not enrolled and request.args.get("go") == "setup", just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
         ifz_m=signed_url(f"/m/{ifz['name']}.plist") if ifz else "",
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
@@ -3256,7 +3307,8 @@ def resign_all():
     try:
         with lock:
             if PROFILE.exists():  # none yet = nobody registered; the first registration makes it
-                regen_profile()
+                with reg_lock:  # B17: not at Apple at the same time as a registration's profile
+                    regen_profile()
                 resign(force=True)
     except Exception as e:
         print("re-signing after new signing files failed:", e, flush=True)

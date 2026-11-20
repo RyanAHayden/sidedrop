@@ -44,8 +44,9 @@ can install the apps you share on their own iPhones without a computer, a cable 
    off Stolen Device Protection (the page walks through it with screenshots) and taps **Register iPhone**. They
    install the small profile it downloads.
 2. iOS sends the server the phone's UDID. SideDrop registers the device with Apple through the App Store Connect API,
-   regenerates the ad hoc profile and re-signs every app.
-3. Safari comes back to the site, where every app now has an **Install** button.
+   regenerates the ad hoc profile and re-signs every app in the background.
+3. Safari comes back to the site at once. Each app reads **Signing…** until it is signed for the new iPhone, then has an
+   **Install** button.
 
 That's once per iPhone. After that:
 

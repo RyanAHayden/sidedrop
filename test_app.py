@@ -32,6 +32,11 @@ def fake_run(cmd, **kw):
 A.regen_profile, A.asc, A.subprocess.run = fake_regen, fake_asc, fake_run
 orig_register = A.register
 A.register = lambda u, n, **kw: (calls.append((u, n)), orig_register(u, n, **kw))
+def bg_idle(m):
+    """B17: waits (10s at most) for the re-sign a registration started in the background."""
+    deadline = time.monotonic() + 10
+    while m.resign_bg["running"] and time.monotonic() < deadline: threading.Event().wait(.01)
+    assert not m.resign_bg["running"], "the background resign never finished"
 
 c = A.app.test_client()
 path_qs = lambda url: (lambda s: f"{s.path}?{s.query}")(urlsplit(url))
@@ -88,6 +93,7 @@ A.PROFILE_CERT_DIR = ""
 # iOS posts a CMS-signed plist; we register + regen + sign, then 301 back
 body = b"\x30\x80" + plistlib.dumps({"UDID": "00008130-AAAA", "PRODUCT": "iPhone16,1"}) + b"\x00sig"
 r = A.app.test_client().post(path_qs(url), data=body)  # no cookie, like iOS
+bg_idle(A)  # B17: the signing runs after the 301; the checks below read what it signed
 assert r.status_code == 301 and r.location.endswith("/?enrolled=" + A.device_token("00008130-AAAA"))
 assert calls == [("00008130-AAAA", "Sam script iPhone16,1")]
 # landing back in Safari sets a device cookie (checked against the profile, survives sign-out); forged tokens do nothing
@@ -1250,6 +1256,7 @@ assert rj0["states"][tok] == "unused" and "Not used" in rj0["html"] and f'data-l
 assert f'<div data-invites data-sig="{rj0["sig"]}">' in page0 and rj0["html"] in page0  # the page draws the same rows it refreshes with
 assert boss.get("/admin/invites.json").get_json()["sig"] == rj0["sig"]  # nothing changed: same signature, so the open page leaves its rows
 r = ipost("GUEST-1"); assert r.status_code == 301 and r.location.endswith("/?enrolled=" + I.device_token("GUEST-1")) and iudids == ["GUEST-1"]
+bg_idle(I)
 rj1 = boss.get("/admin/invites.json").get_json()
 assert rj1["states"][tok] == "used" and rj1["sig"] != rj0["sig"] and "Used by Sam x iPhone14,2 on" in rj1["html"]
 assert f'data-link="https://x.test/invite/{tok}"' not in rj1["html"] and "REVOKE" in rj1["html"]  # no COPY for a used link; still revocable
@@ -1410,4 +1417,59 @@ R2 = boot(rc2start, P12_PASSWORD=rc2_pw)
 R2.heal_signing(); repacked_ok(rc2start / "cert.p12", rc2_pw)
 again = (rc2start / "cert.p12").read_bytes(); R2.heal_signing(); assert (rc2start / "cert.p12").read_bytes() == again  # once only
 os.environ.pop("P12_PASSWORD")
+
+# B17: registering answers at once. The Apple device add, the profile and the invite stay in the request; re-signing every app runs in
+# a thread, and Apps shows the rows still signed with the old profile as Signing… (no INSTALL/UPDATE) until it's done.
+b17 = tmp / "b17"; (b17 / "apps").mkdir(parents=True); (b17 / "signed").mkdir()
+B = boot(b17, PASSWORD="friends-pass-b17", ADMIN_PASSWORD="admin-pass-b17", SECRET_KEY="b" * 32)
+budids = []
+B.asc = lambda m, path, **kw: (m == "POST" and path == "/devices" and budids.append(kw["json"]["data"]["attributes"]["udid"]), {"data": []})[1]
+B.regen_profile = lambda: B.PROFILE.write_bytes(plistlib.dumps({"ProvisionedDevices": list(budids), "Entitlements": {
+    "application-identifier": "TEAM.com.me.*", "com.apple.developer.team-identifier": "TEAM", "get-task-allow": False}}))
+B.subprocess.run = lambda cmd, **kw: Path(cmd[cmd.index("-o") + 1]).write_bytes((b17 / "apps" / "Demo.ipa").read_bytes())
+shutil.copy(tmp / "apps" / "Demo.ipa", b17 / "apps" / "Demo.ipa")
+budids.append("B17-OLD"); B.regen_profile(); B.resign(force=True)  # an iPhone registered before: Demo signed for it
+old = time.time() - 60
+os.utime(b17 / "signed" / "Demo.ipa", (old, old)); os.utime(B.PROFILE, (old, old))
+real_resign, gate, bres = B.resign, threading.Event(), []
+def slow_resign(force=False):
+    bres.append(force); assert gate.wait(10), "the test never let the resign go"; real_resign(force)
+B.resign = slow_resign
+b17_idle = lambda: bg_idle(B)
+bf = B.app.test_client(); bf.post("/login", data={"password": "friends-pass-b17"})
+burl = plistlib.loads(enroll(bf, name="Bea"))["PayloadContent"]["URL"]
+bpost = lambda u, udid: B.app.test_client().post(path_qs(u), data=b"\x30\x80" + plistlib.dumps({"UDID": udid, "PRODUCT": "iPhone15,2"}) + b"\x00")
+# the friend's path: the 301 comes back while the resign is still blocked; the iPhone is at Apple and in the profile already
+t0 = time.monotonic(); r = bpost(burl, "B17-NEW")
+assert r.status_code == 301 and r.location.endswith("/?enrolled=" + B.device_token("B17-NEW")) and time.monotonic() - t0 < 5
+assert not gate.is_set() and B.resign_bg["running"] and budids == ["B17-OLD", "B17-NEW"] and B.profile_udids() == {"B17-OLD", "B17-NEW"}
+# Apps while it signs: the page answers (no wait on the lock), Demo's row says Signing… instead of GET, and no install link to the old build
+bh = bf.get("/?enrolled=" + B.device_token("B17-NEW")).data.decode()
+assert '<span class="get sgn" aria-label="Signing Demo">Signing…</span>' in bh and 'href="itms-services' not in bh and "data-arm=GET" not in bh
+assert B.signing_now() == {"Demo"} and ".get.sgn{cursor:default" in bh
+# a second registration while it runs answers at once too, and only asks for one more resign after this one
+r = bpost(burl, "B17-TWO"); assert r.status_code == 301 and B.resign_bg["again"] and len(bres) == 1
+gate.set(); b17_idle()
+assert bres == [True, True], bres  # the one running, then one more for the iPhone that came in meanwhile
+bh = bf.get("/?enrolled=" + B.device_token("B17-NEW")).data.decode()
+assert "Signing…" not in bh and 'data-arm=GET data-app="Demo"' in bh and 'href="itms-services' in bh and B.signing_now() == set()
+# the guest's path: through a one-iPhone invite, the same 301 while the resign is blocked; the invite is used up in the request
+gate.clear(); bres.clear()
+bboss = B.app.test_client(); assert bboss.get("/?password=admin-pass-b17").location == "/"
+bcsrf = re.search(r'name=csrf value="([^"]+)"', bboss.get("/admin/invites").data.decode()).group(1)
+btok = re.search(r"new=([\w-]+)$", bboss.post("/admin/invites", data={"do": "new", "name": "Gus", "csrf": bcsrf}).location).group(1)
+bg = B.app.test_client(); assert bg.get(f"/invite/{btok}").location == "/?go=setup"
+gurl = plistlib.loads(enroll(bg, name=""))["PayloadContent"]["URL"]; assert f"/g/{btok}/" in gurl
+t0 = time.monotonic(); r = bpost(gurl, "B17-GUEST")
+assert r.status_code == 301 and r.location.endswith("/?enrolled=" + B.device_token("B17-GUEST")) and time.monotonic() - t0 < 5
+assert not gate.is_set() and B.resign_bg["running"] and "B17-GUEST" in B.profile_udids() and bres == [True]
+assert B.load_json(B.INVITES)[btok].get("udid") == "B17-GUEST"  # invite_use ran in the request
+gh17 = bg.get("/?enrolled=" + B.device_token("B17-GUEST")).data.decode()
+assert 'aria-label="Signing Demo">Signing…</span>' in gh17 and 'href="itms-services' not in gh17
+gate.set(); b17_idle()
+assert "Signing…" not in bg.get("/").data.decode()
+# a resign that fails still ends the background state (the page goes back to signing on load) and says why in the log
+B.resign = lambda force=False: (_ for _ in ()).throw(RuntimeError("zsign broke"))
+B.resign_later(); b17_idle()
+B.resign = real_resign
 print("ok")
