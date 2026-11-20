@@ -2871,6 +2871,32 @@ class InviteRefused(Exception):
     pass
 
 
+# B15: a revoked invite leaves the invites file, so its link read like a mistyped one ("doesn't work any more"). Revoking keeps
+# a note keyed by a hash of the token (never the token itself), so the friend who opens it is told it was turned off on purpose.
+INVITES_REVOKED = DATA / "invites-revoked.json"  # {sha256(token)[:32]: {name, revoked}}
+
+
+def invite_hash(tok):
+    return hashlib.sha256(f"invite:{tok}".encode()).hexdigest()[:32]
+
+
+def invite_gone_msg(tok):
+    """Why a one-iPhone invite token that isn't in the invites file signs nobody in: revoked, or never one of ours."""
+    gone = load_json(INVITES_REVOKED).get(invite_hash(tok)) if tok else None
+    if gone is None:
+        return "SideDrop doesn't know this invite link. Check that the whole link was copied, or ask for a new one."
+    name = re.sub(r"[^\w .'-]", "", gone.get("name") or "")[:30]
+    return (f"The person who sent this link{' for ' + name if name else ''} turned it off, so it can't sign in or register an iPhone. "
+            "If they sent you a newer link, open that one instead; otherwise ask them for a new one.")
+
+
+def invite_revoked(tok, inv):
+    """Notes a revoked invite for invite_gone_msg() (called under invites_lock)."""
+    gone = load_json(INVITES_REVOKED)
+    gone[invite_hash(tok)] = {"name": inv.get("name", ""), "revoked": int(time.time())}
+    save_json(INVITES_REVOKED, gone)
+
+
 def load_invites():
     return load_json(INVITES)
 
@@ -2900,7 +2926,7 @@ def invite_check(tok, udid):
     """Raises InviteRefused unless this UDID may register through the invite (register() calls it under its lock)."""
     inv = load_invites().get(tok)
     if not inv:
-        raise InviteRefused("This invite link doesn't work any more. Ask for a new one.")
+        raise InviteRefused(invite_gone_msg(tok))
     if inv.get("udid"):
         if inv["udid"] != udid:
             raise InviteRefused(INVITE_USED)
@@ -3041,10 +3067,20 @@ INVITES_PAGE = """<style>.lnk{font:13px/1.4 ui-monospace,Menlo,monospace;width:1
 <form method=post action=/admin/invites data-name="{{ i.name or 'this link' }}" onsubmit="if(!confirm('Revoke the link for '+this.dataset.name+'?'))return false">
 <input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=do value=revoke><input type=hidden name=tok value="{{ i.tok }}"><button class="act red">REVOKE</button></form></div>{% endfor %}</div>
 <p class=ftr>Revoking a used link signs its guest out and leaves the iPhone registered: turn it off on iPhones.</p>{% endif %}
-<script>/* F16: Copy Link writes the clipboard in the tap; without the API (or refused) it selects the link's text, and tries execCommand */
-window.lnkCopy=function(b){let w=b.closest("[data-link]"),u=w.dataset.link,t=b.textContent,ok=()=>{b.textContent=b.classList.contains("act")?"COPIED":"Copied";setTimeout(()=>b.textContent=t,1500)};
- let sel=()=>{let i=w.querySelector(".lnk"),tmp=!i;if(tmp){i=document.createElement("textarea");i.value=u;i.className="vh";document.body.append(i)}
-  i.focus();i.select();i.setSelectionRange(0,u.length);let c=false;try{c=document.execCommand("copy")}catch(e){}if(tmp)i.remove();if(c)ok()};
+<script>/* F16, B15: Copy Link copies this box's link in the tap. First a copy event that puts exactly that link on the clipboard (from an
+editable, selected textarea: iOS copies nothing from a readonly input's selection and execCommand still says true, which left the
+last link on the clipboard under "Copied"); only when that event ran is it Copied. Else clipboard.writeText; else Not Copied, with
+the link selected in an editable box for the system Copy */
+window.lnkCopy=function(b){let w=b.closest("[data-link]"),u=w.dataset.link,act=b.classList.contains("act"),t=b.dataset.t||(b.dataset.t=b.textContent),
+ say=s=>{b.textContent=s;clearTimeout(b.tm);b.tm=setTimeout(()=>b.textContent=t,2000)},ok=()=>say(act?"COPIED":"Copied"),
+ sel=()=>{let n=w.nextElementSibling,i=w.querySelector(".lnk")||(n&&n.matches(".lnk")?n:null);if(!i){i=document.createElement("input");i.className="lnk";i.value=u;i.setAttribute("aria-label","Link");w.after(i)}
+  i.readOnly=false;i.onblur=()=>i.readOnly=true;i.focus();i.setSelectionRange(0,i.value.length);say(act?"NOT COPIED":"Not Copied")};
+ let got=false,h=e=>{if(!e.clipboardData)return;e.clipboardData.setData("text/plain",u);e.preventDefault();got=true},
+  a=document.createElement("textarea"),s=getSelection(),c=false;a.value=u;a.setAttribute("aria-hidden","true");
+ a.style.cssText="position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;font-size:16px";document.body.append(a);
+ a.focus({preventScroll:true});a.select();a.setSelectionRange(0,u.length);document.addEventListener("copy",h,true);
+ try{c=document.execCommand("copy")}catch(e){}document.removeEventListener("copy",h,true);a.remove();if(s)s.removeAllRanges();
+ if(c&&got)return ok();
  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(u).then(ok,sel);else sel()};
 window.lnkShare=function(b){navigator.share({url:b.closest("[data-link]").dataset.link}).catch(()=>{})};
 document.querySelectorAll(".shr").forEach(b=>b.hidden=!navigator.share)</script>"""
@@ -3085,8 +3121,9 @@ def admin_invites():
         if do == "revoke":
             with invites_lock:
                 invs = load_invites()
-                if invs.pop(request.form.get("tok", ""), None) is not None:
+                if (old := invs.pop(request.form.get("tok", ""), None)) is not None:
                     save_json(INVITES, invs)
+                    invite_revoked(request.form["tok"], old)
             return redirect("/admin/invites?done=revoked")
         abort(400)
     rows = invite_rows()

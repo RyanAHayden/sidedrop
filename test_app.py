@@ -1313,6 +1313,16 @@ rtok = re.search(r"new=([\w-]+)$", inv(do="new", name="Kim").location).group(1)
 rg = I.app.test_client(); assert rg.get(f"/invite/{rtok}").location == "/?go=setup"
 assert inv(do="revoke", tok=rtok).location == "/admin/invites?done=revoked"
 assert not signed_in(rg) and I.app.test_client().get(f"/invite/{rtok}").status_code == 403 and "Kim" not in boss.get("/admin/invites").data.decode()
+# B15: a revoked link says it was turned off (and to open a newer link), an unknown one says SideDrop doesn't know it; the revoked
+# note holds a hash, never the token
+r = I.app.test_client().get(f"/invite/{rtok}").data.decode()
+assert "The person who sent this link for Kim turned it off" in r and "newer link" in r and "doesn&#39;t know" not in r, r[-600:]
+assert rtok not in (idir / "invites-revoked.json").read_text() and I.invite_hash(rtok) in I.load_json(I.INVITES_REVOKED)
+r = I.app.test_client().get("/invite/ULHMz-not-a-real-link"); assert r.status_code == 403
+assert "doesn&#39;t know this invite link" in r.data.decode() and "turned it off" not in r.data.decode()
+assert "turned it off" in rg.get("/").data.decode()  # the revoked link's own session is told the same
+h = boss.get("/admin/invites").data.decode()
+assert 'document.addEventListener("copy",h,true)' in h and "if(c&&got)return ok();" in h and '"NOT COPIED":"Not Copied"' in h
 inv(do="revoke", tok=tok)
 assert not signed_in(guest) and not signed_in(hs) and I.profile_udids() == {"GUEST-1"}
 gone = I.app.test_client(); gone.set_cookie("device", I.device_token("GUEST-1"))
