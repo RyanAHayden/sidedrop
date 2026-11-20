@@ -102,8 +102,10 @@ assert b"About" not in html and b"id=about" not in html and b"aboutT" not in htm
 assert html.count(b"Share an Apple developer account with friends and sideload apps.") == 2 and b"og:site_name content=SideDrop" in html
 assert b"with a friend's Apple developer account.</p>" in html
 assert b"adds your iPhone to the shared developer account" in html
-assert b"sidedrop" not in re.sub(rb"sidedrop\.udid|/static/[\w.]+", b"", html), re.findall(rb".{40}sidedrop.{40}", html)
+assert b"sidedrop" not in re.sub(rb"sidedrop\.udid|/static/[\w.]+|href=\"https://github\.com/RyanAHayden/sidedrop\"", b"", html), re.findall(rb".{40}sidedrop.{40}", html)
 assert b">Help</a>" in html and b'class="tile reg"' not in html
+# B13: the GitHub tile opens the repo; the byline still opens the profile
+assert b'<a class=tile href="https://github.com/RyanAHayden/sidedrop">' in html and b'<a href="https://github.com/RyanAHayden">Ryan Hayden (Fizlo)</a>' in html
 # F22: no Changes tab and no signing your own IPA: nothing links to them, and Help points to iFizBox instead
 for gone in (b"#changes", b"'changes'", b"t-changes", b">Changes<", b"/sign", b"getElementById('sign')", b"Sign IPA", b"Sign your own IPA", b"Choose .ipa File", b"name=ipa"):
     assert gone not in html, gone
