@@ -293,6 +293,10 @@ assert 'function ifzGo(c){ifzAuto=1;go("ifizbox");ifzAuto=0;' in html, "the flag
 c.post("/installed", data={"name": "com.ryha.ifizbox"})
 card = (h := c.get("/").data.decode())[h.index("<h3 class=hdr>iFizBox</h3>"):h.index("<h3 class=hdr>Apps</h3>")]
 assert 'class="get done"' in card and ">INSTALLED</a>" in card and " go" not in card, "current: the grey INSTALLED"
+# F27: the card's hold sheet marks it too (Mark as Not Installed: the green INSTALL again; Mark as Installed: INSTALLED)
+f27 = lambda do: c.post("/installed/mark", data={"name": "com.ryha.ifizbox", "do": do, "csrf": A.mark_csrf(A.token_udid(c.get_cookie("device").value))}).status_code
+assert f27("forget") == 204 and '<a class="get go" data-app="com.ryha.ifizbox"' in (h := c.get("/").data.decode()) and ">INSTALL</a>" in h
+assert f27("installed") == 204 and '<a class="get done" data-app="com.ryha.ifizbox"' in c.get("/").data.decode()
 # tabs: Apps, iFizBox, Settings (no Feather, no More, no Changes, and no Files tab while there are no files: F14)
 assert re.findall(r"<a href=#(\w+)><svg", html) == ["apps", "ifizbox", "settings"] and "t-feather" not in html and "id=t-files" not in html and "t-changes" not in html
 (tmp / "signed" / "com.ryha.ifizbox.ipa").unlink()
@@ -495,6 +499,75 @@ assert '.querySelectorAll(".upn,.ub")' in html and 'x.classList.remove("upd")' i
 (tmp / "signed" / "Plain.ipa").unlink()
 # the page's script: the badge counts Home's update rows, and an install tap takes its row off the count
 assert "querySelectorAll(\"#t-apps .row.up\").length" in html and 'r.classList.remove("up")' in html
+# F27: hold an Apps row for an action sheet. Each mark lands in installed.json for this iPhone and changes the page: Plain has an update,
+# Demo is installed
+import json as _json
+me = A.token_udid(c.get_cookie("device").value)
+mk = re.search(r'<div class=mks id=mkSheet hidden data-csrf="(\w{32})"', html).group(1)
+assert mk == A.mark_csrf(me) and '<p id=mkH></p><div id=mkB></div><button type=button class=mkc onclick="mkClose()">Cancel</button>' in html
+mark = lambda cl, name, do, csrf=mk: cl.post("/installed/mark", data={"name": name, "do": do, "csrf": csrf}).status_code
+mine_now = lambda: _json.loads(A.INSTALLED.read_text()).get(me, {})
+signed_plain("1.1", "2"); assert badge(c.get("/").data.decode()) == (None, "1")
+assert mark(c, "Plain", "installed") == 204 and mine_now()["Plain"] == "1.1/2", "Mark as Updated records the current version"
+html = c.get("/").data.decode()
+assert badge(html) == (" hidden", "0") and "Update available" not in html and 'class="badge ub"' not in apps_tab(html)
+assert re.search(r'<a class="get done" data-arm=INSTALLED data-app="Plain"[^>]*>INSTALLED</a>', html), "the blue UPDATE is the grey INSTALLED"
+assert mark(c, "Plain", "forget") == 204 and "Plain" not in mine_now(), "Mark as Not Installed forgets it"
+html = c.get("/").data.decode()
+assert re.search(r'<a class="get" data-arm=GET data-app="Plain"[^>]*>GET</a>', html) and badge(html) == (" hidden", "0")
+assert mark(c, "Plain", "installed") == 204 and mine_now()["Plain"] == "1.1/2", "Mark as Installed records the current version"
+assert re.search(r'<a class="get done" data-arm=INSTALLED data-app="Plain"[^>]*>INSTALLED</a>', c.get("/").data.decode())
+signed_plain("1.2", "3"); html = c.get("/").data.decode()
+assert badge(html) == (None, "1") and 'data-arm=UPDATE data-app="Plain"' in html, "a newer build: an update again"
+assert mark(c, "Plain", "forget") == 204 and badge(c.get("/").data.decode()) == (" hidden", "0"), "forgetting an update takes it off the tab's count"
+before = A.INSTALLED.read_text()
+# refused: no session, no device, a bad csrf, another iPhone's csrf, an unregistered iPhone, a bad action or app
+assert mark(A.app.test_client(), "Plain", "installed") == 403
+guest = A.app.test_client(); guest.get("/?password=hunter2-but-longer")
+assert mark(guest, "Plain", "installed") == 403, "signed in, no registered iPhone"
+assert mark(c, "Plain", "installed", csrf="x" * 32) == 403 and mark(c, "Plain", "installed", csrf="") == 403
+other = A.app.test_client(); other.get("/?password=hunter2-but-longer"); other.set_cookie("device", A.device_token("00008130-BBBB"))
+assert mark(other, "Plain", "installed", csrf=A.mark_csrf("00008130-BBBB")) == 403, "not in the profile"
+real_udids = A.profile_udids
+A.profile_udids = lambda: real_udids() | {"00008130-BBBB"}
+try:
+    assert mark(other, "Plain", "installed") == 403, "this iPhone's csrf with another iPhone's token"
+    assert mark(c, "Plain", "installed", csrf=A.mark_csrf("00008130-BBBB")) == 403, "another iPhone's csrf with this one's token"
+    assert A.INSTALLED.read_text() == before
+    assert mark(other, "Plain", "installed", csrf=A.mark_csrf("00008130-BBBB")) == 204 and "Plain" not in mine_now(), "the other phone marks only its own"
+    other_html = other.get("/").data.decode()
+    assert re.search(r'id=mkSheet hidden data-csrf="' + A.mark_csrf("00008130-BBBB") + '"', other_html)
+finally:
+    A.profile_udids = real_udids
+before = A.INSTALLED.read_text()
+assert mark(c, "Plain", "delete") == 403 and mark(c, "../x", "installed") == 403 and mark(c, "Nope", "forget") == 403 and A.INSTALLED.read_text() == before
+assert "id=mkSheet" not in guest.get("/").data.decode(), "no sheet for an unregistered iPhone"
+(tmp / "signed" / "Plain.ipa").unlink()
+# the page's hold: half a second still, the row held (cell selection), the ending click eaten, the sheet's items by state, and a mark refreshes the lists
+assert "mkTm=setTimeout(()=>{mkTm=null;mkEat=1;r.classList.add(\"held\")" in html and "},500)},true)" in html
+assert "Math.hypot(e.clientX-mkXY[0],e.clientY-mkXY[1])>10)mkCancel()" in html and 'addEventListener("scroll",()=>{if(mkTm)mkCancel()}' in html
+assert 'addEventListener("click",e=>{if(mkEat){mkEat=0;e.preventDefault();e.stopImmediatePropagation()}},true)' in html
+assert "#t-apps .g .row.held,.dark #t-apps .g .row.held{background:var(--select)" in html and 'closest("#t-apps .g:not(.locked) .row")' in html
+assert 'fetch("/installed/mark",{method:"POST",body:new URLSearchParams({name:n,do:d,csrf:mkSheet.dataset.csrf})}).then(r=>{if(!r.ok)throw 0;return refreshIn()})' in html
+if shutil.which("node"):  # the sheet's items and the GET button's arming (F27 Also), in node with fake buttons
+    js = "\n".join(re.search(r"^function " + f + r"\(.*$", html, re.M).group(0) for f in ("morph", "disarm", "arm", "mkState", "mkItems"))
+    (tmp / "f27.js").write_text(js + """
+const marked=[];function mark(b){marked.push(b.dataset.app)}function setTimeout(){}
+function btn(arm,cls){let c=new Set(cls||[]);return {dataset:{arm,app:arm+"App"},textContent:arm,offsetWidth:40,style:{},classList:{contains:x=>c.has(x),add:x=>c.add(x),remove:x=>c.delete(x)}}}
+const document={querySelectorAll:()=>[]};const out={};
+for(const a of ["GET","INSTALLED","UPDATE"]){let b=btn(a,a=="INSTALLED"?["done"]:a=="UPDATE"?["upd"]:[]);let n=marked.length,r1=arm(b),l1=b.textContent,g1=b.classList.contains("go"),m1=marked.length-n;
+ let r2=r1?null:arm(b);out[a]=[r1,l1,g1,m1,r2,marked.length-n]}
+const row=(up,done)=>({classList:{contains:x=>x=="up"&&up},querySelector:s=>s==".get.done"&&done?{}:null});
+out.items=[mkItems(mkState(row(true,false))),mkItems(mkState(row(false,true))),mkItems(mkState(row(false,false)))];
+console.log(JSON.stringify(out))""")
+    p = subprocess.Popen(["node", str(tmp / "f27.js")], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)  # subprocess.run is zsign's stub
+    out, err = p.communicate()
+    assert p.returncode == 0, err
+    got = _json.loads(out)
+    assert got["GET"] == [False, "INSTALL", True, 0, True, 1], "GET arms as a green INSTALL, the second tap installs"
+    assert got["INSTALLED"] == [False, "REINSTALL", True, 0, True, 1], "an installed app arms as a green REINSTALL"
+    assert got["UPDATE"] == [True, "UPDATE", False, 1, None, 1], "UPDATE installs on its first tap, no confirm"
+    assert got["items"] == [[["Mark as Updated", "installed"], ["Mark as Not Installed", "forget"]], [["Mark as Not Installed", "forget"]], [["Mark as Installed", "installed"]]]
 # admin: separate password, CSRF, lockout; lists devices and disables one
 plain = A.app.test_client()
 assert plain.get("/admin").status_code == 302 and plain.post("/admin/device").status_code == 403
