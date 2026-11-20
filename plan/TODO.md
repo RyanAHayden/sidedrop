@@ -2,6 +2,7 @@
 
 ### Next
 
+- [ ] **D5** Docs: what the App ID needs for re-signed apps' notifications (user-confirmed 2026-11-20 with Unbound on the 18 Pro): the API capabilities aren't enough for apps with notification extensions; App Groups with groups assigned, Communication + Time Sensitive Notifications and the website-only capabilities, ticked on developer.apple.com; App ID changes invalidate the profile, remake it. Check: the repo's gate passes; docs read as current state. | files: docs/developer-account.md, docs/configuration.md, README.md
 ### Follow-ups
 
 - [~] **F32** (follow-up, low) Register step screenshots: capture Settings' Profile Downloaded row (under the name) and the Install Profile sheet with Install top-right, on a current-iOS iPhone, as static/reg1.jpg/reg2.jpg, and show them under the register steps and Help's Register iPhone Didn't Work like sdp1-3 (R1 changed the wording only) | files: app.py, static/**, test_app.py BLOCKED: BLOCKED: send two screenshots from your iOS 26/27 iPhone — Settings with the Profile Downloaded row under your name, and the Install Profile sheet (Install top-right) — and drop them in static/ as reg1.png/reg2.png; then crop, circle and wire them in like sdp1-3 (journal/2026-11-20-f32-register-shots)
