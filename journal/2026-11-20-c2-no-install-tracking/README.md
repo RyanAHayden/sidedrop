@@ -15,8 +15,8 @@
   Nothing else used the action-sheet CSS, so it's all gone. An install tap still brings the one-time Developer Mode alert through a
   small `tapped()`. The page-load `checkNow()` still runs; it no longer spins a badge.
 - **Settings/Help.** Removed the Update Alerts switch and its footer, the "Get Notified of Updates?" alert and all `push*` JS. Removed
-  the Help sentence and the Add to Home Screen footer clause about Update Alerts. The Theme preview's sample buttons show DOWNLOAD
-  (the blue file button) instead of UPDATE, and its badge is gone.
+  the Help sentence and the Add to Home Screen footer clause about Update Alerts. The Theme preview's sample UPDATE button and badge
+  are gone (GET and INSTALL stay).
 - **README.** The Apps bullet no longer promises update rows, a badge or alerts. The screenshot's alt text changed with it. The image
   `docs/img/apps.png` itself is not regenerated.
 - **Tests (`test_app.py`).** Removed the F22/F24 update-row tests, the F27/B18 hold-sheet tests (routes, CSRF, node checks of
@@ -33,6 +33,15 @@
   `apps-armed.png` (one GET tapped → INSTALL), `apps-after-press.png` (after a 1 s press on a row: no dialog, no held row). There were no
   page errors.
 
+## Spec review
+- Fixed: the C2 test's `"upd" not in html` would match any lowercase "update", so it now checks `.get.upd`/`get upd`. I had relabelled
+  the Theme preview's UPDATE to DOWNLOAD, which nobody asked for, so it's now just removed.
+- Kept: GET → INSTALL arming (the decision above). The grep still matches iFizBox's own copy and the pull-to-refresh `held` variable;
+  neither is install tracking. I kept `requirements.txt` (pywebpush is dead once push goes) and the README, Help and Add to Home
+  Screen text: each one described the removed feature. The iFizBox card's INSTALL is still checked as rendered, in the F25 test
+  (`<a class="get go" … onclick="return ifzGo(this)">INSTALL</a>`). The C2 test also checks the code string.
+- Filed: T1, for docs/readme_shots.py and docs/img/apps.png (see Not verified).
+
 ## Tried and failed
 - My first `git worktree add … main`, to compare the gate's stderr with main, failed because main is checked out in the main
   checkout. `--detach` worked, and I removed the worktree afterwards. On main the gate prints the same 3 `KeyError: 'Entitlements'`
@@ -45,5 +54,5 @@
   left them alone: deleting user data on start wasn't asked for. Home Screen apps that subscribed to push keep a registered
   service worker whose `/sw.js` now 404s. Browsers keep the old copy until an update check fails, and no pushes are sent. Nothing
   here could check this on a real device.
-- `docs/img/apps.png` in the README still shows the old UPDATE row and badge. Regenerating it needs the docs shot setup, which is
-  outside this task's files.
+- `docs/img/apps.png` in the README still shows the old UPDATE row and badge, and `docs/readme_shots.py` (which makes it) still
+  seeds `A.INSTALLED` and scrolls to `.row.up`, so it fails now. Both are outside this task's files: filed as T1 (after C2).

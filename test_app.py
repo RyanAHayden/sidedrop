@@ -513,7 +513,7 @@ for gone in ("installed_lock", "INSTALLED", "installed", "mark_csrf", "mark_inst
 signed_plain("1.1", "2"); html = c.get("/").data.decode(); t_apps = apps_tab(html)
 assert re.search(r'<a class=get data-arm=GET data-app="Plain" aria-label="Install Plain" href="itms-services://[^"]+" onclick="return arm\(this\)">GET</a>', t_apps)
 assert '<button type=button class=get data-app="Demo" aria-expanded=false onclick="steps(this)">GET</button>' in t_apps, "an app with files: GET unfolds its steps"
-for gone in ("UPDATE", "INSTALLED", "Update available", "class=badge", "class=upn", "row up", "upd", "mkSheet", "mkItems", "mkState", "/installed",
+for gone in ("UPDATE", "INSTALLED", "Update available", "class=badge", "class=upn", "row up", ".get.upd", "get upd", "mkSheet", "mkItems", "mkState", "/installed",
              "navR", "pushSw", "pushAsk", "Update Alerts", "vapid", "serviceWorker", "REINSTALL", ".held"):
     assert gone not in html, gone
 assert re.search(r'href=#apps><svg[^>]*>.*?</svg>Apps</a>', html), "the Apps tab has no count"

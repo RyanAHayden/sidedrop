@@ -2160,7 +2160,7 @@ def theme_preview():
     buttons, a group of rows (an icon and a value, a switch, a check, a subtitle) and its footer. Inert."""
     return ('<h3 class=hdr>Preview</h3><div class=tpv aria-hidden=true inert><header class=nav><span class="bar back">Back</span><h1>Preview</h1>'
             '<span class="bar r">Edit</span></header>' + theme_segmented("sample", [("a", "Details"), ("b", "Reviews"), ("c", "Related")], "a", small=True, label="Sample")
-            + '<div class=tpb><span class=get>GET</span><span class="get go">INSTALL</span><span class="get blue">DOWNLOAD</span></div>'
+            + '<div class=tpb><span class=get>GET</span><span class="get go">INSTALL</span></div>'
             '<h3 class=hdr>Sample</h3><div class=g>'
             f'<div class="row mrow">{row_icon("sources")}<div>Sources</div><span class=val>12</span></div>'
             f'<div class="row irow">{row_icon("notifications")}<div>Switch</div><label class=sw><input type=checkbox checked tabindex=-1><i></i><span class=k></span></label></div>'
