@@ -313,18 +313,11 @@ assert ".dark .get.go{color:#fff;border-color:#2f7a17}" in html and ".dark .get.
 assert html.index(".dark .get{") < html.index(".dark .get.go.is-pressed{"), "the pressed border comes after the ifzr rule and .dark .get"
 # B5: plain blue buttons outside forms (Copy Link) take the blue pressed look at one class of weight; dark grey buttons hold with --barpress
 # (iFizBox's --dk-btn-pressed), a rule that outranks .dark button.grey; a held mouse presses too, not through :active
-assert ":where(button:not(.grey,.act,.gbtn,.get,.tile,.bar,.ok,.mkc,.confin)).is-pressed{border-color:#1f3b67;background:linear-gradient(#5c7cb3," in html
+assert ":where(button:not(.grey,.act,.gbtn,.get,.tile,.bar,.ok,.confin)).is-pressed{border-color:#1f3b67;background:linear-gradient(#5c7cb3," in html
 assert ".dark button.grey.is-pressed{color:var(--text);border-color:var(--barpe);background:var(--barpress);" in html and ".dark button.grey{" in html
 assert 'addEventListener("pointerdown",e=>{if(e.pointerType!=="mouse"||e.button)return;' in html and 'addEventListener("pointerup",e=>{if(e.pointerType==="mouse")unpress()})' in html
 assert 'addEventListener("hashchange",()=>{if(ifzAuto&&cur=="ifizbox"){ifzAuto=0;ifzRun()}});' in html, "the page runs the install once, off the flag"
-assert 'function ifzGo(c){ifzAuto=1;go("ifizbox");ifzAuto=0;' in html, "the flag is set only for the card's tap"
-c.post("/installed", data={"name": "com.ryha.ifizbox"})
-card = (h := c.get("/").data.decode())[h.index("<h3 class=hdr>iFizBox</h3>"):h.index("<h3 class=hdr>Apps</h3>")]
-assert 'class="get done"' in card and ">INSTALLED</a>" in card and " go" not in card, "current: the grey INSTALLED"
-# F27: the card's hold sheet marks it too (Mark as Not Installed: the green INSTALL again; Mark as Installed: INSTALLED)
-f27 = lambda do: c.post("/installed/mark", data={"name": "com.ryha.ifizbox", "do": do, "csrf": A.mark_csrf(A.token_udid(c.get_cookie("device").value))}).status_code
-assert f27("forget") == 204 and '<a class="get go" data-app="com.ryha.ifizbox"' in (h := c.get("/").data.decode()) and ">INSTALL</a>" in h
-assert f27("installed") == 204 and '<a class="get done" data-app="com.ryha.ifizbox"' in c.get("/").data.decode()
+assert 'function ifzGo(c){ifzAuto=1;go("ifizbox");ifzAuto=0;return false}' in html, "the flag is set only for the card's tap; the card stays INSTALL (C2)"
 # tabs: Apps, iFizBox, Settings (no Feather, no More, no Changes, and no Files tab while there are no files: F14)
 assert re.findall(r"<a href=#(\w+)><svg", html) == ["apps", "ifizbox", "settings"] and "t-feather" not in html and "id=t-files" not in html and "t-changes" not in html
 (tmp / "signed" / "com.ryha.ifizbox.ipa").unlink()
@@ -373,8 +366,8 @@ assert "darkSw" not in html and "data-tk=" not in html and "Display" not in html
 settings_tab = html[html.index("id=t-settings"):]; settings_tab = settings_tab[:settings_tab.index("</section>")]
 ico = lambda name: str(A.row_icon(name))  # str: Markup + str would escape the str
 assert '<a class="row mrow" href=/theme data-push>' + ico("theme") + "<div>Theme</div><span class=val id=themeV>Classic</span></a>" in settings_tab
-assert ico("notifications") + "<div>Update Alerts</div>" in settings_tab
-# F26, the user's concept: the groups in order (This iPhone; Theme + Update Alerts; Add to Home Screen; Help), each footer under its group,
+assert "Update Alerts" not in settings_tab and "id=pushSw" not in settings_tab  # C2: no update alerts
+# F26, the user's concept: the groups in order (This iPhone; Theme; Add to Home Screen; Help), each footer under its group,
 # then Sign Out and the version line; no iFizBox row (the tab bar has it), no About, no 'iPhones used' (Manage > iPhones has it)
 assert re.findall(r'<div class="g[^"]*" id=(s\w+)>', settings_tab) == ["sThis", "sTheme", "sHome", "sHelp", "sAdmin"]
 # B19: a signed-in non-admin's way in to Admin Settings: an Admin Login row (after Help) that pushes /admin's password prompt
@@ -396,7 +389,7 @@ assert any("overflow-y:auto" in b for s, b in scr_rules), scr_rules
 for s, b in scr_rules:
     assert not re.search(r"overflow(-y)?:hidden|(?<![-\w])(max-)?height:|overscroll-behavior(-y)?:none|touch-action:none", b), (s, b)
 order = [settings_tab.index(s) for s in ("<div>Status</div>", "Every app on the Apps tab can install on this iPhone.</p>",
-                                         "<div>Theme</div>", "<div>Update Alerts</div>", "Tells you when an app you installed has a new version.</p>",
+                                         "<div>Theme</div>",
                                          '<a class="row mrow" href=/home-screen data-push>' + ico("homeScreen") + "<div>Add to Home Screen</div></a>",
                                          "Open SideDrop from your Home Screen like an app.</p>",
                                          '<a class="row mrow" href=/help data-push id=helpRow>' + ico("help") + "<div>Help</div></a>",
@@ -504,138 +497,40 @@ import io
 assert c.post("/sign", data={"url": "https://gh/t.ipa"}).status_code in (404, 405)
 (tmp / "signed" / "custom").mkdir(); (tmp / "signed" / "custom" / "0123abcd.ipa").write_bytes(b"x")
 A.drop_old_custom_signs(); assert not (tmp / "signed" / "custom").exists()
-# F22: Home's update rows. Installs are recorded per phone; a newer signed version then turns that app's row into an update
-# (UPDATE in place of GET, "Update available" beside the version) and the Apps tab's badge counts them
+# C2: SideDrop doesn't track installs or offer updates. Every Apps row offers GET (arming to INSTALL), whatever this iPhone did before;
+# no Update badge or row, no Apps tab count, no hold sheet, and the old routes are gone
 def apps_tab(h): return re.search(r"<section class=page id=t-apps .*?</section>", h, re.S).group(0)
-def badge(h): return re.search(r"<span class=badge id=badge( hidden)?>(\d+)</span>", h).groups()
-html = c.get("/").data.decode()
-assert "Update available" not in html and 'class="row up"' not in html and badge(html) == (" hidden", "0")
-assert re.search(r'href=#apps><svg[^>]*>.*?</svg>Apps<span class=badge id=badge hidden>0</span></a>', html), "the badge sits on the Apps tab"
-assert A.app.test_client().post("/installed", data={"name": "Demo"}).status_code == 403
-assert c.post("/installed", data={"name": "../x"}).status_code == 403
-assert c.post("/installed", data={"name": "Demo"}).status_code == 204 and "Update available" not in c.get("/").data.decode()
-html = c.get("/").data.decode()
-assert 'class="get done" data-app="Demo" aria-expanded=false onclick="steps(this)">INSTALLED<' in html and badge(html) == (" hidden", "0")
-with zipfile.ZipFile(tmp / "apps" / "Demo.ipa", "w") as z:
-    z.writestr("Payload/Demo.app/Info.plist", plistlib.dumps({"CFBundleIdentifier": "com.me.demo", "CFBundleVersion": "8", "CFBundleShortVersionString": "1.3", "CFBundleName": "Demo"}))
-os.utime(tmp / "apps" / "Demo.ipa", (time.time() + 5, time.time() + 5))
-html = c.get("/").data.decode()
-t_apps = apps_tab(html)
-assert re.search(r'<div class="row up">.*?Demo<small>Version 1\.3<span class=upn> · Update available</span>', t_apps, re.S), "the row says so, with the new version"
-assert 'data-app="Demo" aria-expanded=false onclick="steps(this)">UPDATE<' in t_apps, "UPDATE in place of GET"
-assert t_apps.count('class="row up"') == 1 and badge(html) == (None, "1"), "the Apps tab's badge counts it"
-assert "Update available" not in A.app.test_client().get("/?password=hunter2-but-longer", follow_redirects=True).data.decode(), "another phone, which never installed Demo, has no update"
-assert c.post("/installed", data={"name": "Demo"}).status_code == 204
-html = c.get("/").data.decode()
-assert "Update available" not in html and badge(html) == (" hidden", "0") and ">INSTALLED<" in apps_tab(html), "installed: the update is gone"
-# an update to an app that doesn't bring files: its row's link says UPDATE, and arming it still installs (data-arm keeps UPDATE)
+import json as _json
 def signed_plain(short, build):  # written as signed (the stubbed zsign always outputs Demo)
     with zipfile.ZipFile(tmp / "signed" / "Plain.ipa", "w") as z:
         z.writestr("Payload/Plain.app/Info.plist", plistlib.dumps({"CFBundleIdentifier": "com.me.plain", "CFBundleVersion": build, "CFBundleShortVersionString": short, "CFBundleName": "Plain"}))
-signed_plain("1.0", "1"); assert c.post("/installed", data={"name": "Plain"}).status_code == 204
-signed_plain("1.1", "2")
-html = c.get("/").data.decode()
-assert re.search(r'<a class="get upd" data-arm=UPDATE data-app="Plain" aria-label="Install Plain" href="itms-services://[^"]+" onclick="return arm\(this\)">UPDATE</a>', html)
-assert "Plain<small>Version 1.1<span class=upn> · Update available</span>" in html and badge(html) == (None, "1")
-# F24: the update row stands out: the red badge on its icon and the blue UPDATE button; an up-to-date row has neither
-def app_row(h, name): return re.search(r'<div class="row[^"]*">(?:(?!<div class="row).)*?data-app="' + name + '".*?</div>', h, re.S).group(0)
-up_row = app_row(apps_tab(html), "Plain")
-assert up_row.startswith('<div class="row up">') and '<i class="badge ub" aria-hidden=true></i>' in up_row and 'class="get upd"' in up_row
-assert apps_tab(html).count('class="badge ub"') == 1 and apps_tab(html).count(' upd"') == 1, "only the update row"
-ok_row = app_row(apps_tab(html), "Demo")
-assert "badge" not in ok_row and "upd" not in ok_row and 'class="get done"' in ok_row
-assert ".get.upd:not(.go):not(.done):not([aria-expanded=true]){color:#fff" in html and "linear-gradient(#79a1f3,#3b71e1 49%,#215fdd 51%,#2361dd);background-origin:border-box" in html
-assert ".get.upd:not(.go):not(.done):not([aria-expanded=true]).is-pressed{background:linear-gradient(#5f86d6," in html, "held, a darker blue"
-assert '.querySelectorAll(".upn,.ub")' in html and 'x.classList.remove("upd")' in html, "an install tap takes the badge and the blue off"
-(tmp / "signed" / "Plain.ipa").unlink()
-# the page's script: the badge counts Home's update rows, and an install tap takes its row off the count
-assert "querySelectorAll(\"#t-apps .row.up\").length" in html and 'r.classList.remove("up")' in html
-# F27: hold an Apps row for an action sheet. Each mark lands in installed.json for this iPhone and changes the page: Plain has an update,
-# Demo is installed
-import json as _json
-me = A.token_udid(c.get_cookie("device").value)
-mk = re.search(r'<div class=mks id=mkSheet hidden data-csrf="(\w{32})"', html).group(1)
-assert mk == A.mark_csrf(me) and '<p id=mkH></p><div id=mkB></div><button type=button class=mkc onclick="mkClose()">Cancel</button>' in html
-# B18: iFizBox's action sheet (its packages.css .action-sheet): a dim layer of its own, the UIAlertSheet panel, 44pt buttons, and an .out that slides it down
-assert 'data-csrf="' + mk + '"><div class=mkd onclick="mkClose()"></div><div class=mkp role=dialog' in html
-assert "linear-gradient(rgba(172,177,185,.84) 1.5px,rgba(142,148,158,.84) 12px,rgba(107,113,123,.84) 26px,rgba(92,98,109,.84) 33px)" in html
-assert "background:linear-gradient(#fff,#fafafa 7%,#ebebec 23%,#d9d9db 38%,#c9cacc 54%,#c2c3c5 69%" in html and ".mkp button{display:block;width:100%;height:44px;" in html
-assert ".mks.out .mkp{animation:mkdown .25s" in html and "@keyframes mkdown{to{transform:translateY(100%)}}" in html and ".mks.out .mkd{animation:mkfade .25s" in html
-assert ".dark .mkp{background:linear-gradient(rgba(35,35,35,.89)" in html, "the Black style in dark themes"
-mark = lambda cl, name, do, csrf=mk: cl.post("/installed/mark", data={"name": name, "do": do, "csrf": csrf}).status_code
-mine_now = lambda: _json.loads(A.INSTALLED.read_text()).get(me, {})
-signed_plain("1.1", "2"); assert badge(c.get("/").data.decode()) == (None, "1")
-assert mark(c, "Plain", "installed") == 204 and mine_now()["Plain"] == "1.1/2", "Mark as Updated records the current version"
-html = c.get("/").data.decode()
-assert badge(html) == (" hidden", "0") and "Update available" not in html and 'class="badge ub"' not in apps_tab(html)
-assert re.search(r'<a class="get done" data-arm=INSTALLED data-app="Plain"[^>]*>INSTALLED</a>', html), "the blue UPDATE is the grey INSTALLED"
-assert mark(c, "Plain", "forget") == 204 and "Plain" not in mine_now(), "Mark as Not Installed forgets it"
-html = c.get("/").data.decode()
-assert re.search(r'<a class="get" data-arm=GET data-app="Plain"[^>]*>GET</a>', html) and badge(html) == (" hidden", "0")
-assert mark(c, "Plain", "installed") == 204 and mine_now()["Plain"] == "1.1/2", "Mark as Installed records the current version"
-assert re.search(r'<a class="get done" data-arm=INSTALLED data-app="Plain"[^>]*>INSTALLED</a>', c.get("/").data.decode())
-signed_plain("1.2", "3"); html = c.get("/").data.decode()
-assert badge(html) == (None, "1") and 'data-arm=UPDATE data-app="Plain"' in html, "a newer build: an update again"
-assert mark(c, "Plain", "forget") == 204 and badge(c.get("/").data.decode()) == (" hidden", "0"), "forgetting an update takes it off the tab's count"
-before = A.INSTALLED.read_text()
-# refused: no session, no device, a bad csrf, another iPhone's csrf, an unregistered iPhone, a bad action or app
-assert mark(A.app.test_client(), "Plain", "installed") == 403
-guest = A.app.test_client(); guest.get("/?password=hunter2-but-longer")
-assert mark(guest, "Plain", "installed") == 403, "signed in, no registered iPhone"
-assert mark(c, "Plain", "installed", csrf="x" * 32) == 403 and mark(c, "Plain", "installed", csrf="") == 403
-other = A.app.test_client(); other.get("/?password=hunter2-but-longer"); other.set_cookie("device", A.device_token("00008130-BBBB"))
-assert mark(other, "Plain", "installed", csrf=A.mark_csrf("00008130-BBBB")) == 403, "not in the profile"
-real_udids = A.profile_udids
-A.profile_udids = lambda: real_udids() | {"00008130-BBBB"}
-try:
-    assert mark(other, "Plain", "installed") == 403, "this iPhone's csrf with another iPhone's token"
-    assert mark(c, "Plain", "installed", csrf=A.mark_csrf("00008130-BBBB")) == 403, "another iPhone's csrf with this one's token"
-    assert A.INSTALLED.read_text() == before
-    assert mark(other, "Plain", "installed", csrf=A.mark_csrf("00008130-BBBB")) == 204 and "Plain" not in mine_now(), "the other phone marks only its own"
-    other_html = other.get("/").data.decode()
-    assert re.search(r'id=mkSheet hidden data-csrf="' + A.mark_csrf("00008130-BBBB") + '"', other_html)
-finally:
-    A.profile_udids = real_udids
-before = A.INSTALLED.read_text()
-assert mark(c, "Plain", "delete") == 403 and mark(c, "../x", "installed") == 403 and mark(c, "Nope", "forget") == 403 and A.INSTALLED.read_text() == before
-assert "id=mkSheet" not in guest.get("/").data.decode(), "no sheet for an unregistered iPhone"
-(tmp / "signed" / "Plain.ipa").unlink()
-# the page's hold: half a second still, the row held (cell selection), the ending click eaten, the sheet's items by state, and a mark refreshes the lists
-assert "mkTm=setTimeout(()=>{mkTm=null;mkEat=1;r.classList.add(\"held\")" in html and "},500)},true)" in html
-assert "Math.hypot(e.clientX-mkXY[0],e.clientY-mkXY[1])>10)mkCancel()" in html and 'addEventListener("scroll",()=>{if(mkTm)mkCancel()}' in html
-assert 'addEventListener("click",e=>{if(mkEat){mkEat=0;e.preventDefault();e.stopImmediatePropagation()}},true)' in html
-assert "#t-apps .g .row.held,.dark #t-apps .g .row.held{background:var(--select)" in html and 'closest("#t-apps .g:not(.locked) .row")' in html
-assert 'fetch("/installed/mark",{method:"POST",body:new URLSearchParams({name:n,do:d,csrf:mkSheet.dataset.csrf})}).then(r=>{if(!r.ok)throw 0;return refreshIn()})' in html
-if shutil.which("node"):  # the sheet's items and the GET button's arming (F27 Also), in node with fake buttons
-    js = "\n".join(re.search(r"^function " + f + r"\(.*$", html, re.M).group(0) for f in ("morph", "disarm", "arm", "mkState", "mkItems"))
-    (tmp / "f27.js").write_text(js + """
-const marked=[];function mark(b){marked.push(b.dataset.app)}function setTimeout(){}
-function btn(arm,cls){let c=new Set(cls||[]);return {dataset:{arm,app:arm+"App"},textContent:arm,offsetWidth:40,style:{},classList:{contains:x=>c.has(x),add:x=>c.add(x),remove:x=>c.delete(x)}}}
-const document={querySelectorAll:()=>[]};const out={};
-for(const a of ["GET","INSTALLED","UPDATE"]){let b=btn(a,a=="INSTALLED"?["done"]:a=="UPDATE"?["upd"]:[]);let n=marked.length,r1=arm(b),l1=b.textContent,g1=b.classList.contains("go"),m1=marked.length-n;
- let r2=r1?null:arm(b);out[a]=[r1,l1,g1,m1,r2,marked.length-n]}
-const row=(up,done)=>({classList:{contains:x=>x=="up"&&up},querySelector:s=>s==".get.done"&&done?{}:null});
-out.items=[mkItems(mkState(row(true,false))),mkItems(mkState(row(false,true))),mkItems(mkState(row(false,false)))];
-console.log(JSON.stringify(out))""")
-    p = subprocess.Popen(["node", str(tmp / "f27.js")], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)  # subprocess.run is zsign's stub
+signed_plain("1.0", "1")
+for route in ("/installed", "/installed/mark", "/push"):
+    assert c.post(route, data={"name": "Plain", "do": "installed"}).status_code == 404, route
+assert c.get("/sw.js").status_code == 404
+for gone in ("installed_lock", "INSTALLED", "installed", "mark_csrf", "mark_installed", "mark_app", "push_subscribe", "notify_upgrades", "pending",
+             "signed_versions", "vapid_public", "PUSH", "VAPID", "resign_and_notify", "service_worker"):
+    assert not hasattr(A, gone), gone
+signed_plain("1.1", "2"); html = c.get("/").data.decode(); t_apps = apps_tab(html)
+assert re.search(r'<a class=get data-arm=GET data-app="Plain" aria-label="Install Plain" href="itms-services://[^"]+" onclick="return arm\(this\)">GET</a>', t_apps)
+assert '<button type=button class=get data-app="Demo" aria-expanded=false onclick="steps(this)">GET</button>' in t_apps, "an app with files: GET unfolds its steps"
+for gone in ("UPDATE", "INSTALLED", "Update available", "class=badge", "class=upn", "row up", ".get.upd", "get upd", "mkSheet", "mkItems", "mkState", "/installed",
+             "navR", "pushSw", "pushAsk", "Update Alerts", "vapid", "serviceWorker", "REINSTALL", ".held"):
+    assert gone not in html, gone
+assert re.search(r'href=#apps><svg[^>]*>.*?</svg>Apps</a>', html), "the Apps tab has no count"
+assert 'function arm(b){if(b.classList.contains("go")){tapped();' in html and "function tapped(){setTimeout(devMaybe,1500)}" in html
+if shutil.which("node"):  # the GET button's arming (F27 Also), in node with a fake button: GET arms as a green INSTALL, the second tap installs
+    js = "\n".join(re.search(r"^function " + f + r"\(.*$", html, re.M).group(0) for f in ("morph", "disarm", "arm"))
+    (tmp / "c2.js").write_text(js + """
+let taps=0;function tapped(){taps++}function setTimeout(){}
+const c=new Set(),b={dataset:{arm:"GET",app:"Plain"},textContent:"GET",offsetWidth:40,style:{},classList:{contains:x=>c.has(x),add:x=>c.add(x),remove:x=>c.delete(x)}};
+const document={querySelectorAll:()=>[]};const r1=arm(b),l1=b.textContent,g1=c.has("go"),t1=taps,r2=arm(b);
+console.log(JSON.stringify([r1,l1,g1,t1,r2,taps]))""")
+    p = subprocess.Popen(["node", str(tmp / "c2.js")], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)  # subprocess.run is zsign's stub
     out, err = p.communicate()
     assert p.returncode == 0, err
-    got = _json.loads(out)
-    assert got["GET"] == [False, "INSTALL", True, 0, True, 1], "GET arms as a green INSTALL, the second tap installs"
-    assert got["INSTALLED"] == [False, "REINSTALL", True, 0, True, 1], "an installed app arms as a green REINSTALL"
-    assert got["UPDATE"] == [True, "UPDATE", False, 1, None, 1], "UPDATE installs on its first tap, no confirm"
-    assert got["items"] == [[["Mark as Updated", "installed"], ["Mark as Not Installed", "forget"]], [["Mark as Not Installed", "forget"]], [["Mark as Installed", "installed"]]]
-    # B18: closing slides the sheet down first: .out at once, hidden only after the 250ms slide, the row let go at once, a second close a no-op
-    js = re.search(r"^let mkOut=0;\nfunction mkClose\(\)[^\n]*\n[^\n]*$", html, re.M).group(0)
-    (tmp / "b18.js").write_text("""let timers=[];function setTimeout(f,ms){timers.push([f,ms]);return timers.length}function clearTimeout(){}
-const cls=new Set(),held=new Set(["held"]);const mkSheet={hidden:false,classList:{contains:x=>cls.has(x),add:x=>cls.add(x),remove:x=>cls.delete(x)}};
-let mkRow={classList:{remove:x=>held.delete(x)}};""" + js + """
-mkClose();const mid=[mkSheet.hidden,cls.has("out"),held.size,timers.length,timers[0]&&timers[0][1]];mkClose();const again=timers.length;
-timers[0][0]();console.log(JSON.stringify({mid,again,end:[mkSheet.hidden,cls.has("out")]}))""")
-    p = subprocess.Popen(["node", str(tmp / "b18.js")], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    out, err = p.communicate()
-    assert p.returncode == 0, err
-    assert _json.loads(out) == {"mid": [False, True, 0, 1, 250], "again": 1, "end": [True, False]}, out
+    assert _json.loads(out) == [False, "INSTALL", True, 0, True, 1], out
+(tmp / "signed" / "Plain.ipa").unlink()
 # admin: separate password, CSRF, lockout; lists devices and disables one
 plain = A.app.test_client()
 assert plain.get("/admin").status_code == 302 and plain.post("/admin/device").status_code == 403
@@ -924,30 +819,10 @@ fresh = A.app.test_client(); fresh.post("/login", data={"password": "hunter2-but
 assert b"Setup Complete" in fresh.get(e).data and b"Setup Complete" not in fresh.get("/").data
 assert b"Setup Complete" not in fresh.get(e).data, "a Home Screen icon saved on /?enrolled= shows it only the first time"
 assert b"id=firstRun" not in fresh.get("/").data, "the splash is remembered for the phone, so the Home Screen app skips it too"
-# web push: subscribe per phone; upgrades already waiting count as told; one push per new version; 410 drops the subscription
+# the Home Screen app's manifest (C2: no web push any more, so no service worker)
 import json
-from pywebpush import WebPushException
-sent = []
-A.webpush = lambda sub, data, **kw: sent.append((sub["endpoint"], json.loads(data)))
-assert len(A.vapid_public()) == 87 and A.vapid_public() in c.get("/").data.decode()
-assert c.get("/sw.js").status_code == 200 and c.get("/manifest.webmanifest").json["display"] == "standalone"
+assert c.get("/manifest.webmanifest").json["display"] == "standalone"
 mf = c.get("/manifest.webmanifest").json; assert (mf["name"], mf["short_name"]) == ("SideDrop", "SideDrop") and "sideload apps" in mf["description"]
-sub = {"endpoint": "https://push.example/1", "keys": {"p256dh": "x", "auth": "y"}}
-assert A.app.test_client().post("/push", json=sub).status_code == 403
-assert c.post("/push", json={"endpoint": "http://x", "keys": {}}).status_code == 400
-assert c.post("/push", json=sub).status_code == 204
-A.notify_upgrades(); assert sent == []
-def release(short, build):
-    with zipfile.ZipFile(tmp / "apps" / "Demo.ipa", "w") as z:
-        z.writestr("Payload/Demo.app/Info.plist", plistlib.dumps({"CFBundleIdentifier": "com.me.demo", "CFBundleVersion": build, "CFBundleShortVersionString": short, "CFBundleName": "Demo"}))
-    os.utime(tmp / "apps" / "Demo.ipa", (time.time() + 10, time.time() + 10))
-    A.resign(force=True)
-release("1.4", "9"); A.notify_upgrades(); A.notify_upgrades()
-assert sent == [("https://push.example/1", {"title": "Update Available", "body": "Demo 1.4 is available.", "url": "/#apps"})], sent  # an Update Alert opens Home's Apps tab
-def gone(*a, **k): raise WebPushException("gone", response=type("R", (), {"status_code": 410})())
-A.webpush = gone
-release("1.5", "10"); A.notify_upgrades()
-assert A.load_json(A.PUSH) == {}
 
 # first run: no PASSWORD/ADMIN_PASSWORD in .env -> default password -> setup splash -> new passwords work, default refused
 import importlib.util, io, sys

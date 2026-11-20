@@ -7,9 +7,7 @@ from urllib.parse import quote
 import jwt, requests
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import pkcs7, pkcs12
-from pywebpush import WebPushException, webpush
 from flask import Flask, abort, make_response, redirect, render_template_string, request, send_from_directory, session, url_for
 
 DATA = Path(os.environ.get("DATA", "/data"))
@@ -61,9 +59,7 @@ app.secret_key = SECRET
 app.config.update(SESSION_COOKIE_SECURE=PUBLIC_URL.startswith("https"), SESSION_COOKIE_HTTPONLY=True,
                   SESSION_COOKIE_SAMESITE="Lax", PERMANENT_SESSION_LIFETIME=10 * 365 * 86400)
 lock = threading.Lock()  # ponytail: one global lock for ASC + signing, fine for a handful of friends
-INSTALLED, installed_lock = DATA / "installed.json", threading.Lock()  # {udid: {app: "short/build"}} from INSTALL taps, for Home's update rows
-PUSH, push_lock = DATA / "push.json", threading.Lock()  # {endpoint: {sub, udid, sent: {app: "short/build"}}} web push subscriptions
-VAPID = DATA / "vapid.pem"  # web push signing key, made on first use
+seen_lock = threading.Lock()  # SEEN and FIRST_RUN writes
 SEEN = DATA / "seen.json"  # {udid: unix time} last page load per registered iPhone, for the admin page
 
 
@@ -80,11 +76,8 @@ def save_json(path, data):
     tmp.replace(path)
 
 
-installed = lambda: load_json(INSTALLED)
-
-
 def touch_seen(udid):
-    with installed_lock:
+    with seen_lock:
         seen = load_json(SEEN)
         if time.time() - seen.get(udid, 0) > 3600:  # ponytail: hourly granularity keeps this to one write an hour per phone
             seen[udid] = int(time.time())
@@ -418,59 +411,12 @@ def sync_source(url, ids, third):
         marker.write_text(v["version"])
 
 
-def vapid_public():
-    """Base64url public key the browser subscribes with; the private half signs each push."""
-    if not VAPID.exists():
-        VAPID.write_bytes(ec.generate_private_key(ec.SECP256R1()).private_bytes(
-            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
-    pub = serialization.load_pem_private_key(VAPID.read_bytes(), None).public_key()
-    return base64.urlsafe_b64encode(pub.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)).rstrip(b"=").decode()
-
-
-def pending(udid, vers):
-    """Apps this phone installed that now have a newer signed version: {name: vkey}."""
-    mine = installed().get(udid, {})
-    return {n: vers[n]["vkey"] for n in mine if n in vers and mine[n] != vers[n]["vkey"]}
-
-
-def signed_versions():
-    vers = {p.stem: ipa_info(p) for p in SIGNED.glob("*.ipa")} if SIGNED.exists() else {}
-    for n, i in vers.items():
-        third = APPS / f".{n}.third"
-        i["vkey"], i["title"] = f"{i['short']}/{i['version']}", (third.read_text().strip() if third.exists() else "") or i["title"]
-    return vers
-
-
-def notify_upgrades():
-    """One notification per phone for upgrades it hasn't been told about yet; dead subscriptions are dropped."""
-    with push_lock:
-        subs, vers = load_json(PUSH), signed_versions()
-        for ep, s in list(subs.items()):
-            new = {n: v for n, v in pending(s["udid"], vers).items() if s["sent"].get(n) != v}
-            if not new:
-                continue
-            names = [vers[n]["title"] for n in new]
-            body = f"{names[0]} {vers[next(iter(new))]['short']} is available." if len(new) == 1 else f"New versions of {', '.join(names)}."
-            try:
-                webpush(s["sub"], json.dumps({"title": "Update Available" if len(new) == 1 else f"{len(new)} Updates Available", "body": body, "url": "/#apps"}),
-                        vapid_private_key=str(VAPID), vapid_claims={"sub": PUBLIC_URL}, timeout=10)
-            except WebPushException as e:
-                if e.response is not None and e.response.status_code in (404, 410):  # unsubscribed or app removed
-                    del subs[ep]
-                else:
-                    print("push failed:", e, flush=True)
-                continue
-            s["sent"].update(new)
-        save_json(PUSH, subs)
-
-
-def resign_and_notify():
+def resign_logged():
     try:
         with lock:
             resign()
-        notify_upgrades()
     except Exception as e:
-        print("resign/notify failed:", e, flush=True)
+        print("resign failed:", e, flush=True)
 
 
 sync_lock, last_sync = threading.Lock(), [0.0]
@@ -492,7 +438,7 @@ def sync_if_stale(max_age):
 def sync_loop():
     while True:
         sync_if_stale(0)
-        resign_and_notify()  # so phones hear about a release without anyone opening the page first
+        resign_logged()  # a release is signed without anyone opening the page first
         time.sleep(3600)
 
 
@@ -749,7 +695,7 @@ details>summary:has(>.rico){justify-content:flex-start;padding-left:7px;gap:11px
 .tpv .nav.nav{position:relative;z-index:0;  /* .nav.nav: over .layer .nav's absolute, which comes later in the page */padding:0 7px;height:44px;box-sizing:border-box;
  background:linear-gradient(var(--navedge),var(--navedge)) bottom/100% 1px no-repeat,linear-gradient(var(--navhi),var(--navhi)) top/100% 1px no-repeat,var(--navbg)}
 .tpv .nav h1{max-width:none} .tpv .nav .bar{display:block}
-.tpv .seg{margin:10px} .tpv .tpb{display:flex;align-items:center;gap:10px;padding:0 10px} .tpv .tpb .badge{position:relative;top:0;left:0}
+.tpv .seg{margin:10px} .tpv .tpb{display:flex;align-items:center;gap:10px;padding:0 10px}
 .tpv>.g{margin:0 10px} .tpv>.hdr{margin-top:14px} .tpv>.ftr{margin-bottom:12px}"""
 
 PAGE = """<!doctype html><meta charset=utf-8><meta name=build content=%BUILD%><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
@@ -813,7 +759,7 @@ a,img{-webkit-user-drag:none}  /* iFizBox's B24: holding a link row or an image 
 .sw.is-pressed .k{background:linear-gradient(#bcbcbc,#e6e6e6)} .dark .sw.is-pressed .k{background:var(--swheld)}
 /* B5: plain blue action buttons outside a form (Copy Link) hold like the form ones (PurchaseButtonBluePressed). :where keeps it at one class, so
    the controls with their own looks (segments, alerts, bars, tiles, GET) still win; dark themes keep the blue, as iFizBox's do */
-:where(button:not(.grey,.act,.gbtn,.get,.tile,.bar,.ok,.mkc,.confin)).is-pressed{border-color:#1f3b67;background:linear-gradient(#5c7cb3,#2c569f 50%,#1e4997 51%,#2c56a4);box-shadow:none}
+:where(button:not(.grey,.act,.gbtn,.get,.tile,.bar,.ok,.confin)).is-pressed{border-color:#1f3b67;background:linear-gradient(#5c7cb3,#2c569f 50%,#1e4997 51%,#2c56a4);box-shadow:none}
 /* B5: dark grey buttons (Share, Make New Link): .dark button.grey below outranked the light pressed look, so a held one never changed;
    iFizBox's dark button press, --dk-btn-pressed, which is each dark palette's --barpress */
 .dark a.b.grey.is-pressed,.dark label.b.grey.is-pressed,.dark button.grey.is-pressed{color:var(--text);border-color:var(--barpe);background:var(--barpress);background-origin:border-box;box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
@@ -1000,10 +946,6 @@ If they sent you an invite link, open it again: it signs you in with no password
         a["title"] = (APPS / f".{a['name']}.third").read_text().strip() or a["title"]
     for a in apps:
         a["icon"] = (APPS / f".{a['name']}.icon").read_text().strip() if (APPS / f".{a['name']}.icon").exists() else ""
-    for a in apps:
-        a["vkey"] = f"{a['short']}/{a['version']}"
-    mine = installed().get(token_udid(tok), {}) if enrolled else {}
-    updates = [a for a in apps if a["name"] in mine and mine[a["name"]] != a["vkey"]]  # Home's UPDATE rows; their count is the Apps tab's badge
     ifizbox = [a for a in apps if IFIZBOX_ID in (a["id"], a["name"])]  # its own category, on top
     apps = [a for a in apps if a not in third and a not in ifizbox]
     ifz = ifizbox[0] if ifizbox else None
@@ -1036,21 +978,13 @@ If they sent you an invite link, open it again: it signs you in with no password
 .get.blue{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-color:#2b4f8a;background:var(--bluebtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
 .get[aria-expanded=true]{color:#7d8794;background:linear-gradient(#c9ced5,#dfe3e8);box-shadow:inset 0 1px 3px rgba(0,0,0,.3)}
 .get.sgn{cursor:default;color:#8e959e;font-weight:400}  /* B17: re-signing for a new iPhone: no INSTALL of the old build */
-.locked .get{min-width:44px}.get.done:not(.go){color:#8e959e}  /* iOS 6 App Store: INSTALLED is grey; tapping still reinstalls */
-/* UPDATE stands out (F24): iFizBox's "Button (Gloss Blue)" (its Done: sources.css .bar-button.done), the same in both themes; held, its
-   darker pressed gloss. border-box so the gradient's light top doesn't tile into the bottom border. Tapped it still arms to the green
-   INSTALL (the :before layer paints over this background), and once installed it is the grey INSTALLED again. */
-.get.upd:not(.go):not(.done):not([aria-expanded=true]){color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.4);border-color:#1f3f86;border-top-color:#30363e;
- background:linear-gradient(#79a1f3,#3b71e1 49%,#215fdd 51%,#2361dd);background-origin:border-box;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 1px 1px rgba(0,0,0,.2)}
-.get.upd:not(.go):not(.done):not([aria-expanded=true]).is-pressed{background:linear-gradient(#5f86d6,#2a5bc0 49%,#164bb8 51%,#184db9);background-origin:border-box;box-shadow:none}
-/* a row with an update: the iOS 6 red badge (the Apps tab's, without a number) on its icon's top-right corner; gone with .up once installed */
+.locked .get{min-width:44px}
 /* Home's iFizBox card (F25): icon, name and its green INSTALL on top, the "Recommended" line under the whole row: in Helvetica Neue 13px it is
    323px, which fits the row's 333px at 375pt but not the 273px beside the icon; narrower screens cut it with an ellipsis, still one line */
 .ifzr{display:grid;grid-template-columns:50px minmax(0,1fr) auto;column-gap:10px;row-gap:6px;align-items:center}
 .ifzr>div:not(.ico){grid-column:2;grid-row:1} .ifzr>.get{grid-column:3;grid-row:1}
 .ifzr>.rec{grid-column:1/4;grid-row:2;font-size:13px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .ifv{margin-left:6px;font-size:14px;color:var(--sub)}
 .dark .ifzr .get.go{color:#fff;border-color:#2f7a17}  /* .dark .get comes later and would grey the green button's label */
-.row.up{position:relative} .ub{display:none} .row.up .ub{display:block;position:absolute;left:47px;top:calc(50% - 32px);width:20px;min-width:0;padding:0;pointer-events:none}
 .steps{background:linear-gradient(#f3f5f8,#fff);display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s cubic-bezier(.25,.1,.25,1)} .steps.open{grid-template-rows:1fr}
 .steps>div{overflow:hidden;min-height:0} .steps .step:first-child{box-shadow:inset 0 1px var(--sep)}  /* real-height animation; max-height snapped */
 .step{display:flex;align-items:center;gap:10px;padding:8px 10px 8px 20px} .step+.step{border-top:1px dashed #d4d9df}
@@ -1121,13 +1055,6 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .dark .tile{background:var(--rowbg);color:var(--text)} .dark .pair .tile{border-color:var(--line);box-shadow:0 1px 0 var(--inset)} .dark .split .tile+.tile{border-left-color:var(--div)}
 .dark .sw i{border-color:var(--baredge);background:var(--swtrack);box-shadow:inset 0 1px 3px rgba(0,0,0,.8)} .dark .sw i:after{color:var(--swoff)}
 .dark .sw i:before{background:var(--swon)} .dark .sw .k{background:var(--swknob);border-color:var(--baredge)}
-/* iOS 5 red count badge on the Apps tab: how many of this iPhone's apps have an update */
-.badge{position:absolute;top:-2px;left:calc(50% + 5px);min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:10px;border:2px solid #fff;color:#fff;letter-spacing:-.02em;
- font:700 13px/16px "Helvetica Neue",Helvetica,sans-serif;text-align:center;background:linear-gradient(#f7b3b7,#e92d35 48.8%,#e70f19 50.5%,#c50103);box-shadow:0 2px 2.5px rgba(0,0,0,.6)}
-/* Cydia: while it checks for updates the badge spins instead of counting. As iFizBox's: the white UIActivityIndicatorView (spokes drawn from the
-   4S's frames) inside the 2px ring, turning a spoke at a time */
-.badge.busy{font-size:0;padding:0;width:20px} .badge.busy:after{content:"";position:absolute;inset:0;animation:spin .96s linear infinite;
- background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cg stroke='%23fff' stroke-width='2' stroke-linecap='round'%3E%3Cline x1='10' y1='1' x2='10' y2='4' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(30 10 10)' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(60 10 10)' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(90 10 10)' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(120 10 10)' opacity='0.369'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(150 10 10)' opacity='0.463'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(180 10 10)' opacity='0.561'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(210 10 10)' opacity='0.659'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(240 10 10)' opacity='0.753'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(270 10 10)' opacity='0.851'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(300 10 10)' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(330 10 10)' opacity='0.271'/%3E%3C/g%3E%3C/svg%3E") center/16px no-repeat}
 /* Cydia tab bar: 3pt + 44pt tabs + 2pt, then the home indicator's area. --tabh, in CSS (not measured once by script, before iOS has applied
    the safe area), so the reload bar and pushed pages always sit right on top of it */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:8;height:var(--tabh);box-sizing:border-box;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;  /* one column a tab: 3, or 4 with Files */
@@ -1150,38 +1077,6 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .shade{position:fixed;inset:0;z-index:6;background:#000;opacity:0;pointer-events:none}
 .ghost{position:absolute;margin:0;pointer-events:none;z-index:1}
 .tabs a[aria-current] svg{fill:url(#tabglow);filter:drop-shadow(0 2.5px 2.5px rgba(0,0,0,.4))}
-/* F27: hold an Apps row for its options. The held row takes the cell selection, as a held UITableViewCell; the sheet is iOS 6's UIActionSheet
-   (default style): a smoky blue-grey panel sliding up from the bottom, white glossy 44pt buttons with bold black titles, a dark Cancel */
-#t-apps .g:not(.locked) .row{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
-#t-apps .g .row.held,.dark #t-apps .g .row.held{background:var(--select);color:#fff;text-shadow:none} #t-apps .row.held>div,#t-apps .row.held small,#t-apps .row.held .ifv{color:#fff;text-shadow:none}
-/* B18: the sheet is iFizBox's (its packages.css .action-sheet and nav/actionsheet.js; values copied, no file shared), from the 4S's
-   UIAlertSheet* art: the panel (UIAlertSheetDefaultBackground, 84%) a 1pt #3f4347 top edge, half a point of white, #acb1b9 -> #5c626d
-   over 33pt; 44pt buttons with 10pt corners and an inward-fading dark edge (UIAlertSheetDefaultButton), pressed blue; Cancel after a
-   wider gap; the Black style in dark themes. It rises in .3s (iFizBox's DURATION) over a dim that fades in on its own layer (.mkd), and leaves (.out) by
-   sliding back down in .25s while the dim fades, then hides. */
-.mks{position:fixed;inset:0;z-index:22} .mks[hidden]{display:none} .mks.out{pointer-events:none}
-.mkd{position:absolute;inset:0;background:rgba(0,0,0,.4);animation:fadein .3s ease-out} .mks.out .mkd{animation:mkfade .25s ease-in forwards}
-.mkp{position:absolute;left:0;right:0;bottom:0;box-sizing:border-box;display:flex;flex-direction:column;gap:11px;
- padding:21px max(21px,env(safe-area-inset-right),(100% - 30rem)/2) calc(22px + env(safe-area-inset-bottom)) max(21px,env(safe-area-inset-left),(100% - 30rem)/2);
- background:linear-gradient(#3f4347,#3f4347) top/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.84),rgba(255,255,255,.84)) 0 1px/100% .5px no-repeat,
- linear-gradient(rgba(172,177,185,.84) 1.5px,rgba(142,148,158,.84) 12px,rgba(107,113,123,.84) 26px,rgba(92,98,109,.84) 33px);
- will-change:transform;animation:mkup .3s cubic-bezier(.25,.1,.25,1)}
-.mks.out .mkp{animation:mkdown .25s cubic-bezier(.25,.1,.25,1) forwards}
-@keyframes mkup{from{transform:translateY(100%)}} @keyframes mkdown{to{transform:translateY(100%)}} @keyframes mkfade{to{opacity:0}}
-.mkp p{margin:-6px 0 2px;text-align:center;font-size:13px;line-height:17px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);overflow-wrap:anywhere}
-#mkB{display:flex;flex-direction:column;gap:11px}
-.mkp button{display:block;width:100%;height:44px;margin:0;padding:0 12px;border:1px solid rgba(0,0,0,.8);border-radius:10px;font:bold 20px/40px -apple-system,"Helvetica Neue",Helvetica,sans-serif;
- color:#000;text-shadow:0 1px 0 rgba(255,255,255,.6);box-shadow:inset 0 0 1.5px 1px rgba(0,0,0,.35),0 1px 0 rgba(211,211,211,.23);touch-action:manipulation;
- background:linear-gradient(#fff,#fafafa 7%,#ebebec 23%,#d9d9db 38%,#c9cacc 54%,#c2c3c5 69%,#c5c6c7 77%,#cdcdcf 85%,#dcdcdd 92%,#e3e3e3);background-origin:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mkp button.mkc{margin-top:3px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);
- background:linear-gradient(#7e8288,#65676d 7%,#565a60 23%,#484b52 38%,#3b3f47 54%,#2e333b 69%,#2b3038 77%,#2c3139 85%,#333941 92%,#383f46);background-origin:border-box}
-.mkp button.is-pressed:not(.mkc){color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.4);
- background:linear-gradient(#91a2f0,#7a90ec 7%,#6a82ea 23%,#4c69e6 38%,#2d4fe1 54%,#1036de 69%,#022bdc 77%,#0c33dd 85%,#2649df 92%,#3252e3);background-origin:border-box}
-.mkp button.mkc.is-pressed{background:linear-gradient(#5f6268,#3a3d43 50%,#1c2027);background-origin:border-box}
-.dark .mkp{background:linear-gradient(rgba(35,35,35,.89),rgba(35,35,35,.89)) top/100% 1px no-repeat,linear-gradient(rgba(167,167,167,.82),rgba(167,167,167,.82)) 0 1px/100% .5px no-repeat,
- linear-gradient(rgba(106,106,106,.73) 1.5px,rgba(81,81,81,.7) 12px,rgba(44,44,44,.65) 24px,rgba(9,9,9,.62) 36px,rgba(1,1,1,.6))}
-.dark .mkp button:not(.mkc):not(.is-pressed){background:linear-gradient(#fbfbfb,#f5f5f5 15%,#f0f0f0 38%,#eee 46%,#e4e4e4 54%,#e4e4e4);background-origin:border-box}
-.dark .mkp button.mkc{background:linear-gradient(#878787,#686868 7%,#545454 23%,#383838 38%,#1a1a1a 54%,#020202 69%,#000 77%,#131313);background-origin:border-box}
 </style>
 {% if error %}<p class="c err">{{ error }}</p>{% endif %}
 {% set enroll_form %}<form method=post action=/enroll style="display:flex;flex-direction:column;gap:10px"
@@ -1198,19 +1093,14 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {# sdp_steps, dev_steps and a2hs_steps: Jinja globals (F26, SDP_STEPS etc. in app.py), shared with the Help page #}
 {% macro install(a) %}{% if not enrolled %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>
 {% elif a.name in signing %}<span class="get sgn" aria-label="Signing {{ a.title }}">Signing…</span>
-{% else %}{% set lbl = 'GET' if a.name not in mine else 'INSTALLED' if mine[a.name] == a.vkey else 'UPDATE' %}
-{% set cls = ' done' if lbl == 'INSTALLED' else ' upd' if lbl == 'UPDATE' else '' %}
-{% if a.files %}<button type=button class="get{{ cls }}" data-app="{{ a.name }}" aria-expanded=false onclick="steps(this)">{{ lbl }}</button>
-{% else %}<a class="get{{ cls }}" data-arm={{ lbl }} data-app="{{ a.name }}" aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">{{ lbl }}</a>{% endif %}{% endif %}{% endmacro %}
+{% elif a.files %}<button type=button class=get data-app="{{ a.name }}" aria-expanded=false onclick="steps(this)">GET</button>
+{% else %}<a class=get data-arm=GET data-app="{{ a.name }}" aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">GET</a>{% endif %}{% endmacro %}
 {% macro ifz_icon(a) %}{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}{% endmacro %}
-{# a newer signed version than this iPhone last installed: the row says so (.up, counted for the Apps tab's badge) and its button says UPDATE #}
-{% macro upnote(a) %}{% if a.name in mine and mine[a.name] != a.vkey %}<span class=upn> · Update available</span>{% endif %}{% endmacro %}
-{% macro ubadge(a) %}{% if a.name in mine and mine[a.name] != a.vkey %}<i class="badge ub" aria-hidden=true></i>{% endif %}{% endmacro %}
 {% macro install_list(apps) %}<div class="g{{ '' if enrolled else ' locked' }}">{% for a in apps %}
-<div class="row{{ ' up' if a.name in mine and mine[a.name] != a.vkey }}">{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}{{ ubadge(a) }}
-<div>{{ a.title }}<small>Version {{ a.short }}{{ upnote(a) }}{% if a.files %} · needs {{ a.files|length }} file{{ 's' if a.files|length > 1 }}{% endif %}</small></div>{{ install(a) }}</div>
+<div class=row>{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
+<div>{{ a.title }}<small>Version {{ a.short }}{% if a.files %} · needs {{ a.files|length }} file{{ 's' if a.files|length > 1 }}{% endif %}</small></div>{{ install(a) }}</div>
 {% if enrolled and a.files %}{% set labels = file_labels(a.files[0].parent) %}<div class=steps><div>
-<div class=step><span class=num>1</span><div><b>Install the app</b></div><a class="get go" data-app="{{ a.name }}" aria-label="Install {{ a.title }}" onclick="mark(this);this.closest('.step').classList.add('ok')"
+<div class=step><span class=num>1</span><div><b>Install the app</b></div><a class="get go" data-app="{{ a.name }}" aria-label="Install {{ a.title }}" onclick="tapped();this.closest('.step').classList.add('ok')"
  href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">INSTALL</a></div>
 {% for f in a.files %}<div class=step><span class=num>{{ loop.index + 1 }}</span><div><b>Download {{ labels.get(f.name, f.name) }}</b>
 <small>{% if f.name in labels %}{{ f.name }} · {% endif %}{{ '%.1f'|format(f.stat().st_size/1e6) }} MB · save to Files</small></div>
@@ -1239,10 +1129,10 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <button type=button class=gbtn onclick="sdpDone(true)">I turned it off</button></details>
 <div class=c id=reg><div class=sh><span class=num>2</span><div>Register this iPhone<small>In Safari on this iPhone</small></div></div>
 <fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>This adds your iPhone to the shared developer account, so the apps here can be signed for it. Registered before but the apps are locked? Register again, it's instant.</small></div></div>{% endif %}
-{% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class="row ifzr{{ ' up' if ifz.name in mine and mine[ifz.name] != ifz.vkey }}">{{ ifz_icon(ifz) }}{{ ubadge(ifz) }}
+{% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class="row ifzr">{{ ifz_icon(ifz) }}
 <div>{{ ifz.title }}<span class=ifv>{{ ifz.short }}</span></div><small class=rec>Recommended: get update alerts and install more apps</small>
 {% if enrolled and ifz.name in signing %}<span class="get sgn" aria-label="Signing {{ ifz.title }}">Signing…</span>
-{% elif enrolled %}<a class="get{{ ' done' if mine.get(ifz.name) == ifz.vkey else ' go' }}" data-app="{{ ifz.name }}" aria-label="Install {{ ifz.title }}" href=#ifizbox onclick="return ifzGo(this)">{{ 'INSTALL' if ifz.name not in mine else 'INSTALLED' if mine[ifz.name] == ifz.vkey else 'UPDATE' }}</a>
+{% elif enrolled %}<a class="get go" data-app="{{ ifz.name }}" aria-label="Install {{ ifz.title }}" href=#ifizbox onclick="return ifzGo(this)">INSTALL</a>
 {% else %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>{% endif %}</div></div>{% endif %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
@@ -1272,10 +1162,10 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 
 <section class=page id=t-settings data-title=Settings>
 {# F26, the user's concept (2026-11-19): iOS 6 Settings' grouped rows, each with its 29pt icon, a chevron where it pushes a page, a footer
-   under its group. This iPhone; Manage (the admin's); Theme and Update Alerts; Add to Home Screen; Help; Sign Out and the version line.
+   under its group. This iPhone; Manage (the admin's); Theme; Add to Home Screen; Help; Sign Out and the version line.
    No iFizBox row (the tab bar has it) and no About.
    F29: the status group has no title ('This iPhone' read as the title of everything under it); the admin's rows are under Admin Settings
-   (Manage, then Share: Invite Friends' links), with no footer; Theme and Update Alerts under Preferences. #}
+   (Manage, then Share: Invite Friends' links), with no footer; Theme under Preferences. #}
 <div class="g grp sg" id=sThis>
 {% if enrolled %}<div class="row irow">{{ row_icon('status') }}<div>Status</div><span class=val>Registered</span></div>
 {% else %}<a class="row mrow" href=#apps onclick="return nudge()">{{ row_icon('device') }}<div>Status</div><span class=val>Not registered</span></a>{% endif %}
@@ -1283,10 +1173,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <p class=ftr>{% if enrolled %}Every app on the Apps tab can install on this iPhone.{% else %}Register this iPhone on the Apps tab, then every app there can install on it.{% endif %}</p>
 {% if is_admin %}<h3 class=hdr>Admin Settings</h3><div class="g sg" id=sManage><a class="row mrow" href=/admin data-push>{{ row_icon('manage') }}<div>Manage</div><span class=val>{{ n_iphones }} iPhone{{ '' if n_iphones == 1 else 's' }}</span></a>
 <a class="row mrow" href=/admin/invites data-push id=shareRow>{{ row_icon('share') }}<div>Share</div></a></div>{% endif %}
-<h3 class=hdr>Preferences</h3><div class="g sg" id=sTheme><a class="row mrow" href=/theme data-push>{{ row_icon('theme') }}<div>Theme</div><span class=val id=themeV>{{ theme_name }}</span></a>
-{% if enrolled %}<div class="row irow">{{ row_icon('notifications') }}<div>Update Alerts</div><label class=sw><input type=checkbox id=pushSw aria-label="Update Alerts"
- onchange="pushSet(this.checked)"><i></i><span class=k></span></label></div>{% endif %}</div>
-{% if enrolled %}<p class=ftr id=pushNote>Tells you when an app you installed has a new version.</p>{% endif %}
+<h3 class=hdr>Preferences</h3><div class="g sg" id=sTheme><a class="row mrow" href=/theme data-push>{{ row_icon('theme') }}<div>Theme</div><span class=val id=themeV>{{ theme_name }}</span></a></div>
 <div class="g grp sg" id=sHome><a class="row mrow" href=/home-screen data-push>{{ row_icon('homeScreen') }}<div>Add to Home Screen</div></a></div>
 <p class=ftr>Open SideDrop from your Home Screen like an app.</p>
 <div class="g grp sg" id=sHelp><a class="row mrow" href=/help data-push id=helpRow>{{ row_icon('help') }}<div>Help</div></a></div>
@@ -1315,17 +1202,11 @@ themeVal();addEventListener("popstate",themeVal);addEventListener("pageshow",the
 <p class=lead>{{ dev_why }}</p>{# F26: Stolen Device Protection left this sheet; it's in Help, under Register iPhone Didn't Work #}
 <div class=c><div class=sh><div>Turn on Developer Mode<small>After the app installs</small></div></div>{{ dev_steps }}</div>
 <button type=button class=gbtn onclick="firstRunGo(1)">Got It, Install</button></div></div>{% endif %}
-{% if enrolled %}<div class=scrim id=pushAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=pushT>
-<h3 id=pushT>Get Notified of Updates?</h3><p>SideDrop can tell you when an app you installed has a new version.</p>
-<div id=pushWeb hidden><div><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open SideDrop from there</span></p></div></div>
-<div class=abtns><button type=button onclick="pushAsk.hidden=true">Not Now</button><button type=button class=ok id=pushOk>Allow</button></div></div></div>{% endif %}
-{% if enrolled %}<div class=mks id=mkSheet hidden data-csrf="{{ mk }}"><div class=mkd onclick="mkClose()"></div><div class=mkp role=dialog aria-modal=true aria-labelledby=mkH>
-<p id=mkH></p><div id=mkB></div><button type=button class=mkc onclick="mkClose()">Cancel</button></div></div>{% endif %}
 <div class=con id=con hidden role=dialog aria-modal=true aria-labelledby=conT><header class=nav><span></span><h1 id=conT>Running</h1>
 <button type=button class="bar r" id=conX onclick="conClose()">Cancel</button></header><div class=conlog id=conL aria-live=polite><span class=concur id=conCur></span></div>
 <div class=confoot><div class=cons id=conS></div><button type=button class=confin id=conF hidden></button></div></div>
 <nav class=tabs aria-label=Sections>
-<a href=#apps><svg viewBox="0 0 30 30"><path d="M4 4h9v9H4zm13 0h9v9h-9zM4 17h9v9H4zm13 0h9v9h-9z"/></svg>Apps<span class=badge id=badge{% if not updates %} hidden{% endif %}>{{ updates|length }}</span></a>
+<a href=#apps><svg viewBox="0 0 30 30"><path d="M4 4h9v9H4zm13 0h9v9h-9zM4 17h9v9H4zm13 0h9v9h-9z"/></svg>Apps</a>
 <a href=#ifizbox><svg viewBox="0 0 30 30"><path d="M15 3l11 5.5-11 5.5L4 8.5zM4 10.7l10 5v11.1l-10-5zM16 15.7l10-5v11.1l-10 5z"/></svg>iFizBox</a>
 {% if files %}<a href=#files><svg viewBox="0 0 30 30"><path d="M3 8a1.5 1.5 0 0 1 1.5-1.5h7.2l2.6 3h11.2A1.5 1.5 0 0 1 27 11v13.5a1.5 1.5 0 0 1-1.5 1.5h-21A1.5 1.5 0 0 1 3 24.5z"/></svg>Files</a>{% endif %}
 <a href=#settings><svg viewBox="0 0 30 30"><path fill-rule=evenodd d="M15 7.5a7.5 7.5 0 1 0 0 15a7.5 7.5 0 1 0 0-15zm0 4.3a3.2 3.2 0 1 1 0 6.4a3.2 3.2 0 1 1 0-6.4z"/>{% for r in range(0, 360, 45) %}<rect x="12.8" y="3" width="4.4" height="6" rx="1" transform="rotate({{ r }} 15 15)"/>{% endfor %}</svg>Settings</a></nav>
@@ -1337,7 +1218,7 @@ function go(t){history.replaceState(history.state,"","#"+t);dispatchEvent(new Ha
 function show(){let t=location.hash.slice(1);if(t=="more")t="settings";/* more: Home Screen links from before */if(!document.getElementById("t-"+t))t="apps";if(cur&&cur!=t)pos[cur]=scr.scrollTop;
  document.querySelectorAll("#scr>.page").forEach(p=>p.hidden=p.id!="t-"+t);
  document.querySelectorAll(".tabs a").forEach(a=>a.getAttribute("href")=="#"+t?a.setAttribute("aria-current","page"):a.removeAttribute("aria-current"));
- navT.textContent=document.getElementById("t-"+t).dataset.title;if(cur!=t)scr.scrollTo(0,pos[t]||0);cur=t;LS.forEach(l=>l.hidden=l.dataset.tab!=t);navR()}
+ navT.textContent=document.getElementById("t-"+t).dataset.title;if(cur!=t)scr.scrollTo(0,pos[t]||0);cur=t;LS.forEach(l=>l.hidden=l.dataset.tab!=t)}
 document.querySelectorAll(".tabs a").forEach(a=>a.addEventListener("click",e=>{e.preventDefault();let t=a.getAttribute("href").slice(1);
  if(t!=cur)return go(t);let tp=tabTop();if(tp)history.go(LS.indexOf(tp)-LS.length);else scr.scrollTo({top:0,behavior:"smooth"})}));  // B6: back to this tab's root (another tab's pages above it go too)
 /* B6: each tab can have its own pushed pages (Apps' Help and This iPhone, Settings' rows); the one showing is the top one of the open tab */
@@ -1387,7 +1268,7 @@ function conDone(status,label,action){conT.textContent="Complete";conCur.hidden=
 function conClose(){conRun++;con.hidden=true;setTimeout(devMaybe,400)}
 function ifzRun(){let b=document.getElementById("ifzb");if(!b)return nudge();
  let t=[...crypto.getRandomValues(new Uint8Array(12))].map(x=>x.toString(16).padStart(2,"0")).join(""),itms="itms-services://?action=download-manifest&url="+encodeURIComponent(b.dataset.m+"&t="+t);
- location.href=itms;mark(b,1);  // first, while Safari still counts this as the tap
+ location.href=itms;  // first, while Safari still counts this as the tap
  let run=conOpen(),a=b.dataset.title,st=IFZ_STEPS(a),shown=-1,at=0,t0=Date.now();
  conLine("step","Installing "+a+" "+b.dataset.v);conLine("raw","Signed for this iPhone by SideDrop");conLine("raw","Certificate: inside, imported on first launch");conLine("raw",b.dataset.n+" sources: inside, added on first launch");
  const show=async n=>{while(shown<n&&run==conRun){if(shown>=0){let l=400-(Date.now()-at);if(l>0)await wait(l)}if(run!=conRun)return;shown++;conLine("step",st[shown]);conS.textContent=st[shown];at=Date.now()}};  // each step shows at least 400 ms
@@ -1413,23 +1294,20 @@ function refreshIn(loud){return fetch("/",{credentials:"same-origin",cache:"no-s
  if(d.getElementById("t-files"))document.getElementById("t-files").innerHTML=d.getElementById("t-files").innerHTML;
  if(newBuild((d.querySelector("meta[name=build]")||{}).content))return;  // a new deploy: newBuild reloads the whole page
  ["t-apps","t-ifizbox"].forEach(i=>document.getElementById(i).innerHTML=d.getElementById(i).innerHTML);STAMP=+d.getElementById("stamp").dataset.v;if(so)setupOpen(true);
- try{if(localStorage.sdp)sdpDone()}catch(e){}document.querySelectorAll("input[name=name]").forEach(i=>i.oninput&&i.oninput());navR();
+ try{if(localStorage.sdp)sdpDone()}catch(e){}document.querySelectorAll("input[name=name]").forEach(i=>i.oninput&&i.oninput());
  document.querySelectorAll("[data-invites]").forEach(b=>b.live&&b.live())})  // B12: a pushed Invite Friends follows Reload too
  .catch(e=>{if(!loud)return;if(e=="net")return reloadFail();location.reload()})}  // B8: a tapped Reload never fails silently; the background check (checkNow) stays quiet
 let held=0,pulled=0;addEventListener("touchstart",()=>{held=1;pulled=0},{passive:true});
 scr.addEventListener("scroll",()=>{if(held&&!pulled&&scr.scrollTop<-70){pulled=1;hap()}},{passive:true});  // the tick as it arms, like UIRefreshControl
 addEventListener("touchend",()=>{held=0;if(pulled){pulled=0;reloadData()}},{passive:true});
-/* the Apps tab's badge counts its rows with an update (.row.up) */
-function navR(){let n=document.querySelectorAll("#t-apps .row.up").length;badge.textContent=n;badge.hidden=!n&&!badge.classList.contains("busy")}
-function mark(b,quiet){let n=b.dataset.app;if(!n)return;navigator.sendBeacon("/installed",new URLSearchParams({name:n}));
- document.querySelectorAll('.row .get[data-app="'+n+'"]').forEach(x=>{x.classList.add("done");if(x.dataset.arm)x.dataset.arm="INSTALLED";if(!x.classList.contains("go"))x.textContent="INSTALLED"});if(!quiet)setTimeout(devMaybe,1500);  // after iOS's install prompt
- document.querySelectorAll("#t-apps .row.up").forEach(r=>{if(r.querySelector('[data-app="'+n+'"]')){r.classList.remove("up");r.querySelectorAll(".upn,.ub").forEach(s=>s.remove());r.querySelectorAll(".get.upd").forEach(x=>x.classList.remove("upd"))}});navR()}  // installed now: no longer an update
+/* C2: SideDrop doesn't track installs; an install tap only brings the Developer Mode alert, after iOS's install prompt */
+function tapped(){setTimeout(devMaybe,1500)}
 addEventListener("hashchange",show);
 /* Home's iFizBox card (F25): its INSTALL opens the iFizBox page and starts the install in the same tap (still a tap for Safari's itms-services),
-   as its Install button would. The flag is read once, so coming back to the page later doesn't run it again; then the card reads INSTALLED. */
+   as its Install button would. The flag is read once, so coming back to the page later doesn't run it again. */
 let ifzAuto=0;
 addEventListener("hashchange",()=>{if(ifzAuto&&cur=="ifizbox"){ifzAuto=0;ifzRun()}});
-function ifzGo(c){ifzAuto=1;go("ifizbox");ifzAuto=0;if(c&&document.getElementById("ifzb")){c.classList.remove("go");c.classList.add("done");c.textContent="INSTALLED"}return false}
+function ifzGo(c){ifzAuto=1;go("ifizbox");ifzAuto=0;return false}
 /* check sources in the background (the page no longer waits on it); swap the lists in only if a new build got signed */
 /* and when the Home Screen app comes back: iOS keeps it running for days, so a new deploy (another build) reloads the whole page, not just the lists */
 const BUILD=document.querySelector("meta[name=build]").content;
@@ -1437,18 +1315,10 @@ const BUILD=document.querySelector("meta[name=build]").content;
 function newBuild(b){if(!b||b==BUILD)return false;let seen=null;try{seen=sessionStorage.reloadedFor}catch(e){}if(seen==b)return false;try{sessionStorage.reloadedFor=b}catch(e){}location.reload();return true}
 function checkNow(){return fetch("/check",{method:"POST"}).then(r=>r.json()).then(d=>{if(newBuild(d.build))return;if(d.stamp!=STAMP)return refreshIn()}).catch(()=>{})}
 addEventListener("visibilitychange",()=>{if(document.visibilityState=="visible"&&con.hidden)checkNow()});  // not mid-install: the install page would vanish
-{% if enrolled %}badge.classList.add("busy");badge.hidden=false;checkNow().finally(()=>{badge.classList.remove("busy");navR()});{% endif %}
-/* web push: iOS offers it only to the Home Screen app (separate storage from Safari, so Safari's "asked" doesn't stop the app asking) */
-const PUSHKEY="{{ vapid }}",pushOK="PushManager" in window&&"serviceWorker" in navigator&&{{ 'true' if enrolled else 'false' }};
-function pushSub(){return navigator.serviceWorker.register("/sw.js").then(r=>r.pushManager.getSubscription().then(s=>[r,s]))}
-function pushSet(on){if(!pushOK){pushSw.checked=false;pushShow();return}  // Safari: explain Add to Home Screen in the alert
- if(!on){pushSub().then(([r,s])=>s&&s.unsubscribe());return}  // the server drops it the next time a push gets a 410
- Notification.requestPermission().then(p=>{if(p!="granted")throw 0;return pushSub()}).then(([r,s])=>s||r.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:Uint8Array.from(atob(PUSHKEY.replace(/-/g,"+").replace(/_/g,"/")),c=>c.charCodeAt(0))}))
-  .then(s=>fetch("/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(s)})).catch(()=>{if(window.pushSw)pushSw.checked=false})}
-/* asked once per phone: after the first INSTALL tap */
-/* first INSTALL on this phone: warn that opening the app will ask for Developer Mode; then the notifications ask */
-function devMaybe(){let a=null;try{a=localStorage.devTold}catch(e){}if(a||!window.devAsk)return pushMaybe();try{localStorage.devTold=1}catch(e){}devAsk.hidden=false}
-function devDone(show){devAsk.hidden=true;if(show)helpOpen("dev");else setTimeout(pushMaybe,400)}
+{% if enrolled %}checkNow();{% endif %}
+/* first INSTALL on this phone: warn that opening the app will ask for Developer Mode; asked once per phone */
+function devMaybe(){let a=null;try{a=localStorage.devTold}catch(e){}if(a||!window.devAsk)return;try{localStorage.devTold=1}catch(e){}devAsk.hidden=false}
+function devDone(show){devAsk.hidden=true;if(show)helpOpen("dev")}
 /* F26: Help is a page (/help); helpOpen(id) opens that item (Developer Mode from the alert). B6: pushed over the tab showing, as iFizBox's
    Home pushes its Help (Back returns to that tab), not by switching to Settings first; from: the tile or row tapped */
 function helpOpen(id,from){let a=from||null,tp=tabTop();if(a){if(a.classList.contains("sel"))return false;a.classList.add("sel")}
@@ -1456,40 +1326,11 @@ function helpOpen(id,from){let a=from||null,tp=tabTop();if(a){if(a.classList.con
  push("/help",{},a,!!L).then(ok=>{if(!ok)location.href="/help"+(id?"#"+id:"");else helpItem(id)});return false}
 function helpItem(id){let t=tabTop(),d=id&&t&&t.querySelector("details#"+id);if(!d)return;d.open=true;
  setTimeout(()=>{let s=t.querySelector(".lscroll");s.scrollTo({top:s.scrollTop+d.getBoundingClientRect().top-56,behavior:"smooth"})},400)}
-function pushMaybe(){let a=null;try{a=localStorage.pushAsked}catch(e){}if(a||!window.pushAsk||(pushOK&&Notification.permission!="default"))return;
- try{localStorage.pushAsked=1}catch(e){}pushShow()}
-function pushShow(){pushWeb.hidden=pushOK;pushOk.textContent=pushOK?"Allow":"OK";let bs=pushOk.parentNode;bs.style.gridTemplateColumns=pushOK?"":"1fr";bs.firstElementChild.style.display=pushOK?"":"none";
- pushOk.onclick=()=>{pushAsk.hidden=true;if(pushOK){pushSet(true);if(window.pushSw)pushSw.checked=true}};pushAsk.hidden=false}
-if(pushOK&&window.pushSw)pushSub().then(([r,s])=>pushSw.checked=!!s&&Notification.permission=="granted").catch(()=>{});
 /* change a GET button's label and colour with its width animating, like the App Store (a label swap alone jumps the width) */
 function morph(b,f){let w0=b.offsetWidth;f();let w1=b.offsetWidth;if(w0==w1)return;b.style.width=w0+"px";b.offsetWidth;b.style.width=w1+"px";clearTimeout(b.mt);b.mt=setTimeout(()=>b.style.width="",300)}
 function disarm(keep){document.querySelectorAll(".get.go[data-arm]").forEach(b=>{if(b!=keep)morph(b,()=>{b.classList.remove("go");b.textContent=b.dataset.arm})})}
-/* F27: GET arms as INSTALL and an installed app's button as REINSTALL (green, a second tap installs); UPDATE installs on its first tap */
-function arm(b){if(b.classList.contains("go")||b.dataset.arm=="UPDATE"){mark(b);setTimeout(()=>disarm(),1500);return true}disarm(b);morph(b,()=>{b.classList.add("go");b.textContent=b.dataset.arm=="INSTALLED"?"REINSTALL":"INSTALL"});return false}
-/* F27: hold an Apps row (iFizBox's card too) about half a second without moving it for an iOS 6 action sheet: Mark as Updated, Installed or
-   Not Installed, by what this iPhone has recorded. The row highlights while held; the click that ends the hold is eaten, so it installs nothing. */
-function mkState(r){return r.classList.contains("up")?"up":r.querySelector(".get.done")?"inst":"none"}
-function mkItems(st){return st=="up"?[["Mark as Updated","installed"],["Mark as Not Installed","forget"]]:st=="inst"?[["Mark as Not Installed","forget"]]:[["Mark as Installed","installed"]]}
-let mkTm=null,mkRow=null,mkXY=null,mkEat=0;
-function mkCancel(){clearTimeout(mkTm);mkTm=null;if(mkRow&&mkSheet.hidden)mkRow.classList.remove("held");if(mkSheet.hidden)mkRow=null}
-function mkRowAt(t){let r=t.closest&&t.closest("#t-apps .g:not(.locked) .row");return r&&r.querySelector(".get[data-app]")&&window.mkSheet?r:null}
-addEventListener("pointerdown",e=>{if(e.button||!window.mkSheet||!mkSheet.hidden)return;mkCancel();let r=mkRowAt(e.target);if(!r)return;mkRow=r;mkXY=[e.clientX,e.clientY];
- if(!e.target.closest(".get"))setTimeout(()=>{if(mkRow==r&&mkTm)r.classList.add("held")},100);  // a cell highlights on touch; a button in it doesn't
- mkTm=setTimeout(()=>{mkTm=null;mkEat=1;r.classList.add("held");if(window.hap)hap();mkOpen(r)},500)},true);
-addEventListener("pointermove",e=>{if(mkTm&&mkXY&&Math.hypot(e.clientX-mkXY[0],e.clientY-mkXY[1])>10)mkCancel()},true);
-["pointerup","pointercancel"].forEach(t=>addEventListener(t,()=>{if(mkTm)mkCancel()},true));
-addEventListener("scroll",()=>{if(mkTm)mkCancel()},{passive:true,capture:true});
-addEventListener("click",e=>{if(mkEat){mkEat=0;e.preventDefault();e.stopImmediatePropagation()}},true);  // capture: before the row's links and the first-run hook
-addEventListener("contextmenu",e=>{if(mkRow)e.preventDefault()});
-function mkOpen(r){let b=r.querySelector(".get[data-app]"),t=r.querySelector(":scope>div:not(.ico)");mkH.textContent=t?t.childNodes[0].textContent.trim():b.dataset.app;mkB.textContent="";
- mkItems(mkState(r)).forEach(([l,d])=>{let x=document.createElement("button");x.type="button";x.textContent=l;x.onclick=()=>mkDo(b.dataset.app,d);mkB.append(x)});
- setTimeout(()=>mkEat=0,700);clearTimeout(mkOut);mkSheet.classList.remove("out");mkSheet.hidden=false}
-/* B18: as iFizBox's sheet, a choice, Cancel or a tap on the dim slides the sheet back down (.out, .25s) and only then hides it; the row
-   lets go at once. A timer, not animationend: with reduced motion there is no animation to end. */
-let mkOut=0;
-function mkClose(){if(mkRow)mkRow.classList.remove("held");mkRow=null;if(mkSheet.hidden||mkSheet.classList.contains("out"))return;
- mkSheet.classList.add("out");mkOut=setTimeout(()=>{mkSheet.hidden=true;mkSheet.classList.remove("out")},250)}
-function mkDo(n,d){mkClose();fetch("/installed/mark",{method:"POST",body:new URLSearchParams({name:n,do:d,csrf:mkSheet.dataset.csrf})}).then(r=>{if(!r.ok)throw 0;return refreshIn()}).catch(()=>location.reload())}
+/* F27: GET arms as a green INSTALL; a second tap installs */
+function arm(b){if(b.classList.contains("go")){tapped();setTimeout(()=>disarm(),1500);return true}disarm(b);morph(b,()=>{b.classList.add("go");b.textContent="INSTALL"});return false}
 addEventListener("click",e=>{if(!e.target.closest("[data-arm]"))disarm()});
 function steps(b){let open=b.getAttribute("aria-expanded")!="true";b.setAttribute("aria-expanded",open);b.closest(".row").nextElementSibling.classList.toggle("open",open)}
 function sdpDone(save){let d=document.getElementById("sdp");if(!d)return;d.classList.add("ok");d.open=false;regf.disabled=false;
@@ -1508,13 +1349,13 @@ function firstRunGo(ok){let b=frNext;frNext=null;firstRun.hidden=true;if(!ok)ret
  if(b){if(b.dataset.arm)b.classList.add("go");b.click()}}  // an armed GET installs on click
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();if(window.themeMarks)themeMarks()});  // themeMarks exists only once Settings > Theme was pushed
-</script>""", error=error, enrolled=enrolled, mine=mine, signing=signing, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=admin_enabled(), updates=updates, open_setup=not enrolled and request.args.get("go") == "setup", just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
+</script>""", error=error, enrolled=enrolled, signing=signing, stamp=signed_stamp(), admin_on=admin_enabled(), open_setup=not enrolled and request.args.get("go") == "setup", just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
         ifz_m=signed_url(f"/m/{ifz['name']}.plist") if ifz else "",
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
         file_labels=file_labels, is_admin=is_admin(), n_iphones=manage_iphone_count() if is_admin() else 0, theme_names={n: p[1] for n, p in PALETTES.items()},
         theme_name=PALETTES[THEME_DEFAULT["light"]][1], files=shared_files(), inv_name=invite_name(), guest=is_guest(), fdl=lambda f: signed_url(f"/f/{f.name}"),
-        first_run=enrolled and first_run_due(token_udid(tok)), mk=mark_csrf(token_udid(tok)) if enrolled else ""))
+        first_run=enrolled and first_run_due(token_udid(tok))))
     if (enrolled or is_guest()) and request.args.get("enrolled") and token_udid(tok):  # survives sign-out; re-checked against the profile on every load (B7: and against the invite for a guest)
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
     return resp
@@ -1545,74 +1386,13 @@ def login():
     return redirect("/")
 
 
-@app.get("/sw.js")
-def service_worker():
-    """Shows pushes; tapping one opens the Apps tab, where the update waits. Served from / so its scope is the whole site."""
-    return """self.addEventListener("push",e=>{let d=e.data.json();e.waitUntil(self.registration.showNotification(d.title,{body:d.body,icon:"/apple-touch-icon.png",data:d.url}))});
-self.addEventListener("notificationclick",e=>{e.notification.close();e.waitUntil(clients.openWindow(e.notification.data||"/"))});""", 200, {
-        "Content-Type": "text/javascript", "Cache-Control": "no-cache"}
-
-
 @app.get("/manifest.webmanifest")
-def manifest_json():  # iOS only offers web push to Home Screen apps with display: standalone
+def manifest_json():  # the Home Screen app opens full screen (display: standalone)
     # as iFizBox's: an opaque black status bar (capable + status-bar-style black above; a translucent one put the nav under it, where iOS 26 blurs
     # it and taps near the top go to the status bar) and portrait only (rotating left the page offset). iOS reads these when the icon is added.
     return {"name": "SideDrop", "short_name": "SideDrop", "description": "Share an Apple developer account with friends and sideload apps.", "id": "/", "scope": "/", "display": "standalone", "orientation": "portrait",
             "start_url": "/", "background_color": "#c8cfd6", "theme_color": "#597498",
             "icons": [{"src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png"}]}
-
-
-@app.post("/push")
-def push_subscribe():
-    """Save this phone's push subscription. Upgrades already waiting count as told, so only new releases notify."""
-    udid, sub = token_udid(request.cookies.get("device", "")), request.get_json(silent=True) or {}
-    if not logged_in() or not udid:
-        abort(403)
-    if not str(sub.get("endpoint", "")).startswith("https://") or not isinstance(sub.get("keys"), dict):
-        abort(400)
-    with push_lock:
-        subs = load_json(PUSH)
-        subs[sub["endpoint"]] = {"sub": {"endpoint": sub["endpoint"], "keys": sub["keys"]}, "udid": udid, "sent": pending(udid, signed_versions())}
-        save_json(PUSH, subs)
-    return "", 204
-
-
-@app.post("/installed")
-def mark_installed():
-    """INSTALL tapped: remember this phone has the current version, so its Apps row can offer later ones as updates."""
-    udid, p = token_udid(request.cookies.get("device", "")), SIGNED / f"{request.form.get('name', '')}.ipa"
-    if not logged_in() or not udid or p.parent != SIGNED or not p.is_file():
-        abort(403)
-    i = ipa_info(p)
-    with installed_lock:
-        data = installed()
-        data.setdefault(udid, {})[p.stem] = f"{i['short']}/{i['version']}"
-        save_json(INSTALLED, data)
-    return "", 204
-
-
-def mark_csrf(udid):
-    """F27: the hold sheet's CSRF token, tied to this iPhone (friends' sessions carry no csrf): a page drawn for one phone can't mark another's."""
-    return hmac.new(SECRET, b"mark:" + udid.encode(), "sha256").hexdigest()[:32] if udid else ""
-
-
-@app.post("/installed/mark")
-def mark_app():
-    """F27: an Apps row's hold sheet. do=installed (Mark as Installed, and Mark as Updated: both record the current version) or
-    do=forget (Mark as Not Installed), for this registered iPhone's device token only."""
-    udid, p, do = token_udid(request.cookies.get("device", "")), SIGNED / f"{request.form.get('name', '')}.ipa", request.form.get("do", "")
-    if (not logged_in() or not udid or udid not in profile_udids() or do not in ("installed", "forget")
-            or not hmac.compare_digest(request.form.get("csrf", ""), mark_csrf(udid)) or p.parent != SIGNED or not p.is_file()):
-        abort(403)
-    with installed_lock:
-        data = installed()
-        if do == "forget":
-            data.get(udid, {}).pop(p.stem, None)
-        else:
-            i = ipa_info(p)
-            data.setdefault(udid, {})[p.stem] = f"{i['short']}/{i['version']}"
-        save_json(INSTALLED, data)
-    return "", 204
 
 
 FIRST_RUN = DATA / "first_run.json"  # {udid: unix time} phones that went through the first-install splash (SDP + Developer Mode)
@@ -1625,7 +1405,7 @@ def first_run_seen():
     udid = token_udid(request.cookies.get("device", ""))
     if not logged_in() or not udid:
         abort(403)
-    with installed_lock:
+    with seen_lock:
         data = load_json(FIRST_RUN)
         data.setdefault(udid, int(time.time()))
         save_json(FIRST_RUN, data)
@@ -2375,10 +2155,10 @@ def theme_segmented(key, options, current, small=False, label="Mode"):
 
 def theme_preview():
     """iFizBox's themePreview, with SideDrop's own controls: a nav bar with Back and a bar button, a segmented control, the App Store
-    buttons and the badge, a group of rows (an icon and a value, a switch, a check, a subtitle) and its footer. Inert."""
+    buttons, a group of rows (an icon and a value, a switch, a check, a subtitle) and its footer. Inert."""
     return ('<h3 class=hdr>Preview</h3><div class=tpv aria-hidden=true inert><header class=nav><span class="bar back">Back</span><h1>Preview</h1>'
             '<span class="bar r">Edit</span></header>' + theme_segmented("sample", [("a", "Details"), ("b", "Reviews"), ("c", "Related")], "a", small=True, label="Sample")
-            + '<div class=tpb><span class=get>GET</span><span class="get go">INSTALL</span><span class="get blue">UPDATE</span><span class=badge>3</span></div>'
+            + '<div class=tpb><span class=get>GET</span><span class="get go">INSTALL</span></div>'
             '<h3 class=hdr>Sample</h3><div class=g>'
             f'<div class="row mrow">{row_icon("sources")}<div>Sources</div><span class=val>12</span></div>'
             f'<div class="row irow">{row_icon("notifications")}<div>Switch</div><label class=sw><input type=checkbox checked tabindex=-1><i></i><span class=k></span></label></div>'
@@ -2471,15 +2251,14 @@ HELP = """<h3 class=hdr>Problems</h3><div class="g hlp">
 <h3 class=hdr>Getting Started</h3><div class="g hlp">
 <details id=a2hs><summary>{{ icon('homeScreen') }}<span>Add to Home Screen</span></summary>{{ a2hs_steps }}</details>
 <details id=notify><summary>{{ icon('notifications') }}<span>Notifications in Apps</span></summary>
-<p>Apps from here keep their notifications: allow them when an app asks, as you would for one from the App Store.</p>
-<p>SideDrop's own Update Alerts (in Settings) tell you when an app you installed has a new version. iOS offers them only to SideDrop on your Home Screen.</p></details>
+<p>Apps from here keep their notifications: allow them when an app asks, as you would for one from the App Store.</p></details>
 <details id=more><summary>{{ icon('sources') }}<span>More Apps with iFizBox</span></summary>
 <p>SideDrop serves the apps listed on its Apps tab; for your own IPAs and other sources, use <a href=/#ifizbox onclick="if(window.go){go('ifizbox');return false}">iFizBox</a>.
 It signs apps right on your iPhone, with this site's certificate already inside it.</p></details></div>
 <script>/* opened on its own as /help#dev (no JS push): that item starts open */
 (function(){if(location.pathname!="/help")return;let d=document.getElementById(location.hash.slice(1));if(d&&d.tagName=="DETAILS")d.open=true})()</script>"""
 HOME_SCREEN = """<div class=c>{{ a2hs_steps }}</div>
-<p class=ftr>SideDrop gets its own icon and opens full screen, like an app. On the Home Screen it can also send Update Alerts.</p>"""
+<p class=ftr>SideDrop gets its own icon and opens full screen, like an app.</p>"""
 
 
 @app.get("/help")
@@ -3534,11 +3313,11 @@ def signed_stamp():
 
 @app.post("/check")
 def check():
-    """Page-load update check: sync sources if the last one is over a minute old, sign what's new, notify phones."""
+    """Page-load check: sync sources if the last one is over a minute old and sign what's new."""
     if not logged_in():
         abort(403)
     sync_if_stale(60)
-    resign_and_notify()
+    resign_logged()
     return {"stamp": signed_stamp(), "build": BUILD}
 
 
