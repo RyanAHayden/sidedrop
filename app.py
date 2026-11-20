@@ -901,6 +901,9 @@ def page(body, back=None, title="SideDrop", **ctx):
     return render_template_string(PAGE + VERSION_JS, body=render_template_string(body, stats=stats, vfoot=vfoot, **ctx), stats=stats, back=back, title=title, vfoot=vfoot)
 
 
+SETUP_LINK = "/?go=setup"  # F30: where a setup or invite link lands: the Apps tab with 'Set up this iPhone' already open at step 1
+
+
 @app.get("/")
 def home():
     if "password" in request.args:  # shareable ?password= link; redirect drops it from the address bar
@@ -1146,9 +1149,9 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <a class=tile href=#ifizbox onclick="go('ifizbox');return false"><span class=tic style="background:#1a82fb"><svg viewBox="0 0 30 30" fill="#fff"><path d="M15 3l11 5.5-11 5.5L4 8.5zM4 10.7l10 5v11.1l-10-5zM16 15.7l10-5v11.1l-10 5z"/></svg></span>iFizBox</a></div>
 <div class=hw><a class=tile href=/help onclick="return helpOpen()"><span class=tic style="background:#8a929c"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M8.8 9a3.3 3.3 0 1 1 4.6 3c-.9.4-1.4 1.1-1.4 2.2"/><path d="M12 18.3v.2"/></svg></span>Help</a></div>
 {% if enrolled %}<a class="tile reg" href=#settings onclick="go('settings');return false"><span class=tic style="background:#34a84a"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.5 4.5 8.5-10"/></svg></span>Registered{% if stats and stats[1] %}<span class=hdt>until {{ stats[1].strftime('%b %-d, %Y') }}</span>{% endif %}</a>
-{% else %}<button type=button class="tile todo" id=setupT aria-expanded=false aria-controls=setup onclick="setupOpen(setup.hidden)"><span class=tic style="background:#f08a12"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#f08a12"/></svg></span><div>Set up this iPhone<small>2 steps, then every app unlocks</small></div></button>{% endif %}</div>
+{% else %}<button type=button class="tile todo" id=setupT aria-expanded={{ 'true' if open_setup else 'false' }} aria-controls=setup onclick="setupOpen(setup.hidden)"><span class=tic style="background:#f08a12"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#f08a12"/></svg></span><div>Set up this iPhone<small>2 steps, then every app unlocks</small></div></button>{% endif %}</div>
 <p class=ftr id=tagline>Sideload apps on your iPhone with a friend's Apple developer account.</p>
-{% if not enrolled %}<div id=setup hidden>
+{% if not enrolled %}<div id=setup{% if not open_setup %} hidden{% endif %}>
 <details class=c id=sdp open><summary><span class=num>1</span><div>Turn off Stolen Device Protection</div></summary>
 {{ sdp_steps }}
 <button type=button class=gbtn onclick="sdpDone(true)">I turned it off</button></details>
@@ -1308,9 +1311,10 @@ function reloadData(){let h=document.documentElement;if(h.classList.contains("re
 function refreshIn(){return fetch("/",{credentials:"same-origin"}).then(r=>r.text()).then(t=>{let d=new DOMParser().parseFromString(t,"text/html");
  if(!d.getElementById("t-apps")||!d.getElementById("reg")!=!document.getElementById("reg"))return location.reload();  // signed out, or registered since: the whole page changes
  if(!d.getElementById("t-files")!=!document.getElementById("t-files"))return location.reload();  // the Files tab came or went: the tab bar changes
+ let so=window.setup&&!setup.hidden;  // F30: unfolded setup steps stay unfolded through the swap below (the fetched "/" draws them folded)
  if(d.getElementById("t-files"))document.getElementById("t-files").innerHTML=d.getElementById("t-files").innerHTML;
  if(newBuild((d.querySelector("meta[name=build]")||{}).content))return;  // a new deploy: newBuild reloads the whole page
- ["t-apps","t-ifizbox"].forEach(i=>document.getElementById(i).innerHTML=d.getElementById(i).innerHTML);STAMP=+d.getElementById("stamp").dataset.v;
+ ["t-apps","t-ifizbox"].forEach(i=>document.getElementById(i).innerHTML=d.getElementById(i).innerHTML);STAMP=+d.getElementById("stamp").dataset.v;if(so)setupOpen(true);
  try{if(localStorage.sdp)sdpDone()}catch(e){}document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());navR()}).catch(()=>{})}
 let held=0,pulled=0;addEventListener("touchstart",()=>{held=1;pulled=0},{passive:true});
 scr.addEventListener("scroll",()=>{if(held&&!pulled&&scr.scrollTop<-70){pulled=1;hap()}},{passive:true});  // the tick as it arms, like UIRefreshControl
@@ -1387,6 +1391,7 @@ function sdpDone(save){let d=document.getElementById("sdp");if(!d)return;d.class
  if(save){try{localStorage.sdp=1}catch(e){}regf.querySelector("input").focus()}}
 try{if(localStorage.sdp)sdpDone()}catch(e){}
 function setupOpen(on){let s=document.getElementById("setup");if(!s)return;s.hidden=!on;setupT.setAttribute("aria-expanded",on)}  // the Apps header's 'Set up this iPhone' tile unfolds the steps
+if(new URLSearchParams(location.search).get("go")=="setup")history.replaceState(history.state,"","/"+location.hash);  // F30: a setup link opened them (the server drew them unfolded); the address bar and a Home Screen icon added now get plain /
 function nudge(){go("apps");setupOpen(true);let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
 /* the first install tap on this iPhone opens the splash (Developer Mode) instead; Install there carries the held tap on, and the
    server remembers the phone (/first-run), so Safari and the Home Screen app show it once between them. Cancel keeps it for the next tap. */
@@ -1398,7 +1403,7 @@ function firstRunGo(ok){let b=frNext;frNext=null;firstRun.hidden=true;if(!ok)ret
  if(b){if(b.dataset.arm)b.classList.add("go");b.click()}}  // an armed GET installs on click
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();if(window.themeMarks)themeMarks()});  // themeMarks exists only once Settings > Theme was pushed
-</script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=admin_enabled(), updates=updates, just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
+</script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=admin_enabled(), updates=updates, open_setup=not enrolled and request.args.get("go") == "setup", just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
         ifz_m=signed_url(f"/m/{ifz['name']}.plist") if ifz else "",
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
@@ -1424,6 +1429,8 @@ def login():
     if password_ok(pw):
         session.permanent, session["ok"], session["pv"] = True, True, ["f", password_ver()]
         session.pop("admin", None)  # a friend's login on a shared browser drops an earlier admin one
+        if request.method == "GET":  # F30: the friends' ?password= link is a setup link; the typed form (POST) stays on Home
+            return redirect(SETUP_LINK)
     elif not needs_setup() and admin_enabled() and password_ok(pw, admin=True):  # the same form and ?password= link sign the admin in
         session.permanent, session["ok"], session["admin"], session["csrf"] = True, True, time.time(), secrets.token_urlsafe(32)
         session["pv"] = ["a", password_ver(True)]
@@ -2876,25 +2883,25 @@ INVITE_NO = """<div class="c"><p class=err>{{ msg }}</p></div>"""
 @app.get("/join/<tok>")
 def join(tok):
     if logged_in() and not is_guest():
-        return redirect("/")  # a friend or the admin trying the link stays who they are
+        return redirect(SETUP_LINK)  # a friend or the admin trying the link stays who they are (F30: on the setup steps, unless registered)
     if needs_setup() or not hmac.compare_digest(tok.encode(), join_token().encode()):
         return page(INVITE_NO, title="Invite", msg="This link doesn't work any more. Ask for a new one."), 403
     session.pop("admin", None)
     session.permanent, session["ok"], session["pv"] = True, True, ["f", password_ver()]
-    return redirect("/")
+    return redirect(SETUP_LINK)
 
 
 @app.get("/invite/<tok>")
 def invite_link(tok):
     if logged_in() and not is_guest():
-        return redirect("/")
+        return redirect(SETUP_LINK)
     inv = load_invites().get(tok)
     if inv and (inv["udid"] == token_udid(request.cookies.get("device", "")) if inv.get("udid") else time.time() < inv.get("exp", 0)):
         if not (is_guest() and session["pv"][1:2] == [tok] and logged_in()):  # a guest session already made with it keeps its id
             session.pop("admin", None)
             session.pop("csrf", None)
             session.permanent, session["ok"], session["pv"] = True, True, ["g", tok, secrets.token_urlsafe(12)]
-        return redirect("/")
+        return redirect(SETUP_LINK)
     try:
         invite_check(tok, None)
         msg = INVITE_USED
