@@ -356,6 +356,7 @@ if shutil.which("node"):
 # F18 themes: the nine palettes in iFizBox's order, each a CSS block on the page with every token its tone's default sets, and (F20) a row
 # in its tone's Settings > Theme checklist
 assert A.THEMES == {"light": ["classic", "sepia", "solarized"], "dark": ["oled", "gunmetal", "midnight", "linen", "nord", "dracula"]}
+assert A.THEME_DEFAULT == {"light": "classic", "dark": "gunmetal"}  # F35: Gunmetal is the dark default, as iFizBox
 toks = lambda css: set(re.findall(r"--([a-z]+):", css))
 theme_lists = {t: c.get(f"/theme/{t}", base_url="https://localhost").data.decode() for t in ("light", "dark")}
 for n, (tone, label, color, css) in A.PALETTES.items():
@@ -420,10 +421,10 @@ seg = re.search(r'<div class="seg" role=radiogroup aria-label="Mode" data-tk=mod
 assert re.findall(r"data-v=(\w+) aria-checked=(\w+)[^>]*>(\w+)<", seg) == [("auto", "true", "Automatic"), ("light", "false", "Light"), ("dark", "false", "Dark")]
 assert "onclick=\"themeSet('mode',this.dataset.v)\"" in seg and "<h3 class=hdr>Mode</h3>" in tp and "<h3 class=hdr>Themes</h3>" in tp
 assert '<a class="row mrow" href=/theme/light data-push><div>Light</div><span class=val data-tv=lightTheme>Classic</span></a>' in tp
-assert '<a class="row mrow" href=/theme/dark data-push><div>Dark</div><span class=val data-tv=darkTheme>OLED Black</span></a>' in tp
+assert '<a class="row mrow" href=/theme/dark data-push><div>Dark</div><span class=val data-tv=darkTheme>Gunmetal</span></a>' in tp
 assert "Automatic switches between your Light and Dark themes" in tp and 'themePreview("' not in tp
 assert c.get("/display", base_url="https://localhost").data.decode() == tp  # Display's old address still opens Theme
-for tone, first in (("light", "classic"), ("dark", "oled")):
+for tone, first in (("light", "classic"), ("dark", "gunmetal")):
     tl = theme_lists[tone]
     assert f"<h1>{tone.title()}</h1>" in tl and '<a class="bar back" href="/theme"' in tl and f'themePreview("{tone}");' in tl
     ticks = re.findall(r'class="row ck" role=radio data-v=(\w+) aria-checked=(\w+)', tl)
@@ -471,15 +472,16 @@ console.log(JSON.stringify(JSON.parse(process.argv[3]).map(([store,dark])=>{let 
   documentElement:{setAttribute:(k,v)=>at[k]=v,classList:{toggle:(c,on)=>(on?cls.add(c):cls.delete(c),on)}}}});
  return [at["data-theme"],at["data-palette"],cls.has("dark"),meta.content]})))""")
     cases = [  # (localStorage, phone dark) -> (data-theme, data-palette, .dark, theme-color)
-        ({}, False, "light", "classic", "#4f698b"),  # nothing stored: Automatic, each tone's first theme
-        ({}, True, "dark", "oled", "#000"),
-        ({"dark": "1"}, False, "dark", "oled", "#000"),  # the old Dark Mode switch on: Mode Dark
+        ({}, False, "light", "classic", "#4f698b"),  # nothing stored: Automatic, each tone's default (THEME_DEFAULT)
+        ({}, True, "dark", "gunmetal", "#5f656f"),  # F35: Gunmetal, not OLED Black
+        ({"mode": "dark", "darkTheme": "oled"}, True, "dark", "oled", "#000"),  # a stored OLED Black stays
+        ({"dark": "1"}, False, "dark", "gunmetal", "#5f656f"),  # the old Dark Mode switch on: Mode Dark
         ({"dark": "0"}, True, "light", "classic", "#4f698b"),  # and off: Mode Light, even on a dark phone
         ({"mode": "dark", "darkTheme": "nord"}, False, "dark", "nord", "#2e3440"),
         ({"mode": "light", "lightTheme": "sepia", "dark": "1"}, True, "light", "sepia", "#7a5c36"),  # a picked Mode wins over the old key
         ({"mode": "auto", "lightTheme": "solarized", "darkTheme": "gunmetal"}, True, "dark", "gunmetal", "#5f656f"),
         ({"mode": "auto", "lightTheme": "solarized", "darkTheme": "gunmetal"}, False, "light", "solarized", "#2a74a8"),
-        ({"mode": "bogus", "darkTheme": "bogus", "dark": "1"}, False, "dark", "oled", "#000"),  # unknown values fall back
+        ({"mode": "bogus", "darkTheme": "bogus", "dark": "1"}, False, "dark", "gunmetal", "#5f656f"),  # unknown values fall back
         ({"mode": "light", "lightTheme": "nord"}, False, "light", "classic", "#4f698b"),  # a dark theme's name isn't a light theme
     ] + [({"mode": t, f"{t}Theme": n}, False, t, n, A.PALETTES[n][2]) for t, ns in A.THEMES.items() for n in ns]
     import json

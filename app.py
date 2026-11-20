@@ -551,8 +551,8 @@ def version_foot():
 # ---- F18: themes, after iFizBox's Settings > Theme (its ios6.css, palettes.css and theme-boot.js; values copied, no file shared) ----
 # <html data-theme=light|dark data-palette=<name>> (plus the old .dark class on a dark page, which every .dark rule below keys on) is put
 # on the page before first paint by THEME_BOOT. Each palette is one block of sidedrop's own CSS variables: Classic is also :root's and
-# Gunmetal (sidedrop's dark before F18) also html.dark's, so every other palette only has to win over those. The first of each tone is
-# its default. A new palette: add it here with every token its tone's first block sets (test_app.py checks).
+# Gunmetal (sidedrop's dark before F18) also html.dark's, so every other palette only has to win over those. THEME_DEFAULT names
+# each tone's default. A new palette: add it here with every token its tone's first block sets (test_app.py checks).
 def back_arrow(edge_top, edge_bottom, fill_top, fill_bottom, rim=".3"):
     """static/back.svg (the iOS 6 back button) with a palette's edge and fill gradients, as a data: URL."""
     stops = iter((edge_top, edge_bottom, fill_top, fill_bottom))
@@ -664,7 +664,8 @@ PALETTES = {
         "--warnbg:#3e3a20;--warnedge:#8a8440;--warntext:#f1fa8c;--badbg:#4a2630;--badedge:#772828;--badtext:#ff7b7b;"
         "--swtrack:linear-gradient(#21222c,#383b4c);--swoff:#a4abcf;--swon:linear-gradient(#8a5fe0,#bd93f9);--swknob:linear-gradient(#6c708c,#44475a);--swheld:linear-gradient(#5a5e78,#383b4c)"),
 }
-THEMES = {t: [n for n, p in PALETTES.items() if p[0] == t] for t in ("light", "dark")}  # in menu order; [0] is the default
+THEMES = {t: [n for n, p in PALETTES.items() if p[0] == t] for t in ("light", "dark")}  # in menu order
+THEME_DEFAULT = {"light": "classic", "dark": "gunmetal"}  # F35: with no stored choice, as iFizBox (Gunmetal, not OLED Black, in the dark)
 THEMES_CSS = "/* F18 palettes (PALETTES in app.py) */\n" + "\n".join(
     (":root," if n == "classic" else "html.dark," if n == "gunmetal" else "") + f"html[data-theme={t}][data-palette={n}]{{{css}}}"
     for n, (t, _, _, css) in PALETTES.items()) + "\n.tabs{background:var(--tabbar)}"
@@ -672,10 +673,10 @@ THEMES_CSS = "/* F18 palettes (PALETTES in app.py) */\n" + "\n".join(
 # Dark Mode switch stored localStorage.dark = 1 or 0, read here as Mode Dark or Light until a Mode is picked; with neither, Mode is Automatic
 # (it followed the phone before, so nobody's page changes tone). theme() runs again when the phone's appearance flips and after a pick.
 THEME_BOOT = ("<script>/* F18 themes: THEME_BOOT in app.py */\nconst THEMES=" + json.dumps(THEMES, separators=(",", ":")) + ",THEME_COLORS="
-              + json.dumps({n: p[2] for n, p in PALETTES.items()}, separators=(",", ":")) + """;
+              + json.dumps({n: p[2] for n, p in PALETTES.items()}, separators=(",", ":")) + ",THEME_DEFAULT=" + json.dumps(THEME_DEFAULT, separators=(",", ":")) + """;
 function themeState(){let s={};try{s={mode:localStorage.mode,light:localStorage.lightTheme,dark:localStorage.darkTheme,old:localStorage.dark}}catch(e){}
  return{mode:["light","dark","auto"].includes(s.mode)?s.mode:s.old=="1"?"dark":s.old=="0"?"light":"auto",
-  light:THEMES.light.includes(s.light)?s.light:THEMES.light[0],dark:THEMES.dark.includes(s.dark)?s.dark:THEMES.dark[0]}}
+  light:THEMES.light.includes(s.light)?s.light:THEME_DEFAULT.light,dark:THEMES.dark.includes(s.dark)?s.dark:THEME_DEFAULT.dark}}
 var themeTone=null;  /* F20: "light" or "dark" while Settings > Theme > Light or Dark is open, its live preview, whatever Mode says */
 function theme(){let s=themeState(),h=document.documentElement,dk=themeTone?themeTone=="dark":s.mode=="dark"||s.mode=="auto"&&matchMedia("(prefers-color-scheme: dark)").matches,p=dk?s.dark:s.light;
  h.classList.toggle("dark",dk);h.setAttribute("data-theme",dk?"dark":"light");h.setAttribute("data-palette",p);
@@ -1511,7 +1512,7 @@ addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").f
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
         file_labels=file_labels, is_admin=is_admin(), n_iphones=manage_iphone_count() if is_admin() else 0, theme_names={n: p[1] for n, p in PALETTES.items()},
-        theme_name=PALETTES[THEMES["light"][0]][1], files=shared_files(), inv_name=invite_name(), guest=is_guest(), fdl=lambda f: signed_url(f"/f/{f.name}"),
+        theme_name=PALETTES[THEME_DEFAULT["light"]][1], files=shared_files(), inv_name=invite_name(), guest=is_guest(), fdl=lambda f: signed_url(f"/f/{f.name}"),
         first_run=enrolled and first_run_due(token_udid(tok)), mk=mark_csrf(token_udid(tok)) if enrolled else ""))
     if (enrolled or is_guest()) and request.args.get("enrolled") and token_udid(tok):  # survives sign-out; re-checked against the profile on every load (B7: and against the invite for a guest)
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
@@ -2387,13 +2388,13 @@ def theme_preview():
 
 def theme_page(tone=None):
     if tone is None:  # Settings > Theme
-        themes = "".join(f'<a class="row mrow" href=/theme/{t} data-push><div>{t.title()}</div><span class=val data-tv={t}Theme>{PALETTES[THEMES[t][0]][1]}</span></a>'
+        themes = "".join(f'<a class="row mrow" href=/theme/{t} data-push><div>{t.title()}</div><span class=val data-tv={t}Theme>{PALETTES[THEME_DEFAULT[t]][1]}</span></a>'
                          for t in ("light", "dark"))
         body = (f"<h3 class=hdr>Mode</h3>{theme_segmented('mode', MODES, 'auto')}<p class=ftr>{THEME_FOOTERS['mode']}</p>"
                 f"<h3 class=hdr>Themes</h3><div class=g>{themes}</div>" + THEME_JS % "")
         return page(body, back=MORE, title="Theme")
     key = f"{tone}Theme"
-    rows = "".join(f'<a class="row ck" role=radio data-v={n} aria-checked={"true" if n == THEMES[tone][0] else "false"} onclick="themeSet(\'{key}\',this.dataset.v)">'
+    rows = "".join(f'<a class="row ck" role=radio data-v={n} aria-checked={"true" if n == THEME_DEFAULT[tone] else "false"} onclick="themeSet(\'{key}\',this.dataset.v)">'
                    f'<span class=sws style="background:linear-gradient({SWATCH[n][0]} 0 45%,{SWATCH[n][1]} 45%)"></span><div>{PALETTES[n][1]}</div></a>'
                    for n in THEMES[tone])
     body = (f'<div class="g thm" role=radiogroup aria-label="{tone.title()} Theme" data-tk={key}>{rows}</div><p class=ftr>{THEME_FOOTERS[tone]}</p>'
