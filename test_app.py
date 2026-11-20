@@ -439,8 +439,18 @@ def signed_plain(short, build):  # written as signed (the stubbed zsign always o
 signed_plain("1.0", "1"); assert c.post("/installed", data={"name": "Plain"}).status_code == 204
 signed_plain("1.1", "2")
 html = c.get("/").data.decode()
-assert re.search(r'<a class="get" data-arm=UPDATE data-app="Plain" aria-label="Install Plain" href="itms-services://[^"]+" onclick="return arm\(this\)">UPDATE</a>', html)
+assert re.search(r'<a class="get upd" data-arm=UPDATE data-app="Plain" aria-label="Install Plain" href="itms-services://[^"]+" onclick="return arm\(this\)">UPDATE</a>', html)
 assert "Plain<small>Version 1.1<span class=upn> · Update available</span>" in html and badge(html) == (None, "1")
+# F24: the update row stands out: the red badge on its icon and the blue UPDATE button; an up-to-date row has neither
+def app_row(h, name): return re.search(r'<div class="row[^"]*">(?:(?!<div class="row).)*?data-app="' + name + '".*?</div>', h, re.S).group(0)
+up_row = app_row(apps_tab(html), "Plain")
+assert up_row.startswith('<div class="row up">') and '<i class="badge ub" aria-hidden=true></i>' in up_row and 'class="get upd"' in up_row
+assert apps_tab(html).count('class="badge ub"') == 1 and apps_tab(html).count(' upd"') == 1, "only the update row"
+ok_row = app_row(apps_tab(html), "Demo")
+assert "badge" not in ok_row and "upd" not in ok_row and 'class="get done"' in ok_row
+assert ".get.upd:not(.go):not(.done):not([aria-expanded=true]){color:#fff" in html and "linear-gradient(#79a1f3,#3b71e1 49%,#215fdd 51%,#2361dd);background-origin:border-box" in html
+assert ".get.upd:not(.go):not(.done):not([aria-expanded=true]).is-pressed{background:linear-gradient(#5f86d6," in html, "held, a darker blue"
+assert '.querySelectorAll(".upn,.ub")' in html and 'x.classList.remove("upd")' in html, "an install tap takes the badge and the blue off"
 (tmp / "signed" / "Plain.ipa").unlink()
 # the page's script: the badge counts Home's update rows, and an install tap takes its row off the count
 assert "querySelectorAll(\"#t-apps .row.up\").length" in html and 'r.classList.remove("up")' in html

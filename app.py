@@ -963,6 +963,14 @@ def home():
 .get.blue{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);border-color:#2b4f8a;background:var(--bluebtn);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
 .get[aria-expanded=true]{color:#7d8794;background:linear-gradient(#c9ced5,#dfe3e8);box-shadow:inset 0 1px 3px rgba(0,0,0,.3)}
 .locked .get{min-width:44px} .get.done:not(.go){color:#8e959e}  /* iOS 6 App Store: INSTALLED is grey; tapping still reinstalls */
+/* UPDATE stands out (F24): iFizBox's "Button (Gloss Blue)" (its Done: sources.css .bar-button.done), the same in both themes; held, its
+   darker pressed gloss. border-box so the gradient's light top doesn't tile into the bottom border. Tapped it still arms to the green
+   INSTALL (the :before layer paints over this background), and once installed it is the grey INSTALLED again. */
+.get.upd:not(.go):not(.done):not([aria-expanded=true]){color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.4);border-color:#1f3f86;border-top-color:#30363e;
+ background:linear-gradient(#79a1f3,#3b71e1 49%,#215fdd 51%,#2361dd);background-origin:border-box;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 1px 1px rgba(0,0,0,.2)}
+.get.upd:not(.go):not(.done):not([aria-expanded=true]).is-pressed{background:linear-gradient(#5f86d6,#2a5bc0 49%,#164bb8 51%,#184db9);background-origin:border-box;box-shadow:none}
+/* a row with an update: the iOS 6 red badge (the Apps tab's, without a number) on its icon's top-right corner; gone with .up once installed */
+.row.up{position:relative} .ub{display:none} .row.up .ub{display:block;position:absolute;left:47px;top:calc(50% - 32px);width:20px;min-width:0;padding:0;pointer-events:none}
 .steps{background:linear-gradient(#f3f5f8,#fff);display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s cubic-bezier(.25,.1,.25,1)} .steps.open{grid-template-rows:1fr}
 .steps>div{overflow:hidden;min-height:0} .steps .step:first-child{box-shadow:inset 0 1px var(--sep)}  /* real-height animation; max-height snapped */
 .step{display:flex;align-items:center;gap:10px;padding:8px 10px 8px 20px} .step+.step{border-top:1px dashed #d4d9df}
@@ -1087,13 +1095,15 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class=warn><span aria-hidden=true>💡</span><div>Don't see it? Install an app first, then look again.</div></div>{% endset %}
 {% macro install(a) %}{% if not enrolled %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>
 {% else %}{% set lbl = 'GET' if a.name not in mine else 'INSTALLED' if mine[a.name] == a.vkey else 'UPDATE' %}
-{% if a.files %}<button type=button class="get{{ ' done' if lbl == 'INSTALLED' }}" data-app="{{ a.name }}" aria-expanded=false onclick="steps(this)">{{ lbl }}</button>
-{% else %}<a class="get{{ ' done' if lbl == 'INSTALLED' }}" data-arm={{ lbl }} data-app="{{ a.name }}" aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">{{ lbl }}</a>{% endif %}{% endif %}{% endmacro %}
+{% set cls = ' done' if lbl == 'INSTALLED' else ' upd' if lbl == 'UPDATE' else '' %}
+{% if a.files %}<button type=button class="get{{ cls }}" data-app="{{ a.name }}" aria-expanded=false onclick="steps(this)">{{ lbl }}</button>
+{% else %}<a class="get{{ cls }}" data-arm={{ lbl }} data-app="{{ a.name }}" aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">{{ lbl }}</a>{% endif %}{% endif %}{% endmacro %}
 {% macro ifz_icon(a) %}{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}{% endmacro %}
 {# a newer signed version than this iPhone last installed: the row says so (.up, counted for the Apps tab's badge) and its button says UPDATE #}
 {% macro upnote(a) %}{% if a.name in mine and mine[a.name] != a.vkey %}<span class=upn> · Update available</span>{% endif %}{% endmacro %}
+{% macro ubadge(a) %}{% if a.name in mine and mine[a.name] != a.vkey %}<i class="badge ub" aria-hidden=true></i>{% endif %}{% endmacro %}
 {% macro install_list(apps) %}<div class="g{{ '' if enrolled else ' locked' }}">{% for a in apps %}
-<div class="row{{ ' up' if a.name in mine and mine[a.name] != a.vkey }}">{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
+<div class="row{{ ' up' if a.name in mine and mine[a.name] != a.vkey }}">{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}{{ ubadge(a) }}
 <div>{{ a.title }}<small>Version {{ a.short }}{{ upnote(a) }}{% if a.files %} · needs {{ a.files|length }} file{{ 's' if a.files|length > 1 }}{% endif %}</small></div>{{ install(a) }}</div>
 {% if enrolled and a.files %}{% set labels = file_labels(a.files[0].parent) %}<div class=steps><div>
 <div class=step><span class=num>1</span><div><b>Install the app</b></div><a class="get go" data-app="{{ a.name }}" aria-label="Install {{ a.title }}" onclick="mark(this);this.closest('.step').classList.add('ok')"
@@ -1126,9 +1136,9 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <button type=button class=gbtn onclick="sdpDone(true)">I turned it off</button></details>
 <div class=c id=reg><div class=sh><span class=num>2</span><div>Register this iPhone<small>In Safari on this iPhone</small></div></div>
 <fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>This adds your iPhone to the shared developer account, so the apps here can be signed for it. Registered before but the apps are locked? Register again, it's instant.</small></div></div>{% endif %}
-{% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class="row{{ ' up' if ifz.name in mine and mine[ifz.name] != ifz.vkey }}">{{ ifz_icon(ifz) }}
+{% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class="row{{ ' up' if ifz.name in mine and mine[ifz.name] != ifz.vkey }}">{{ ifz_icon(ifz) }}{{ ubadge(ifz) }}
 <div>{{ ifz.title }}<small>Version {{ ifz.short }}{% if ifz.name in mine and mine[ifz.name] != ifz.vkey %}{{ upnote(ifz) }}{% else %} · your certificate inside{% endif %}</small></div>
-{% if enrolled %}<a class="get{{ ' done' if mine.get(ifz.name) == ifz.vkey }}" data-app="{{ ifz.name }}" aria-label="{{ ifz.title }}: why and install" href=#ifizbox onclick="go('ifizbox');return false">{{ 'GET' if ifz.name not in mine else 'INSTALLED' if mine[ifz.name] == ifz.vkey else 'UPDATE' }}</a>
+{% if enrolled %}<a class="get{{ ' done' if mine.get(ifz.name) == ifz.vkey else ' upd' if ifz.name in mine }}" data-app="{{ ifz.name }}" aria-label="{{ ifz.title }}: why and install" href=#ifizbox onclick="go('ifizbox');return false">{{ 'GET' if ifz.name not in mine else 'INSTALLED' if mine[ifz.name] == ifz.vkey else 'UPDATE' }}</a>
 {% else %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>{% endif %}</div></div>
 <p class=ftr>Installs apps right on your iPhone. <a href=#ifizbox onclick="go('ifizbox');return false">Why iFizBox</a></p>{% endif %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
@@ -1294,7 +1304,7 @@ addEventListener("touchend",()=>{held=0;if(pulled){pulled=0;reloadData()}},{pass
 function navR(){let n=document.querySelectorAll("#t-apps .row.up").length;badge.textContent=n;badge.hidden=!n&&!badge.classList.contains("busy")}
 function mark(b,quiet){let n=b.dataset.app;if(!n)return;navigator.sendBeacon("/installed",new URLSearchParams({name:n}));
  document.querySelectorAll('.row .get[data-app="'+n+'"]').forEach(x=>{x.classList.add("done");if(x.dataset.arm)x.dataset.arm="INSTALLED";if(!x.classList.contains("go"))x.textContent="INSTALLED"});if(!quiet)setTimeout(devMaybe,1500);  // after iOS's install prompt
- document.querySelectorAll("#t-apps .row.up").forEach(r=>{if(r.querySelector('[data-app="'+n+'"]')){r.classList.remove("up");r.querySelectorAll(".upn").forEach(s=>s.remove())}});navR()}  // installed now: no longer an update
+ document.querySelectorAll("#t-apps .row.up").forEach(r=>{if(r.querySelector('[data-app="'+n+'"]')){r.classList.remove("up");r.querySelectorAll(".upn,.ub").forEach(s=>s.remove());r.querySelectorAll(".get.upd").forEach(x=>x.classList.remove("upd"))}});navR()}  // installed now: no longer an update
 addEventListener("hashchange",show);
 /* check sources in the background (the page no longer waits on it); swap the lists in only if a new build got signed */
 /* and when the Home Screen app comes back: iOS keeps it running for days, so a new deploy (another build) reloads the whole page, not just the lists */
