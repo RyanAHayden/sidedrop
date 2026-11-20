@@ -1894,8 +1894,9 @@ if P12.exists() and not needs_setup():  # ponytail: once per worker; Apple's che
 DIST_TYPES = ("DISTRIBUTION", "IOS_DISTRIBUTION")  # Apple Distribution, and the older iOS Distribution, which share the limit
 opt = lambda key, option: [{"key": key, "options": [{"key": option, "enabled": True}]}]
 # An explicit App ID gets every capability Apple's API takes for one (tried on a real team), so an app finds what it asks for in
-# the profile; Push must work, the rest may be refused. Not in the API, so never in the profile: time-sensitive and communication
-# notifications, WeatherKit, App Attest, fonts, memory limits, multitasking camera. {capabilityType: settings or None}
+# the profile; Push must work, the rest may be refused. The API can't set time-sensitive and communication notifications,
+# WeatherKit, App Attest, fonts or memory limits, nor make or assign app groups: ticked on developer.apple.com, they are in the
+# next regen_profile (docs/developer-account.md, Capabilities). Multitasking camera is by Apple's grant only. {capabilityType: settings or None}
 APP_ID_CAPS = {"PUSH_NOTIFICATIONS": None, "APP_GROUPS": None, "ASSOCIATED_DOMAINS": None,
                "ICLOUD": opt("ICLOUD_VERSION", "XCODE_6"), "GAME_CENTER": None, "HEALTHKIT": None, "HOMEKIT": None, "SIRIKIT": None,
                "NETWORK_EXTENSIONS": None, "PERSONAL_VPN": None, "MULTIPATH": None, "HOT_SPOT": None, "NFC_TAG_READING": None,
