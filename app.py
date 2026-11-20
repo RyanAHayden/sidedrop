@@ -1527,6 +1527,49 @@ def p12_opens(blob, pw):
         return False
 
 
+# PKCS#12 PBE algorithms (1.2.840.113549.1.12.1.x, DER-encoded) the image's static musl zsign 1.1.2 can't open: RC4-128/40,
+# 2-key DES, RC2-128/40 (Keychain exports carry RC2-40). Only 3DES (.3) of the family loads without OpenSSL's legacy provider.
+LEGACY_PBES = [bytes.fromhex("060a2a864886f70d010c01") + bytes([n]) for n in (1, 2, 4, 5, 6)]
+
+
+def p12_repacked(blob, pw):
+    """A .p12 zsign can't load (bags under RC2 or RC4) written again with the same key, certificates and password as 3DES/SHA1,
+    as make_certificate writes it; None when it needs nothing (or doesn't open)."""
+    if not any(oid in blob for oid in LEGACY_PBES):
+        return None
+    try:
+        got = pkcs12.load_pkcs12(blob, pw.encode() or None)
+    except Exception:
+        return None
+    if got.cert is None or got.key is None:
+        return None
+    enc = serialization.PrivateFormat.PKCS12.encryption_builder().kdf_rounds(50000).hmac_hash(hashes.SHA1()) \
+        .key_cert_algorithm(pkcs12.PBES.PBESv1SHA1And3KeyTripleDESCBC).build(pw.encode()) if pw \
+        else serialization.NoEncryption()  # no password: nothing to encrypt with, and nothing for zsign to decrypt
+    return pkcs12.serialize_key_and_certificates(got.cert.friendly_name or b"sidedrop", got.key, got.cert.certificate,
+                                                 [c.certificate for c in got.additional_certs] or None, enc)
+
+
+def save_p12(blob, pw):
+    """Writes cert.p12, repacked when zsign couldn't load it as it is; the file as given is kept beside it as cert.p12.bak."""
+    if (new := p12_repacked(blob, pw)) is not None:
+        P12.with_suffix(".p12.bak").write_bytes(blob)
+        P12.with_suffix(".p12.bak").chmod(0o600)
+        print("cert.p12 used RC2/RC4, which zsign can't load: saved it again as 3DES (the original is cert.p12.bak)", flush=True)
+        blob = new
+    P12.write_bytes(blob)
+    P12.chmod(0o600)
+
+
+def repack_p12():
+    """At start: a cert.p12 saved before uploads were repacked (or copied in by hand) gets the same treatment."""
+    try:
+        if P12.exists() and p12_repacked(blob := P12.read_bytes(), P12_PASSWORD) is not None:
+            save_p12(blob, P12_PASSWORD)
+    except Exception as e:
+        print("couldn't repack cert.p12:", e, flush=True)
+
+
 def password_guesses(text, name=""):
     """Lines of a text file as p12 password guesses, as iFizBox's certfiles.js: "password: x" first, then a password file's
     first line, then every short line without spaces."""
@@ -1584,7 +1627,7 @@ def take_signing_files(f, uploads, s):
         elif bad := [t for lvl, t in cert_problems(got["p12"], p12_pw) if lvl == "error"]:
             err = " ".join(bad)  # kept out: a certificate that can't sign would break every app on the next re-sign
         else:
-            P12.write_bytes(got["p12"])
+            save_p12(got["p12"], p12_pw)
             s["p12_password"] = p12_pw
     elif f.get("p12_password") and P12.exists() and "P12_PASSWORD" not in ENV_SET:
         if p12_opens(P12.read_bytes(), f["p12_password"]):
@@ -2754,6 +2797,7 @@ def profile_stale():
 def heal_signing():
     """At start, after cert.p12, P12_PASSWORD or BUNDLE_ID changed on the server: the App ID gets the capabilities it lacks, and a
     profile that no longer fits (or predates those capabilities) is made again, with every app signed again."""
+    repack_p12()  # B1: before anything signs with it
     if needs_setup() or not (PROFILE.exists() and P12.exists() and ASC_KEY.exists() and BUNDLE_ID
                              and os.environ.get("ASC_KEY_ID") and os.environ.get("ASC_ISSUER_ID")):
         return

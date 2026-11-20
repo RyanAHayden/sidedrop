@@ -990,4 +990,38 @@ assert inv(do="revoke", tok=rtok).location == "/admin/invites?done=revoked"
 assert not signed_in(rg) and I.app.test_client().get(f"/invite/{rtok}").status_code == 403 and "Kim" not in boss.get("/admin/invites").data.decode()
 inv(do="revoke", tok=tok)
 assert not signed_in(guest) and not signed_in(hs) and I.profile_udids() == {"GUEST-1"}
+# B1: a cert.p12 with an RC2-40 certificate bag (Keychain exports) opens in Python but not in the image's zsign: it's saved again as
+# 3DES with the same key, certificate and password, the original kept as cert.p12.bak; on upload and at start
+import shutil, subprocess as SP
+real_run = lambda cmd: SP.Popen(cmd, stdout=SP.DEVNULL, stderr=SP.DEVNULL).wait()  # subprocess.run is zsign's stub here
+RC2_OID, TDES_OID = bytes.fromhex("060a2a864886f70d010c0106"), bytes.fromhex("060a2a864886f70d010c0103")
+rc2dir = tmp / "rc2src"; rc2dir.mkdir()
+if shutil.which("openssl"):
+    (rc2dir / "key.pem").write_bytes(k.private_bytes(S.Encoding.PEM, S.PrivateFormat.PKCS8, S.NoEncryption()))
+    (rc2dir / "cert.pem").write_bytes(dcrt.public_bytes(S.Encoding.PEM))
+    assert real_run(["openssl", "pkcs12", "-export", "-legacy", "-certpbe", "PBE-SHA1-RC2-40", "-inkey", str(rc2dir / "key.pem"), "-in",
+                     str(rc2dir / "cert.pem"), "-passout", "pass:rc2-secret", "-out", str(rc2dir / "cert.p12")]) == 0
+    rc2_pw = "rc2-secret"
+else:  # fixtures/rc2-legacy.p12: the same openssl command, its own key and an "Apple Distribution" certificate to 2126
+    shutil.copy(Path(__file__).with_name("fixtures") / "rc2-legacy.p12", rc2dir / "cert.p12"); rc2_pw = "fixture-pw"
+rc2 = (rc2dir / "cert.p12").read_bytes()
+assert RC2_OID in rc2 and A.p12_opens(rc2, rc2_pw) and A.p12_repacked(p12_of(dcrt), "pw") is None  # AES (cryptography's) is left alone
+def repacked_ok(path, pw):
+    blob = path.read_bytes()
+    assert RC2_OID not in blob and TDES_OID in blob and (path.parent / "cert.p12.bak").read_bytes() == rc2
+    (k1, c1, _), (k2, c2, _) = (P12x.load_key_and_certificates(b, pw.encode()) for b in (rc2, blob))
+    assert c1 == c2 and k1.private_numbers() == k2.private_numbers()
+    if shutil.which("openssl"):  # what zsign's OpenSSL does: no legacy provider, so RC2 fails and 3DES opens
+        no_legacy = lambda p: real_run(["openssl", "pkcs12", "-in", str(p), "-noout", "-passin", f"pass:{pw}"])
+        assert no_legacy(path) == 0 and no_legacy(path.parent / "cert.p12.bak") != 0
+rc2up = tmp / "rc2up"
+R = boot(rc2up)
+rw = R.app.test_client(); rw.post("/login", data={"password": "sidedrop"})
+rw.post("/setup", data={"p12_password": rc2_pw, "files": [(io.BytesIO(rc2), "cert.p12")]}, content_type="multipart/form-data")
+assert R.P12_PASSWORD == rc2_pw; repacked_ok(rc2up / "cert.p12", rc2_pw)
+rc2start = tmp / "rc2start"; rc2start.mkdir(); (rc2start / "cert.p12").write_bytes(rc2)  # saved before B1, or copied in by hand
+R2 = boot(rc2start, P12_PASSWORD=rc2_pw)
+R2.heal_signing(); repacked_ok(rc2start / "cert.p12", rc2_pw)
+again = (rc2start / "cert.p12").read_bytes(); R2.heal_signing(); assert (rc2start / "cert.p12").read_bytes() == again  # once only
+os.environ.pop("P12_PASSWORD")
 print("ok")
