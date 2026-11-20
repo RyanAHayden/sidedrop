@@ -1263,6 +1263,23 @@ r = early.get("/"); assert r.status_code == 403 and I.INVITE_USED.encode() in r.
 assert b"action=/login" in early.get("/logout", follow_redirects=True).data  # its way to the password form, if it has one
 assert not signed_in(other) and b"action=/login" in other.get("/").data  # an iPhone no invite registered: the password form as before
 assert b"open it again: it signs you in with no password" in other.get("/").data
+# B8: Reload for an invite guest. The session that registered (no device cookie) and the iPhone's device cookie both get past
+# /refresh (not 403; this setup's fake profile can't re-sign, a 500 refreshIn still follows) and a "/" with what refreshIn swaps in
+for cl in (guest, hs, lost):
+    assert cl.post("/refresh").status_code != 403
+    h = cl.get("/").data.decode(); assert all(f"id={i}" in h for i in ("t-apps", "t-ifizbox", "stamp")), h[:300]
+# a stale guest session: /refresh 403 and "/" a page without the lists, so the page reloads to that page (the invite's "used" message)
+stale = I.app.test_client()
+with stale.session_transaction() as s:
+    s.update(ok=True, pv=["g", tok, "not-the-registering-session"])
+assert stale.post("/refresh").status_code == 403 and stale.get("/").status_code == 403 and b"id=t-apps" not in stale.get("/").data
+# and the page's side: a refused /refresh reloads the page, an unreachable server says so in the bar, a page refreshIn can't swap in
+# reloads the page, a fresh "/" (no cached copy), and a hung request can't leave Reload dead
+h = guest.get("/").data.decode()
+assert '.then(r=>r.status==403?location.reload():refreshIn(1),()=>refreshIn(1))' in h and "setTimeout(()=>ac&&ac.abort(),120000)" in h
+assert 'fetch("/",{credentials:"same-origin",cache:"no-store"}).then(r=>{if(!r.ok)throw"page";return r.text()},()=>{throw"net"})' in h
+assert '.catch(e=>{if(!loud)return;if(e=="net")return reloadFail();location.reload()})' in h and 'rbarT.textContent="Couldn\'t Reach SideDrop"' in h
+assert "#rbar.fail .spin{display:none}" in h and "i.oninput&&i.oninput()" in h
 # expired: refused, sessions from it out, its profile can't register
 etok = re.search(r"new=([\w-]+)$", inv(do="new").location).group(1)
 eg = I.app.test_client(); assert eg.get(f"/invite/{etok}").location == "/?go=setup"

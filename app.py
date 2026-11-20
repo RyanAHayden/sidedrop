@@ -826,6 +826,7 @@ html.dark{color-scheme:dark}
  background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7)) bottom/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.2),rgba(255,255,255,.2)) top/100% 1px no-repeat,linear-gradient(rgba(76,76,76,.8),rgba(0,0,0,.8) 52%);
  transform:translateY(100%);transition:transform .25s ease-in} html.reloading #rbar{transform:none;transition:transform .3s cubic-bezier(.25,.1,.25,1)}  /* F204's timings: up .3s, down .25s */
 html.reloading #scr{padding-bottom:calc(116px + env(safe-area-inset-bottom))}
+#rbar.fail .spin{display:none}  /* B8: a Reload that couldn't reach the server says so in the bar, without the spinner */
 .spin{width:20px;height:20px;flex:none;animation:spin .96s linear infinite}
 /* iFizBox's F166: spinners turn a spoke at a time by holding each 30-degree turn for 1/12 of the cycle. Not steps(12): WebKit on iOS 15 hands the
    animation to Core Animation, where steps() leaves it standing still */
@@ -1312,16 +1313,24 @@ function ifzRun(){let b=document.getElementById("ifzb");if(!b)return nudge();
   if(!(s&&s.started)&&Date.now()-t0>60000){conLine("error","iOS didn't ask for the app. Tap Retry.");conDone("iOS didn't ask for the app.","Retry",()=>{ifzRun();return true});return}
   await wait(500)}})()}
 /* Reload: Cydia's reload bar while sources sync, then the lists swap in place (scroll, the open tab and a pushed page stay). Pull down past the top does the same. */
+/* B8: never silent. /refresh refused (signed out, or a guest whose invite no longer lets them in): the whole page reloads, to what the
+   server shows them now. Not reached (offline, or no answer in 2 minutes): the bar says so. Anything else refreshIn(1) can't swap in
+   reloads the page. A hung request can't leave "reloading" set for ever, which made later taps do nothing. */
 function reloadData(){let h=document.documentElement;if(h.classList.contains("reloading"))return;h.classList.add("reloading");
- fetch("/refresh",{method:"POST"}).catch(()=>{}).then(refreshIn).finally(()=>h.classList.remove("reloading"))}
-function refreshIn(){return fetch("/",{credentials:"same-origin"}).then(r=>r.text()).then(t=>{let d=new DOMParser().parseFromString(t,"text/html");
+ let ac=window.AbortController&&new AbortController(),tm=setTimeout(()=>ac&&ac.abort(),120000);
+ fetch("/refresh",{method:"POST",credentials:"same-origin",signal:ac&&ac.signal}).then(r=>r.status==403?location.reload():refreshIn(1),()=>refreshIn(1))
+  .finally(()=>{clearTimeout(tm);h.classList.remove("reloading")})}
+function reloadFail(){rbar.classList.add("fail");rbarT.textContent="Couldn't Reach SideDrop";
+ return new Promise(ok=>setTimeout(ok,2000)).then(()=>setTimeout(()=>{rbar.classList.remove("fail");rbarT.textContent="Reloading Data"},300))}  // after the bar slid away
+function refreshIn(loud){return fetch("/",{credentials:"same-origin",cache:"no-store"}).then(r=>{if(!r.ok)throw"page";return r.text()},()=>{throw"net"}).then(t=>{let d=new DOMParser().parseFromString(t,"text/html");
  if(!d.getElementById("t-apps")||!d.getElementById("reg")!=!document.getElementById("reg"))return location.reload();  // signed out, or registered since: the whole page changes
  if(!d.getElementById("t-files")!=!document.getElementById("t-files"))return location.reload();  // the Files tab came or went: the tab bar changes
  let so=window.setup&&!setup.hidden;  // F30: unfolded setup steps stay unfolded through the swap below (the fetched "/" draws them folded)
  if(d.getElementById("t-files"))document.getElementById("t-files").innerHTML=d.getElementById("t-files").innerHTML;
  if(newBuild((d.querySelector("meta[name=build]")||{}).content))return;  // a new deploy: newBuild reloads the whole page
  ["t-apps","t-ifizbox"].forEach(i=>document.getElementById(i).innerHTML=d.getElementById(i).innerHTML);STAMP=+d.getElementById("stamp").dataset.v;if(so)setupOpen(true);
- try{if(localStorage.sdp)sdpDone()}catch(e){}document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());navR()}).catch(()=>{})}
+ try{if(localStorage.sdp)sdpDone()}catch(e){}document.querySelectorAll("input[name=name]").forEach(i=>i.oninput&&i.oninput());navR()})
+ .catch(e=>{if(!loud)return;if(e=="net")return reloadFail();location.reload()})}  // B8: a tapped Reload never fails silently; the background check (checkNow) stays quiet
 let held=0,pulled=0;addEventListener("touchstart",()=>{held=1;pulled=0},{passive:true});
 scr.addEventListener("scroll",()=>{if(held&&!pulled&&scr.scrollTop<-70){pulled=1;hap()}},{passive:true});  // the tick as it arms, like UIRefreshControl
 addEventListener("touchend",()=>{held=0;if(pulled){pulled=0;reloadData()}},{passive:true});
