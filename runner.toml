@@ -4,6 +4,7 @@ dir = "plan"
 journal = "journal"
 
 [run]
+auto_upgrade = true  # upgrade agent-runner by itself when a newer release is out, between merges
 test = "uv run -q --no-project --with-requirements requirements.txt python test_app.py"  # no venv needed in a worktree
 slots = 2
 notes = ".runner"
