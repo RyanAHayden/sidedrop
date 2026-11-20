@@ -1241,7 +1241,16 @@ assert boss.get(f"/invite/{tok}").location == "/?go=setup" and boss.get("/admin/
 iurl = plistlib.loads(enroll(guest, name=""))["PayloadContent"]["URL"]
 assert "/udid/Sam%20x/g/" + tok + "/" in iurl, iurl
 ipost = lambda udid: I.app.test_client().post(path_qs(iurl), data=b"\x30\x80" + plistlib.dumps({"UDID": udid, "PRODUCT": "iPhone14,2"}) + b"\x00")
+# B12: Invite Friends' refresh (/admin/invites.json, polled by the open page and run by Reload) follows the invite being used
+assert guest.get("/admin/invites.json").status_code == 403 and I.app.test_client().get("/admin/invites.json").status_code == 403
+rj0 = boss.get("/admin/invites.json").get_json(); page0 = boss.get("/admin/invites").data.decode()
+assert rj0["states"][tok] == "unused" and "Not used" in rj0["html"] and f'data-link="https://x.test/invite/{tok}"' in rj0["html"]
+assert f'<div data-invites data-sig="{rj0["sig"]}">' in page0 and rj0["html"] in page0  # the page draws the same rows it refreshes with
+assert boss.get("/admin/invites.json").get_json()["sig"] == rj0["sig"]  # nothing changed: same signature, so the open page leaves its rows
 r = ipost("GUEST-1"); assert r.status_code == 301 and r.location.endswith("/?enrolled=" + I.device_token("GUEST-1")) and iudids == ["GUEST-1"]
+rj1 = boss.get("/admin/invites.json").get_json()
+assert rj1["states"][tok] == "used" and rj1["sig"] != rj0["sig"] and "Used by Sam x iPhone14,2 on" in rj1["html"]
+assert f'data-link="https://x.test/invite/{tok}"' not in rj1["html"] and "REVOKE" in rj1["html"]  # no COPY for a used link; still revocable
 r = ipost("GUEST-2"); assert r.status_code == 301 and r.location == f"https://x.test/invite/{tok}" and iudids == ["GUEST-1"]
 try:
     I.register("GUEST-3", "x", invite=(tok, "")); raise AssertionError("second UDID registered")

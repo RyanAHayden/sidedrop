@@ -1339,7 +1339,8 @@ function refreshIn(loud){return fetch("/",{credentials:"same-origin",cache:"no-s
  if(d.getElementById("t-files"))document.getElementById("t-files").innerHTML=d.getElementById("t-files").innerHTML;
  if(newBuild((d.querySelector("meta[name=build]")||{}).content))return;  // a new deploy: newBuild reloads the whole page
  ["t-apps","t-ifizbox"].forEach(i=>document.getElementById(i).innerHTML=d.getElementById(i).innerHTML);STAMP=+d.getElementById("stamp").dataset.v;if(so)setupOpen(true);
- try{if(localStorage.sdp)sdpDone()}catch(e){}document.querySelectorAll("input[name=name]").forEach(i=>i.oninput&&i.oninput());navR()})
+ try{if(localStorage.sdp)sdpDone()}catch(e){}document.querySelectorAll("input[name=name]").forEach(i=>i.oninput&&i.oninput());navR();
+ document.querySelectorAll("[data-invites]").forEach(b=>b.live&&b.live())})  // B12: a pushed Invite Friends follows Reload too
  .catch(e=>{if(!loud)return;if(e=="net")return reloadFail();location.reload()})}  // B8: a tapped Reload never fails silently; the background check (checkNow) stays quiet
 let held=0,pulled=0;addEventListener("touchstart",()=>{held=1;pulled=0},{passive:true});
 scr.addEventListener("scroll",()=>{if(held&&!pulled&&scr.scrollTop<-70){pulled=1;hap()}},{passive:true});  // the tick as it arms, like UIRefreshControl
@@ -3047,6 +3048,14 @@ def invite_back():
 
 
 LINK_BTNS ="""<div class=lbtn><button type=button class="{{ cls }}" onclick="lnkCopy(this)">{{ copy }}</button><button type=button class="{{ cls }} grey shr" onclick="lnkShare(this)">{{ share }}</button></div>"""
+# B12: Invite Friends' one-iPhone rows, on the page and alone from /admin/invites.json (the page's refresh)
+INVITE_ROWS = """{% if invites %}<div class=g>{% for i in invites %}<div class="row irow"{% if i.state == 'unused' %} data-link="{{ i.url }}"{% endif %}>
+<div><b>{{ i.name or 'No name' }}</b><small>Made {{ fmt_day(i.made) }} · {{ i.status }}</small></div>
+{% if i.state == 'unused' %}""" + LINK_BTNS.replace("{{ cls }}", "act").replace("{{ copy }}", "COPY").replace("{{ share }}", "SHARE") + """{% endif %}
+<form method=post action=/admin/invites data-name="{{ i.name or 'this link' }}" onsubmit="if(!confirm('Revoke the link for '+this.dataset.name+'?'))return false">
+<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=do value=revoke><input type=hidden name=tok value="{{ i.tok }}"><button class="act red">REVOKE</button></form></div>{% endfor %}</div>
+<p class=ftr>Revoking a used link signs its guest out and leaves the iPhone registered: turn it off on iPhones.</p>{% endif %}"""
+
 INVITES_PAGE = """<style>.lnk{font:13px/1.4 ui-monospace,Menlo,monospace;width:100%;box-sizing:border-box} .lbtn{display:flex;gap:8px} .lbtn button{flex:1}
 .lbtn button[hidden]{display:none} .irow>div:first-child{flex:1;min-width:0} .irow .lbtn{flex:none;gap:4px} .irow form{flex:none;margin-left:4px} .irow b{font-weight:700}</style>
 <h3 class=hdr>Anyone with the Link</h3>
@@ -3061,13 +3070,17 @@ INVITES_PAGE = """<style>.lnk{font:13px/1.4 ui-monospace,Menlo,monospace;width:1
 <form class="c mg" method=post action=/admin/invites><input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=do value=new>
 <input name=name maxlength=30 placeholder="Name (optional), like Sam" aria-label=Name autocomplete=off>
 <button>New One-iPhone Link</button><small>Each link registers one iPhone, then signs in again only on that iPhone. Unused links expire after 7 days. Guests install apps like friends but never see these links or the friends' password.</small></form>
-{% if invites %}<div class=g>{% for i in invites %}<div class="row irow"{% if i.state == 'unused' %} data-link="{{ i.url }}"{% endif %}>
-<div><b>{{ i.name or 'No name' }}</b><small>Made {{ fmt_day(i.made) }} · {{ i.status }}</small></div>
-{% if i.state == 'unused' %}""" + LINK_BTNS.replace("{{ cls }}", "act").replace("{{ copy }}", "COPY").replace("{{ share }}", "SHARE") + """{% endif %}
-<form method=post action=/admin/invites data-name="{{ i.name or 'this link' }}" onsubmit="if(!confirm('Revoke the link for '+this.dataset.name+'?'))return false">
-<input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=do value=revoke><input type=hidden name=tok value="{{ i.tok }}"><button class="act red">REVOKE</button></form></div>{% endfor %}</div>
-<p class=ftr>Revoking a used link signs its guest out and leaves the iPhone registered: turn it off on iPhones.</p>{% endif %}
-<script>/* F16, B15: Copy Link copies this box's link in the tap. First a copy event that puts exactly that link on the clipboard (from an
+<div data-invites data-sig="{{ sig }}">""" + INVITE_ROWS + """</div>
+<script>/* B12: the one-iPhone rows follow the server while the page shows: every few seconds while it's visible, at once when it comes
+back to the screen, and with the app's Reload (refreshIn calls box.live). /admin/invites.json answers the rows and their signature;
+the rows are drawn again only when that changed (an iPhone registered through a link: 'Used by <iPhone>'), so a COPIED label or the
+name being typed above stays put. A page closed (its box out of the document) stops asking. */
+(function(){let box=document.querySelector("[data-invites]");if(!box||box.live)return;let busy=0,tm=null;
+ box.live=()=>{if(busy||!box.isConnected)return;busy=1;fetch("/admin/invites.json",{credentials:"same-origin",cache:"no-store"}).then(r=>r.ok?r.json():null)
+  .then(d=>{if(d&&d.sig!=box.dataset.sig){box.dataset.sig=d.sig;box.innerHTML=d.html;box.querySelectorAll(".shr").forEach(b=>b.hidden=!navigator.share)}}).catch(()=>{}).finally(()=>busy=0)};
+ const tick=()=>{if(!box.isConnected)return;if(document.visibilityState=="visible"&&box.offsetParent)box.live();tm=setTimeout(tick,4000)};tm=setTimeout(tick,4000);
+ const vis=()=>{if(!box.isConnected)return removeEventListener("visibilitychange",vis);if(document.visibilityState=="visible")box.live()};addEventListener("visibilitychange",vis)})();
+/* F16, B15: Copy Link copies this box's link in the tap. First a copy event that puts exactly that link on the clipboard (from an
 editable, selected textarea: iOS copies nothing from a readonly input's selection and execCommand still says true, which left the
 last link on the clipboard under "Copied"); only when that event ran is it Copied. Else clipboard.writeText; else Not Copied, with
 the link selected in an editable box for the system Copy */
@@ -3128,7 +3141,23 @@ def admin_invites():
         abort(400)
     rows = invite_rows()
     new = next((i for i in rows if i["tok"] == request.args.get("new") and i["state"] == "unused"), None)
-    return admin_page(ADMIN_CSS + INVITES_PAGE, "Invite Friends", join=f"{PUBLIC_URL}/join/{join_token()}", invites=rows, new=new)
+    return admin_page(ADMIN_CSS + INVITES_PAGE, "Invite Friends", join=f"{PUBLIC_URL}/join/{join_token()}", invites=rows, new=new,
+                      sig=invite_rows_sig(rows))
+
+
+def invite_rows_sig(rows):
+    """B12: changes when a one-iPhone row would read differently (made, revoked, used, expired), so the page redraws only then."""
+    return hashlib.sha256(json.dumps([(i["tok"], i["name"], i["state"], i["status"]) for i in rows]).encode()).hexdigest()[:16]
+
+
+@app.get("/admin/invites.json")
+def admin_invites_json():
+    """B12: Invite Friends' refresh: its one-iPhone rows drawn now, so 'Used by <iPhone>' shows without opening the page again."""
+    if not is_admin():
+        abort(403)
+    rows = invite_rows()
+    return {"sig": invite_rows_sig(rows), "states": {i["tok"]: i["state"] for i in rows},
+            "html": render_template_string(INVITE_ROWS, invites=rows, csrf=session["csrf"], fmt_day=fmt_day)}
 
 
 FILE_ROW ="""<div class=row data-file="{{ f.name }}"><div>{{ f.name }}<small>{{ f.stat().st_size|filesizeformat }}</small></div>
