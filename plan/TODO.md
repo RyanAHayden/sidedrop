@@ -2,6 +2,7 @@
 
 ### Next
 
+- [ ] **B5** Buttons like Copy Link (and the other plain action buttons) have no pressed look while held. Give them iFizBox's depressed hold state (its *Pressed art/styles), in light and dark themes. Check: hold each button on the phone or in the browser with :active; it darkens/insets like iFizBox's.
 ### Follow-ups
 
 ### Parked
