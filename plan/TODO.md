@@ -2,6 +2,7 @@
 
 ### Next
 
+- [ ] **F29** Settings layout fixes: (1) under the Manage row, bring back the Share page row, admins only; (2) remove the hint text there; (3) the section title that says This iPhone makes no sense: the admin section gets a group title like Admin Settings instead; (4) Theme and the other personal options go in their own group with a fitting title; (5) the page can be scrolled/overscrolled too far above its top, stop that. Check: as admin, Settings shows Admin Settings with Manage then Share; as a user no Share row; theme in its own group; no gap above the top when dragging down.
 - [ ] **B5** Buttons like Copy Link (and the other plain action buttons) have no pressed look while held. Give them iFizBox's depressed hold state (its *Pressed art/styles), in light and dark themes. Check: hold each button on the phone or in the browser with :active; it darkens/insets like iFizBox's.
 ### Follow-ups
 
