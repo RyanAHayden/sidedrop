@@ -26,6 +26,7 @@ def fake_asc(method, path, **kw):
     return {"data": []}
 signed_ents = []
 def fake_run(cmd, **kw):
+    assert "--rm_watch" in cmd  # no watch is ever in the profile
     signed_ents.append(plistlib.loads(Path(cmd[cmd.index("-e") + 1]).read_bytes()))
     Path(cmd[cmd.index("-o") + 1]).write_bytes((tmp / "apps" / "Demo.ipa").read_bytes())
 A.regen_profile, A.asc, A.subprocess.run = fake_regen, fake_asc, fake_run
@@ -234,6 +235,27 @@ d = seen_in[-1].removeprefix("ifizbox://import?d=")
 sent = json.loads(gzip.decompress(base64.urlsafe_b64decode(d + "=" * (-len(d) % 4))))
 assert sent["v"] == 1 and sent["sources"][:2] == ["https://provenance-emu.com/apps.json", "https://fizl0.github.io/apps/source.json"], sent
 assert not any("ifizbox-identity" in n for n in seen_in[1]) and not (tmp / ".ifz-signed.ipa.in").exists()
+# an explicit App ID with Push (the paid-signing-service way): every app keeps its own bundle ID, iFizBox's too, extensions keep
+# theirs; the entitlements carry the profile's App ID, the keychain group narrowed to it
+prof0, bid0 = A.PROFILE.read_bytes(), A.BUNDLE_ID
+A.BUNDLE_ID = "com.me.sideload"
+A.PROFILE.write_bytes(plistlib.dumps({"Entitlements": {"application-identifier": "TEAM.com.me.sideload", "aps-environment": "production",
+    "com.apple.developer.team-identifier": "TEAM", "keychain-access-groups": ["TEAM.*", "com.apple.token"], "get-task-allow": False,
+    "com.apple.security.application-groups": []}}))
+def look(cmd, **kw):
+    with zipfile.ZipFile(cmd[-1]) as z:
+        seen_in.append(({n: plistlib.loads(z.read(n))["CFBundleIdentifier"] for n in z.namelist() if n.endswith("/Info.plist") and ".lproj/" not in n},
+                        plistlib.loads(Path(cmd[cmd.index("-e") + 1]).read_bytes()), "--rm_watch" in cmd))
+A.subprocess.run = look
+for ipa in ("pb.ipa", "ifz-src.ipa"):
+    A.sign_ipa(tmp / ipa, tmp / "explicit-signed.ipa")
+A.subprocess.run = run0
+(pb_ids, pb_ents, pb_rm), (ifz_ids, ifz_ents, _) = seen_in[-2:]
+assert pb_ids == {"Payload/PB.app/Info.plist": "com.mario.pb", "Payload/PB.app/PlugIns/W.appex/Info.plist": "com.mario.pb.widget"} and pb_rm
+assert ifz_ids == {"Payload/iFizBox.app/Info.plist": "com.ryha.ifizbox"}
+assert pb_ents == ifz_ents == {"application-identifier": "TEAM.com.me.sideload", "aps-environment": "production", "com.apple.developer.team-identifier": "TEAM",
+    "keychain-access-groups": ["TEAM.com.me.sideload"], "get-task-allow": False, "com.apple.security.application-groups": []}, pb_ents
+A.PROFILE.write_bytes(prof0); A.BUNDLE_ID = bid0
 # iFizBox gets its own category above Apps
 (tmp / "signed" / "com.ryha.ifizbox.ipa").write_bytes((tmp / "ifz.ipa").read_bytes())
 html = c.get("/").data.decode()
@@ -698,6 +720,7 @@ assert not E.admin_enabled() and v.get("/admin").status_code == 404
 class FakeApple:
     def __init__(s):
         s.calls, s.bundles, s.caps, s.certs, s.forbid, s.limit = [], {}, [], {}, False, 3
+        s.settings, s.refuse = {}, set()  # capabilityType: the settings it was turned on with; capabilities Apple refuses
     def add_cert(s, crt_, name):
         cid = f"C{len(s.certs) + len(s.calls)}"
         s.certs[cid] = {"type": "certificates", "id": cid, "attributes": {
@@ -711,7 +734,14 @@ class FakeApple:
         if (method, path) == ("POST", "/bundleIds"):
             b = dict(kw["json"]["data"], id=f"B{len(s.bundles)}"); s.bundles[b["id"]] = b; return {"data": b}
         if (method, path) == ("POST", "/bundleIdCapabilities"):
-            d = kw["json"]["data"]; s.caps.append((d["relationships"]["bundleId"]["data"]["id"], d["attributes"]["capabilityType"])); return {"data": d}
+            d = kw["json"]["data"]; cap = d["attributes"]["capabilityType"]
+            if cap in s.refuse:
+                raise RuntimeError(f'App Store Connect POST /bundleIdCapabilities: 409 {{"errors":[{{"detail":"no {cap}"}}]}}')
+            s.caps.append((d["relationships"]["bundleId"]["data"]["id"], cap)); s.settings[cap] = d["attributes"].get("settings"); return {"data": d}
+        if method == "GET" and path.endswith("/bundleIdCapabilities"):
+            if kw.get("params"):  # Apple answers a limit here with a 400
+                raise RuntimeError(f"App Store Connect GET {path}: 400 PARAMETER_ERROR.INVALID limit")
+            return {"data": [{"attributes": {"capabilityType": c}} for b, c in s.caps if b == path.split("/")[2]]}
         if (method, path) == ("GET", "/certificates"):
             return {"data": list(s.certs.values())}
         if (method, path) == ("POST", "/certificates"):
@@ -742,16 +772,61 @@ apple.forbid = True  # an App Manager key: Apple refuses the certificate, and th
 r = key_only()
 assert b"Admin role" in r.data and not (tmp / "apikey" / "cert.p12").exists() and G.needs_setup()
 assert [b["attributes"] for b in apple.bundles.values()] == [{"identifier": "com.me.sideload", "name": "SideDrop", "platform": "IOS"}]
-assert apple.caps == [("B0", "PUSH_NOTIFICATIONS"), ("B0", "APP_GROUPS"), ("B0", "ASSOCIATED_DOMAINS")]
+ALL_CAPS = ["PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS", "ICLOUD", "GAME_CENTER", "HEALTHKIT", "HOMEKIT", "SIRIKIT",
+            "NETWORK_EXTENSIONS", "PERSONAL_VPN", "MULTIPATH", "HOT_SPOT", "NFC_TAG_READING", "CLASSKIT", "AUTOFILL_CREDENTIAL_PROVIDER",
+            "ACCESS_WIFI_INFORMATION", "COREMEDIA_HLS_LOW_LATENCY", "APPLE_ID_AUTH", "WALLET", "IN_APP_PURCHASE", "INTER_APP_AUDIO",
+            "WIRELESS_ACCESSORY_CONFIGURATION", "DATA_PROTECTION", "MAPS", "APPLE_PAY"]  # the 25 Apple's API took on a real team
+assert apple.caps == [("B0", c) for c in ALL_CAPS], apple.caps
+assert apple.settings["ICLOUD"] == [{"key": "ICLOUD_VERSION", "options": [{"key": "XCODE_6", "enabled": True}]}]
+assert apple.settings["APPLE_ID_AUTH"] == [{"key": "APPLE_ID_AUTH_APP_CONSENT", "options": [{"key": "PRIMARY_APP_CONSENT", "enabled": True}]}]
+assert apple.settings["DATA_PROTECTION"] == [{"key": "DATA_PROTECTION_PERMISSION_LEVEL", "options": [{"key": "COMPLETE_PROTECTION", "enabled": True}]}]
+assert apple.settings["PUSH_NOTIFICATIONS"] is None
 apple.forbid = False
 r = key_only()
 assert r.location == "/" and not G.needs_setup(), re.findall(rb"class=err>[^<]*", r.data)
 made_p12 = (tmp / "apikey" / "cert.p12").read_bytes()
 assert G.cert_problems(made_p12, G.P12_PASSWORD) == [] and len(G.P12_PASSWORD) >= 20  # signs: our key, Apple's Distribution cert
 assert G.load_json(G.SETUP)["p12_password"] == G.P12_PASSWORD and os.environ["ASC_KEY_ID"] == "KEYID12345"
-assert len(apple.bundles) == 1 and len(apple.caps) == 3 and len(apple.certs) == 1  # the App ID made once, not again on the retry
+assert len(apple.bundles) == 1 and len(apple.caps) == 25 and len(apple.certs) == 1  # the App ID made once, not again on the retry
 assert [m for m, p, _ in apple.calls].count("DELETE") == 0
-assert G.ensure_app_id("com.me.*") and len(apple.caps) == 3 and not G.ensure_app_id("com.me.*")  # a wildcard gets no capabilities
+assert G.ensure_app_id("com.me.*") and len(apple.caps) == 25 and not G.ensure_app_id("com.me.*")  # a wildcard gets no capabilities
+# an App ID that already exists (made by hand, with Push and App Groups) gets the ones it lacks; one Apple refuses is skipped
+apple.bundles["BX"] = {"type": "bundleIds", "id": "BX", "attributes": {"identifier": "com.me.hand"}}
+apple.caps += [("BX", "PUSH_NOTIFICATIONS"), ("BX", "APP_GROUPS")]
+apple.refuse = {"HEALTHKIT"}
+assert G.ensure_app_id("com.me.hand") and [c for b, c in apple.caps if b == "BX"] == ["PUSH_NOTIFICATIONS", "APP_GROUPS"] + [
+    c for c in ALL_CAPS if c not in ("PUSH_NOTIFICATIONS", "APP_GROUPS", "HEALTHKIT")]
+n = len(apple.caps); apple.refuse = set()
+assert G.ensure_app_id("com.me.hand") and apple.caps[n:] == [("BX", "HEALTHKIT")]  # tried again next time
+assert not G.ensure_app_id("com.me.hand") and len(apple.caps) == n + 1  # nothing missing: the profile needn't change
+apple.bundles["BY"] = {"type": "bundleIds", "id": "BY", "attributes": {"identifier": "com.me.nopush"}}
+apple.refuse = {"PUSH_NOTIFICATIONS"}
+try:
+    G.ensure_app_id("com.me.nopush"); raise AssertionError("Push refused, yet no error")
+except RuntimeError as e:
+    assert "PUSH_NOTIFICATIONS" in str(e)
+apple.refuse = set(); del apple.bundles["BX"], apple.bundles["BY"]
+# at start: a profile made for another certificate or App ID, or an App ID that just got capabilities, is made again and every
+# app signed again; a profile that fits is left alone
+regens, resign_all0, gprof0 = [], G.resign_all, G.PROFILE.read_bytes() if G.PROFILE.exists() else None
+G.resign_all = lambda: regens.append(1)
+_, gcert, _ = P12x.load_key_and_certificates(made_p12, G.P12_PASSWORD.encode())
+gprof = lambda der, appid: G.PROFILE.write_bytes(b"\x30junk" + plistlib.dumps({"DeveloperCertificates": [der], "Entitlements": {
+    "application-identifier": appid, "com.apple.developer.team-identifier": "TEAM"}}) + b"\x00")
+gprof(gcert.public_bytes(S.Encoding.DER), "TEAM.com.me.sideload")
+assert G.BUNDLE_ID == "com.me.sideload" and G.profile_stale() is None
+G.heal_signing(); assert regens == []
+gprof(dcrt.public_bytes(S.Encoding.DER), "TEAM.com.me.sideload")
+assert "another certificate" in G.profile_stale(); G.heal_signing(); assert regens == [1]
+gprof(gcert.public_bytes(S.Encoding.DER), "TEAM.com.me.*")
+assert "com.me.*" in G.profile_stale(); G.heal_signing(); assert regens == [1, 1]
+gprof(gcert.public_bytes(S.Encoding.DER), "TEAM.com.me.sideload")
+apple.caps.remove(("B0", "MAPS"))  # a capability added to the list since the profile was made
+G.heal_signing(); assert regens == [1, 1, 1] and ("B0", "MAPS") in apple.caps
+G.heal_signing(); assert regens == [1, 1, 1]
+G.PROFILE.unlink(); G.heal_signing(); assert regens == [1, 1, 1]  # no profile yet: the first registration makes it
+G.resign_all = resign_all0
+if gprof0 is not None: G.PROFILE.write_bytes(gprof0)
 # Manage: Make New Certificate with the account full lists the certificates and revokes nothing; the pick is revoked, then a new one made
 apple.add_cert(dist_cert("Apple Distribution: Old Mac (TEAM123456)"), "Old Mac"); apple.add_cert(dist_cert(days=40), "Elsewhere")
 ga = G.app.test_client(); assert ga.get("/?password=admin-pass-x").location == "/"

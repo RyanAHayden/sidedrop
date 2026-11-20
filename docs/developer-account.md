@@ -39,8 +39,8 @@ and fill in the Issuer ID and the **App ID** you want, such as `com.yourname.sid
 
 SideDrop then:
 
-1. makes the App ID if the account doesn't have it: an explicit one gets **Push Notifications**, **App Groups** and
-   **Associated Domains** (a wildcard such as `com.yourname.*` gets none; Apple gives wildcards no Push);
+1. makes the App ID if the account doesn't have it, and gives an explicit one every capability it lacks from the list
+   in [Capabilities](#capabilities) (a wildcard such as `com.yourname.*` gets none; Apple gives wildcards no Push);
 2. makes a private key and a certificate signing request on the server, and has Apple issue an **Apple
    Distribution** certificate for it;
 3. saves the two as `cert.p12` in the data folder, with a random password kept in `setup.json` beside it (or the
@@ -64,9 +64,11 @@ You don't register iPhones or make profiles on developer.apple.com. When a frien
 adds the UDID to the account through the API, makes a new Ad Hoc profile for `BUNDLE_ID` with every enabled iPhone
 and your certificate, and re-signs every app.
 
-SideDrop makes the profile again only when an iPhone registers or is turned on or off, or the signing files change.
-After changing the App ID's capabilities, make it happen yourself: **Settings > Manage** (needs the admin
-password), turn any iPhone off, then on again. A profile holds the capabilities the App ID had when it was made.
+SideDrop makes the profile again when an iPhone registers or is turned on or off, when the signing files change on
+Manage, and when it starts and finds the profile made for another certificate or App ID (you changed `cert.p12`,
+`P12_PASSWORD` or `BUNDLE_ID` on the server) or had to add capabilities to the App ID. A profile holds the
+capabilities the App ID had when it was made. After changing them yourself on developer.apple.com, make it happen:
+**Settings > Manage** (needs the admin password), turn any iPhone off, then on again.
 
 Apple allows 100 iPhones per account per membership year; turning one off takes it out of the profile, but its slot
 frees up only at renewal.
@@ -79,10 +81,33 @@ openssl smime -inform der -verify -noverify -in data/adhoc.mobileprovision | gre
 
 It should say `production`.
 
+### How apps are signed
+
+With an explicit App ID, every app keeps its own bundle ID in Info.plist (YouTube stays `com.google.ios.youtube`),
+iFizBox included. Only the entitlements carry the App ID: `application-identifier` is `TEAM.<App ID>`, the keychain
+group is narrowed to that one ID, `get-task-allow` is off, and the rest is what the profile grants. App extensions
+(share sheets, widgets, notification services) stay, keep their own IDs and get the same entitlements; watch apps are
+removed, since no watch is in the profile.
+
 Every app SideDrop signs uses the one App ID, so they share a keychain: an app could see another's saved sign-ins.
 Fine among friends' own phones; iFizBox makes one App ID per app instead. A wildcard `BUNDLE_ID` still works (the old
 way: apps renamed to `com.yourname.<app>`, no push), and so does an explicit one without Push (bundle IDs kept, no
 notifications).
+
+### Capabilities
+
+SideDrop turns these on for an explicit App ID, when it makes it and at every start (adding only what's missing):
+every capability App Store Connect's API accepts for an App ID.
+
+- Push Notifications (it must succeed; the others are skipped with a line in the log if Apple refuses one)
+- App Groups, Associated Domains, iCloud (CloudKit), Game Center, HealthKit, HomeKit, SiriKit
+- Network Extensions, Personal VPN, Multipath, Hotspot, NFC Tag Reading, Access Wi-Fi Information
+- ClassKit, AutoFill Credential Provider, Low-Latency HLS, Sign in with Apple, Wallet, In-App Purchase
+- Inter-App Audio, Wireless Accessory Configuration, Data Protection (complete), Maps, Apple Pay
+
+The API has no way to turn on time-sensitive or communication notifications, WeatherKit, App Attest, fonts, the
+memory-limit entitlements or multitasking camera access. Tick those on developer.apple.com if you want them; SideDrop
+leaves capabilities it didn't add alone. An app that asks for one the profile lacks goes without it.
 
 ## 5. Switching from a wildcard
 
@@ -90,6 +115,10 @@ Apps signed under a wildcard were renamed (`com.yourname.youtube`); with an expl
 so iOS sees them as different apps. Friends install them again from SideDrop and delete the old copies (their data
 doesn't carry over). If the App Store copy of an app is on the phone, delete it first: iOS won't put a signed app
 over it.
+
+An app whose ID already fitted the wildcard (`com.yourname.app`, iFizBox when the wildcard is `com.ryha.*`) keeps
+the same ID, but its `application-identifier` changes from `TEAM.com.yourname.app` to `TEAM.<App ID>`. iOS may refuse
+to install that over the old copy; if it does, delete the old copy first.
 
 ## Manual setup
 
@@ -133,8 +162,8 @@ Turn it into `cert.p12`:
 
 - **Explicit**, an ID of your own such as `com.yourname.sideload`. Not a wildcard (`com.yourname.*`): Apple gives
   wildcards no Push.
-- Tick **Push Notifications**, **App Groups** and **Associated Domains**. Many apps ask for the last two, and an app
-  that asks for one the App ID lacks just goes without it.
+- Tick **Push Notifications**. SideDrop adds the rest of [Capabilities](#capabilities) itself when the API key may
+  (App Manager can); an app that asks for one the App ID lacks just goes without it.
 - Continue, Register.
 
 ### M3. Upload them

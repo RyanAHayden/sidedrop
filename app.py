@@ -262,14 +262,16 @@ def app_entitlements(bid):
     """The profile's entitlements, with a wildcard narrowed to this app, the way Xcode signs.
 
     zsign copies TEAM.com.you.* verbatim, and iOS can then match the app to a development
-    profile on the phone and demand Developer Mode. An explicit App ID (with push) is left as is:
-    iOS checks application-identifier against the profile but not Info.plist, so the app keeps its
-    own bundle ID and registers for push under it, and its developer's server can reach it."""
+    profile on the phone and demand Developer Mode. An explicit App ID (with push) keeps the profile's
+    application-identifier (TEAM.<App ID>), the way paid signing services sign: iOS checks it against
+    the profile but not Info.plist, so the app keeps its own bundle ID and registers for push under it,
+    and its developer's server can reach it. Either way the keychain group is narrowed to that one ID
+    (the profile has TEAM.*), and zsign puts the same entitlements on every extension."""
     ents = embedded_plist(PROFILE.read_bytes())["Entitlements"]
-    if BUNDLE_ID.endswith("*"):
-        team = ents["com.apple.developer.team-identifier"]
-        ents["application-identifier"] = f"{team}.{bid}"
-        ents["keychain-access-groups"] = [f"{team}.{bid}"]
+    team = ents["com.apple.developer.team-identifier"]
+    appid = f"{team}.{bid}" if BUNDLE_ID.endswith("*") else ents["application-identifier"]
+    ents["application-identifier"] = appid
+    ents["keychain-access-groups"] = [appid]
     ents["get-task-allow"] = False
     return ents
 
@@ -296,6 +298,10 @@ def ifizbox_settings():
 
 
 def sign_ipa(src, out):
+    """Sign one IPA. Under an explicit App ID every app keeps its Info.plist bundle ID, iFizBox's own too: it is installed as
+    com.ryha.ifizbox already (it fitted the old com.ryha.* wildcard), and iFizBox signs its own IPA the old way only when the
+    installed copy has another ID. Extensions stay, signed with the app's entitlements (installd wants their IDs prefixed by
+    the app's, which keeping the IDs does); watch apps go (--rm_watch): no watch is in the profile."""
     old_id = ipa_info(src)["id"]
     new_id = fit_bundle_id(old_id)
     extra = {"ifizbox-identity.plist": ifizbox_identity(), "web/transfer.link": ifizbox_transfer().encode()} if old_id == IFIZBOX_ID else {}
@@ -307,7 +313,7 @@ def sign_ipa(src, out):
     ents.write_bytes(plistlib.dumps(app_entitlements(new_id or old_id)))
     try:
         subprocess.run(["zsign", "-q", "-t", out.parent, "-k", P12, "-p", P12_PASSWORD, "-m", PROFILE,
-                        "-e", ents, "-o", out, tmp], check=True, timeout=600)
+                        "-e", ents, "--rm_watch", "-o", out, tmp], check=True, timeout=600)
     finally:
         ents.unlink(missing_ok=True)
         if rewrite:
@@ -1732,7 +1738,17 @@ if P12.exists() and not needs_setup():  # ponytail: once per worker; Apple's che
 # --- setup with just the API key: sidedrop makes the Apple Distribution certificate and the App ID through the API ---
 
 DIST_TYPES = ("DISTRIBUTION", "IOS_DISTRIBUTION")  # Apple Distribution, and the older iOS Distribution, which share the limit
-APP_ID_CAPS = ("PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS")  # as docs/developer-account.md ticks them; Push must work
+opt = lambda key, option: [{"key": key, "options": [{"key": option, "enabled": True}]}]
+# An explicit App ID gets every capability Apple's API takes for one (tried on a real team), so an app finds what it asks for in
+# the profile; Push must work, the rest may be refused. Not in the API, so never in the profile: time-sensitive and communication
+# notifications, WeatherKit, App Attest, fonts, memory limits, multitasking camera. {capabilityType: settings or None}
+APP_ID_CAPS = {"PUSH_NOTIFICATIONS": None, "APP_GROUPS": None, "ASSOCIATED_DOMAINS": None,
+               "ICLOUD": opt("ICLOUD_VERSION", "XCODE_6"), "GAME_CENTER": None, "HEALTHKIT": None, "HOMEKIT": None, "SIRIKIT": None,
+               "NETWORK_EXTENSIONS": None, "PERSONAL_VPN": None, "MULTIPATH": None, "HOT_SPOT": None, "NFC_TAG_READING": None,
+               "CLASSKIT": None, "AUTOFILL_CREDENTIAL_PROVIDER": None, "ACCESS_WIFI_INFORMATION": None, "COREMEDIA_HLS_LOW_LATENCY": None,
+               "APPLE_ID_AUTH": opt("APPLE_ID_AUTH_APP_CONSENT", "PRIMARY_APP_CONSENT"), "WALLET": None, "IN_APP_PURCHASE": None,
+               "INTER_APP_AUDIO": None, "WIRELESS_ACCESSORY_CONFIGURATION": None,
+               "DATA_PROTECTION": opt("DATA_PROTECTION_PERMISSION_LEVEL", "COMPLETE_PROTECTION"), "MAPS": None, "APPLE_PAY": None}
 # the manual certificate steps, shown where cert.p12 is picked (setup splash, Manage > Signing) instead of a link out
 MANUAL_STEPS = """<style>.msteps{margin:0;padding-left:20px;font-size:14px;color:var(--sub);display:flex;flex-direction:column;gap:6px}
 .msteps b{color:var(--fg,inherit)} .msteps code{display:block;margin-top:3px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}</style>
@@ -1761,24 +1777,34 @@ def asc_status(e):
 
 
 def ensure_app_id(bid):
-    """Make the App ID if the account lacks it: an explicit one with Push (and App Groups and Associated Domains, which many
-    apps ask for); a wildcard gets none, Apple gives wildcards no Push. Returns True when it made one."""
+    """Make the App ID if the account lacks it, and give an explicit one every capability in APP_ID_CAPS it lacks (Push must
+    succeed; another Apple refuses is skipped with a log line). A wildcard gets none: Apple gives wildcards no Push. Returns
+    True when it made the App ID or added a capability, so the profile, which holds the capabilities it was made with, is stale."""
     found = [b for b in asc("GET", "/bundleIds", params={"filter[identifier]": bid, "limit": 200})["data"]
              if b["attributes"]["identifier"] == bid]  # the filter is a prefix match
     if found:
-        return False
-    made = asc("POST", "/bundleIds", json={"data": {"type": "bundleIds", "attributes": {
-        "identifier": bid, "name": "SideDrop", "platform": "IOS"}}})["data"]
-    if not bid.endswith("*"):
-        for cap in APP_ID_CAPS:
-            try:
-                asc("POST", "/bundleIdCapabilities", json={"data": {"type": "bundleIdCapabilities", "attributes": {"capabilityType": cap},
-                    "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": made["id"]}}}}})
-            except RuntimeError as e:
-                if cap == "PUSH_NOTIFICATIONS":
-                    raise
-                print(f"App ID {bid}: couldn't turn on {cap}:", e, flush=True)
-    return True
+        if bid.endswith("*"):
+            return False
+        bundle = found[0]["id"]  # Apple refuses a limit on this list (400)
+        have = {c["attributes"].get("capabilityType") for c in asc("GET", f"/bundleIds/{bundle}/bundleIdCapabilities")["data"]}
+    else:
+        bundle = asc("POST", "/bundleIds", json={"data": {"type": "bundleIds", "attributes": {
+            "identifier": bid, "name": "SideDrop", "platform": "IOS"}}})["data"]["id"]
+        have = set()
+    changed = not found
+    for cap, settings in APP_ID_CAPS.items() if not bid.endswith("*") else ():
+        if cap in have:
+            continue
+        try:
+            asc("POST", "/bundleIdCapabilities", json={"data": {"type": "bundleIdCapabilities",
+                "attributes": {"capabilityType": cap, **({"settings": settings} if settings else {})},
+                "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle}}}}})
+            changed = True
+        except RuntimeError as e:
+            if cap == "PUSH_NOTIFICATIONS":
+                raise
+            print(f"App ID {bid}: couldn't turn on {cap}:", e, flush=True)
+    return changed
 
 
 def dist_certs():
@@ -1850,7 +1876,7 @@ def api_signing(s, revoke=""):
     """The API-key path of the setup splash and Manage: the App ID if missing, then a certificate. (error, certificates to pick)."""
     try:
         if ensure_app_id(BUNDLE_ID):
-            print(f"made App ID {BUNDLE_ID} through the API", flush=True)
+            print(f"made App ID {BUNDLE_ID} (or gave it capabilities) through the API", flush=True)
     except Exception as e:
         if asc_status(e) == 403:
             return f"Apple refused to make the App ID {BUNDLE_ID}: the API key needs the Admin role. {str(e)[:160]}", []
@@ -2711,6 +2737,42 @@ def resign_all():
                 resign(force=True)
     except Exception as e:
         print("re-signing after new signing files failed:", e, flush=True)
+
+
+def profile_stale():
+    """Why the ad hoc profile no longer fits the signing files: made for another certificate or another App ID, or None."""
+    p = embedded_plist(PROFILE.read_bytes())
+    _, cert, _ = pkcs12.load_key_and_certificates(P12.read_bytes(), P12_PASSWORD.encode() or None)
+    if cert.public_bytes(serialization.Encoding.DER) not in p.get("DeveloperCertificates", []):
+        return "it was made for another certificate"
+    ents = p.get("Entitlements", {})
+    if ents.get("application-identifier") != f"{ents.get('com.apple.developer.team-identifier')}.{BUNDLE_ID}":
+        return f"it was made for {ents.get('application-identifier')}, not {BUNDLE_ID}"
+    return None
+
+
+def heal_signing():
+    """At start, after cert.p12, P12_PASSWORD or BUNDLE_ID changed on the server: the App ID gets the capabilities it lacks, and a
+    profile that no longer fits (or predates those capabilities) is made again, with every app signed again."""
+    if needs_setup() or not (PROFILE.exists() and P12.exists() and ASC_KEY.exists() and BUNDLE_ID
+                             and os.environ.get("ASC_KEY_ID") and os.environ.get("ASC_ISSUER_ID")):
+        return
+    why = None
+    try:
+        if ensure_app_id(BUNDLE_ID):
+            why = f"the App ID {BUNDLE_ID} was made or got capabilities"
+    except Exception as e:
+        print(f"couldn't check the App ID {BUNDLE_ID}'s capabilities:", e, flush=True)
+    try:
+        why = why or profile_stale()
+    except Exception as e:
+        print("couldn't read the ad hoc profile or cert.p12:", e, flush=True)
+    if why:
+        print(f"making the ad hoc profile again: {why}", flush=True)
+        resign_all()
+
+
+threading.Thread(target=heal_signing, daemon=True).start()  # ponytail: once per worker (one gunicorn worker)
 
 
 @app.post("/admin/signing")

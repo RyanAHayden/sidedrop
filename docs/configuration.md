@@ -27,8 +27,10 @@ Put `asc.p8` and `cert.p12` in the data folder and fill in `PASSWORD`, `ADMIN_PA
 
 ## `BUNDLE_ID`
 
-Either an explicit App ID with Push Notifications, App Groups and Associated Domains, such as `com.you.sideload`
-(recommended: apps keep their own bundle ID in Info.plist, so push works), or a wildcard such as `com.you.*`, which
+Either an explicit App ID with Push Notifications, such as `com.you.sideload` (recommended: apps keep their own
+bundle ID in Info.plist and only the entitlements carry the App ID, so push works; SideDrop gives the App ID every
+capability Apple's API accepts, listed in [developer-account.md](developer-account.md#capabilities), and makes the
+profile again when it adds one), or a wildcard such as `com.you.*`, which
 re-IDs apps outside it (`com.other.game` becomes `com.you.game`) and can't carry entitlements like push. Apps signed
 under a wildcard install again as separate apps after a switch.
 
