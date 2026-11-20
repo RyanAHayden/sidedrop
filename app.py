@@ -1093,9 +1093,12 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% if inv_name %}<button>Register iPhone</button>{# a named one-iPhone invite: registered under its name, no typing #}
 {% else %}<input name=name required maxlength=30 placeholder="Your name" aria-label="Your name" autocomplete=given-name
  oninput="this.form.querySelector('button').disabled=!this.value.trim()"><button disabled>Register iPhone</button>{% endif %}</form>
-<ol id=next hidden><li>Tap <b>Allow</b>, then <b>Close</b>.</li><li>Open the <b>Settings</b> app.</li>
-<li>Tap <b>Profile Downloaded</b> near the top.</li><li>Tap <b>Install</b>, enter your passcode, tap <b>Install</b> again.</li>
-<li>You'll land back here automatically, registered.</li></ol>{% endset %}
+{# R1: where iOS puts each tap. The Profile Downloaded row sits under the Apple Account name; Install is a top-right nav button, not a
+   button at the bottom; iOS deletes a downloaded profile not installed within 8 minutes; a dismissed row is still under VPN & Device Management #}
+<ol id=next hidden><li>Tap <b>Allow</b>, then <b>Close</b>.</li><li>Leave Safari and open the <b>Settings</b> app (the grey gear), within a few minutes.</li>
+<li>Tap <b>Profile Downloaded</b>, just under your name at the top. Not there? Go to <b>General</b> › <b>VPN &amp; Device Management</b> and tap <b>SideDrop device registration</b>.</li>
+<li>Tap <b>Install</b> in the top-right corner, enter your iPhone passcode, then tap <b>Install</b> again if iOS asks.</li>
+<li>Safari opens back here by itself, registered.</li></ol>{% endset %}
 {# sdp_steps, dev_steps and a2hs_steps: Jinja globals (F26, SDP_STEPS etc. in app.py), shared with the Help page #}
 {% macro install(a) %}{% if not enrolled %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>
 {% else %}{% set lbl = 'GET' if a.name not in mine else 'INSTALLED' if mine[a.name] == a.vkey else 'UPDATE' %}
@@ -2332,7 +2335,7 @@ HELP_CSS = """<style>.num{flex:none;width:24px;height:24px;border-radius:50%;dis
 HELP = """<h3 class=hdr>Problems</h3><div class="g hlp">
 <details id=register><summary>{{ icon('device') }}<span>Register iPhone Didn't Work</span></summary>
 <ol><li>Tap <b>Register iPhone</b> again, then <b>Allow</b>.</li>
-<li>Open the <b>Settings</b> app, tap <b>Profile Downloaded</b> near the top, then <b>Install</b>.</li>
+<li>Open the <b>Settings</b> app, tap <b>Profile Downloaded</b> just under your name, then <b>Install</b> in the top-right corner. No such row? It's under <b>General</b> › <b>VPN &amp; Device Management</b>; after 8 minutes iOS deletes it, so register again.</li>
 <li>Stuck on a wait timer? That's <b>Stolen Device Protection</b>: turn it off as below, or do it at home, where there's no wait.</li></ol>
 {{ sdp_steps }}</details>
 <details id=install><summary>{{ icon('alert') }}<span>An App Won't Install</span></summary>

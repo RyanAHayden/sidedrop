@@ -94,6 +94,7 @@ assert calls == [("00008130-AAAA", "Sam script iPhone16,1")]
 html = c.get("/").data
 assert b"Set up this iPhone" in html and b"/static/sdp1.jpg" in html and b'href="itms-services' not in html and b"id=ifzb " not in html  # apps locked until registered
 # Apps header: welcome, GitHub | iFizBox, then Help (F26: no About) and the setup tile, which folds the SDP + Register steps behind it
+assert b"just under your name" in html and b"<b>Install</b> in the top-right corner" in html and b"VPN &amp; Device Management" in html  # R1: where each tap is
 assert b"Welcome to SideDrop" in html and b"<title>SideDrop</title>" in html and b"<h1 id=navT>SideDrop</h1>" in html and b"Ryan Hayden (Fizlo)</a>" in html and b"go('ifizbox')" in html and b"id=setupT" in html and b"<div id=setup hidden>" in html
 # F26: the About alert, its nav button and its tiles are gone; Help is a pushed page
 assert b"About" not in html and b"id=about" not in html and b"aboutT" not in html and b'<a class=tile href=/help onclick="return helpOpen()">' in html
