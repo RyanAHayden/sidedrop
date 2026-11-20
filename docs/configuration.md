@@ -94,7 +94,12 @@ SIDEDROP_SYNC_TOKEN`). `/sync` returns 202 right away and works in the backgroun
 ## Manage, in more detail
 
 Sign in with the admin password instead of the friends' one, on the sign-in screen or as
-`?password=<admin password>`, and **Settings → Manage** appears.
+`?password=<admin password>`, and **Settings → Manage** appears (its detail is the number of iPhones registered).
+
+Manage opens with a banner: green (**Signing works**: the certificate's kind, the App ID, and Push when the profile
+has it) when nothing is wrong, else the first problem Signing lists. Its rows come in three groups: **Friends**
+(iPhones, Invite Friends, Passwords), **Signing** (Certificate with its expiry, Profile with its capabilities and the
+iPhones in it; both open Signing) and **Apps** (App Sources, Files for Friends, iFizBox with the version served).
 
 - **iPhones**: Apple has no API to delete a device. Turning one off takes it out of the profile so its apps stop
   opening, but its slot only frees up at renewal.
