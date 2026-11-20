@@ -1315,6 +1315,32 @@ inv(do="revoke", tok=tok)
 assert not signed_in(guest) and not signed_in(hs) and I.profile_udids() == {"GUEST-1"}
 gone = I.app.test_client(); gone.set_cookie("device", I.device_token("GUEST-1"))
 assert not signed_in(gone)  # F31: a revoked invite's device cookie signs nobody in
+# B9: make, revoke, make again. The friend's iPhone (GUEST-1, registered through the revoked link) opens the new one in Safari: the
+# iPhone is already registered, so nothing ever used the new link, its Home Screen app (the revoked link's session, the device
+# cookie) said "doesn't work any more", and 7 days on Safari's session said "expired". An iPhone already in the profile uses an
+# unused invite on opening it, so every cookie jar of that iPhone gets in, past the 7 days, after a restart, and after a crawler
+safari, homeapp = I.app.test_client(), I.app.test_client()
+for cl in (safari, homeapp):
+    cl.set_cookie("device", I.device_token("GUEST-1"))
+    with cl.session_transaction() as s:
+        s.update(ok=True, pv=["g", tok, "the-revoked-links-session"])
+ntok = re.search(r"new=([\w-]+)$", inv(do="new", name="Sam").location).group(1)
+assert I.app.test_client().get(f"/invite/{ntok}").location == "/?go=setup"  # a link-preview crawler (no cookies) uses nothing up
+assert "Not used" in boss.get("/admin/invites").data.decode()
+assert safari.get(f"/invite/{ntok}").location == "/?go=setup" and signed_in(safari)
+assert "Used by Sam iPhone14,2 on" in boss.get("/admin/invites").data.decode() and I.profile_udids() == {"GUEST-1"}
+assert homeapp.get("/").status_code == 302 and signed_in(homeapp), homeapp.get("/").data[:300]
+invs = I.load_invites(); invs[ntok]["exp"] = time.time() - 1; I.save_json(I.INVITES, invs)  # 7 days on
+assert signed_in(safari) and signed_in(homeapp)
+I2 = boot(idir, PASSWORD="friends-pass-16", ADMIN_PASSWORD="admin-pass-16", SECRET_KEY="i" * 32)  # a restart, or a second worker
+later = I2.app.test_client(); later.set_cookie("device", I2.device_token("GUEST-1")); later.get("/")
+assert signed_in(later) and I2.app.test_client().get(f"/invite/{ntok}").status_code == 403  # used: other iPhones still refused
+# an iPhone not registered yet opening it after the link was made, revoked and made again registers through the new one as before
+utok = re.search(r"new=([\w-]+)$", inv(do="new").location).group(1); inv(do="revoke", tok=utok)
+vtok = re.search(r"new=([\w-]+)$", inv(do="new").location).group(1)
+nu = I.app.test_client(); assert nu.get(f"/invite/{utok}").status_code == 403 and nu.get(f"/invite/{vtok}").location == "/?go=setup" and signed_in(nu)
+assert "Not used" in boss.get("/admin/invites").data.decode()
+inv(do="revoke", tok=ntok); inv(do="revoke", tok=vtok)
 # F30: every setup or invite link, opened in a fresh browser, lands on the setup steps unfolded at step 1 (Stolen Device Protection),
 # not on Home with them folded; plain / keeps them folded, a registered iPhone has none, the admin's own ?password= link stays on /
 setup_open = lambda h: '<div id=setup>' in h and 'id=setupT aria-expanded=true' in h and h.index('id=sdp open') < h.index('id=reg>')
