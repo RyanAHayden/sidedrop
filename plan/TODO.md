@@ -2,6 +2,7 @@
 
 ### Next
 
+- [ ] **B18** Apps row 'Mark as Installed' hold sheet (mkItems, ~app.py:1449, F27 /installed route ~1574) doesn't look like the iFizBox action sheet, and on choosing it vanishes at once instead of sliding down. Match iFizBox's sheet look (use the same UIKit-art action sheet styling iFizBox uses) and run the slide-away animation before removing it. Check: test_app.py covers the markup/class; screenshot open and dismiss on a 375px iPhone. | files: app.py, test_app.py
 ### Follow-ups
 
 - [~] **F34** (follow-up, normal) Control session 4 asked the person: "Want me to add that to the run's queue?" Carry on from their answer (the session, closed while it waited: https://claude.ai/code/session_012iEtdP3dUvBtpKQviukSVv) BLOCKED: DECIDE: Want me to add that to the run's queue? https://claude.ai/code/session_012iEtdP3dUvBtpKQviukSVv (asked 2026-11-20 14:37)
