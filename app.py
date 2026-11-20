@@ -714,6 +714,8 @@ PAGE = """<!doctype html><meta charset=utf-8><meta name=build content=%BUILD%><m
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--pin)}
 /* always 1px taller than the screen, so short pages still rubber-band like native */
 #scr{scrollbar-width:none} #scr::-webkit-scrollbar{display:none} .page{min-height:calc(100% + 1px)}
+/* F29: Settings doesn't rubber-band: dragging it down showed a gap of pinstripes above its first group (and it has nothing to pull-reload) */
+#scr:has(>#t-settings:not([hidden])){overscroll-behavior-y:none} #t-settings{min-height:0}
 /* scroll indicator, drawn by us between the nav and tab bar (iOS doesn't show one for a scrolling body) */
 /* UIKit's UIScrollerIndicatorDefault: 5pt black at 50% with a 1pt 15% white ring, fully rounded (7pt overall) */
 #sb{position:fixed;right:2px;z-index:6;width:5px;border-radius:3px;background:rgba(0,0,0,.5);box-shadow:0 0 0 1px rgba(255,255,255,.15);opacity:0;transition:opacity .3s,width .1s;pointer-events:none;will-change:transform}
@@ -1186,15 +1188,17 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <section class=page id=t-settings data-title=Settings>
 {# F26, the user's concept (2026-11-19): iOS 6 Settings' grouped rows, each with its 29pt icon, a chevron where it pushes a page, a footer
    under its group. This iPhone; Manage (the admin's); Theme and Update Alerts; Add to Home Screen; Help; Sign Out and the version line.
-   No iFizBox row (the tab bar has it) and no About. #}
-<h3 class=hdr>This iPhone</h3><div class="g sg" id=sThis>
+   No iFizBox row (the tab bar has it) and no About.
+   F29: the status group has no title ('This iPhone' read as the title of everything under it); the admin's rows are under Admin Settings
+   (Manage, then Share: Invite Friends' links), with no footer; Theme and Update Alerts under Preferences. #}
+<div class="g grp sg" id=sThis>
 {% if enrolled %}<div class="row irow">{{ row_icon('status') }}<div>Status</div><span class=val>Registered</span></div>
 {% else %}<a class="row mrow" href=#apps onclick="return nudge()">{{ row_icon('device') }}<div>Status</div><span class=val>Not registered</span></a>{% endif %}
 {% if stats and stats[1] %}<div class="row irow">{{ row_icon('calendar') }}<div>Apps Work Until</div><span class=val>{{ stats[1].strftime('%b %-d, %Y') }}</span></div>{% endif %}</div>
 <p class=ftr>{% if enrolled %}Every app on the Apps tab can install on this iPhone.{% else %}Register this iPhone on the Apps tab, then every app there can install on it.{% endif %}</p>
-{% if is_admin %}<div class="g grp sg" id=sManage><a class="row mrow" href=/admin data-push>{{ row_icon('manage') }}<div>Manage</div><span class=val>{{ n_iphones }} iPhone{{ '' if n_iphones == 1 else 's' }}</span></a></div>
-<p class=ftr>Only you see this: you run this SideDrop.</p>{% endif %}
-<div class="g grp sg" id=sTheme><a class="row mrow" href=/theme data-push>{{ row_icon('theme') }}<div>Theme</div><span class=val id=themeV>{{ theme_name }}</span></a>
+{% if is_admin %}<h3 class=hdr>Admin Settings</h3><div class="g sg" id=sManage><a class="row mrow" href=/admin data-push>{{ row_icon('manage') }}<div>Manage</div><span class=val>{{ n_iphones }} iPhone{{ '' if n_iphones == 1 else 's' }}</span></a>
+<a class="row mrow" href=/admin/invites data-push id=shareRow>{{ row_icon('share') }}<div>Share</div></a></div>{% endif %}
+<h3 class=hdr>Preferences</h3><div class="g sg" id=sTheme><a class="row mrow" href=/theme data-push>{{ row_icon('theme') }}<div>Theme</div><span class=val id=themeV>{{ theme_name }}</span></a>
 {% if enrolled %}<div class="row irow">{{ row_icon('notifications') }}<div>Update Alerts</div><label class=sw><input type=checkbox id=pushSw aria-label="Update Alerts"
  onchange="pushSet(this.checked)"><i></i><span class=k></span></label></div>{% endif %}</div>
 {% if enrolled %}<p class=ftr id=pushNote>Tells you when an app you installed has a new version.</p>{% endif %}

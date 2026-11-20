@@ -364,7 +364,11 @@ assert re.findall(r'<div class="g[^"]*" id=(s\w+)>', settings_tab) == ["sThis", 
 assert ico("status") + "<div>Status</div><span class=val>Registered</span>" in settings_tab
 for gone in (">iFizBox<", "#ifizbox", "About", "iPhones used", ico("slots"), "Stolen Device", "<details", "class=tile", "class=pair", "g split"):
     assert gone not in settings_tab, gone
-order = [settings_tab.index(s) for s in ("<h3 class=hdr>This iPhone</h3>", "<div>Status</div>", "Every app on the Apps tab can install on this iPhone.</p>",
+# F29: no 'This iPhone' title; a user has no Admin Settings or Share row; Theme sits under Preferences; Settings doesn't rubber-band
+assert "This iPhone</h3>" not in settings_tab and "Admin Settings" not in settings_tab and "id=shareRow" not in settings_tab and "<div>Share</div>" not in settings_tab
+assert re.findall(r"<h3 class=hdr>([^<]+)</h3>", settings_tab) == ["Preferences"] and settings_tab.index("Preferences</h3>") < settings_tab.index("<div>Theme</div>")
+assert "#scr:has(>#t-settings:not([hidden])){overscroll-behavior-y:none} #t-settings{min-height:0}" in html
+order = [settings_tab.index(s) for s in ("<div>Status</div>", "Every app on the Apps tab can install on this iPhone.</p>",
                                          "<div>Theme</div>", "<div>Update Alerts</div>", "Tells you when an app you installed has a new version.</p>",
                                          '<a class="row mrow" href=/home-screen data-push>' + ico("homeScreen") + "<div>Add to Home Screen</div></a>",
                                          "Open SideDrop from your Home Screen like an app.</p>",
@@ -621,7 +625,12 @@ for ftr in ("Who can sign in, and the links that let a friend register one iPhon
 st = (h := c.get("/").data.decode())[h.index("id=t-settings"):]; st = st[:st.index("</section>")]  # the admin's Settings: the Manage row, second
 assert re.findall(r'<div class="g[^"]*" id=(s\w+)>', st) == ["sThis", "sManage", "sTheme", "sHome", "sHelp"]
 assert '<a class="row mrow" href=/admin data-push>' + str(A.row_icon("manage")) + "<div>Manage</div><span class=val>1 iPhone</span></a>" in st
-assert "<p class=ftr>Only you see this: you run this SideDrop.</p>" in st and A.ROW_ICONS["manage"][0] == "#f08b1d"
+assert "Only you see this" not in st and A.ROW_ICONS["manage"][0] == "#f08b1d"  # F29: no hint under the admin's group
+# F29: the admin's group is titled Admin Settings (Manage, then Share pushing Invite Friends' links); Theme's group is Preferences
+assert re.findall(r"<h3 class=hdr>([^<]+)</h3>", st) == ["Admin Settings", "Preferences"] and "This iPhone</h3>" not in st
+assert re.findall(r"<div>(\w[\w ]*)</div>", st[st.index("id=sManage"):st.index("id=sTheme")]) == ["Manage", "Share"]
+assert '<a class="row mrow" href=/admin/invites data-push id=shareRow>' + str(A.row_icon("share")) + "<div>Share</div></a>" in st
+assert st.index("Admin Settings") < st.index("id=sManage") < st.index("Preferences") < st.index("id=sTheme")
 assert A.tile_svg("general").startswith('<svg xmlns="http://www.w3.org/2000/svg" width="29" height="29"') and 'fill="#8c9097"' in A.tile_svg("general")
 t0 = time.monotonic(); html = c.get("/admin/iphones").data.decode()  # nothing saved yet: the loading row, and the refresh's script
 assert time.monotonic() - t0 < 1 and "Loading from Apple…" in html and "/admin/devices.json" in html and "No iPhones" not in html
