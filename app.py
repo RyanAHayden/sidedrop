@@ -908,11 +908,14 @@ def home():
     if needs_setup() and session.get("setup"):
         return redirect("/setup")
     if not logged_in():
+        if r := invite_back():  # F31: someone who came in by an invite link never lands on a password form
+            return r
         return page("""<form class=c method=post action=/login>
 <label>Password<input type=password name=password autofocus required></label>
 {% if err %}<p class=err>Wrong password.</p>{% endif %}<button>Sign in</button></form>
 {% if first %}<p class=ftr>New server: sign in with the default password, <b>{{ first }}</b>, to set it up.</p>
-{% else %}<p class=ftr>SideDrop shares an Apple developer account with friends so they can sideload apps. The friend who sent you the link has the password.</p>{% endif %}
+{% else %}<p class=ftr>SideDrop shares an Apple developer account with friends so they can sideload apps. The friend who sent you the link has the password.
+If they sent you an invite link, open it again: it signs you in with no password.</p>{% endif %}
 {{ vfoot }}""",
                     err=request.args.get("err"), first=needs_setup() and DEFAULT_PASSWORD)
     tok = request.args.get("enrolled") or request.cookies.get("device", "")  # ?enrolled= is the 301 after the profile install
@@ -1198,7 +1201,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class="g grp sg" id=sHome><a class="row mrow" href=/home-screen data-push>{{ row_icon('homeScreen') }}<div>Add to Home Screen</div></a></div>
 <p class=ftr>Open SideDrop from your Home Screen like an app.</p>
 <div class="g grp sg" id=sHelp><a class="row mrow" href=/help data-push id=helpRow>{{ row_icon('help') }}<div>Help</div></a></div>
-<a class="b grey out" href=/logout>Sign Out</a>
+{% if not guest %}<a class="b grey out" href=/logout>Sign Out</a>{% endif %}{# F31: an invite guest has no password to sign back in with #}
 <script>/* F26: the Theme row's detail, the theme showing now (THEME_BOOT's themeState); again after Settings > Theme pops, or the iPhone flips */
 const THEME_NAMES={{ theme_names|tojson }};
 function themeVal(){let s=themeState(),dk=s.mode=="dark"||s.mode=="auto"&&matchMedia("(prefers-color-scheme: dark)").matches,e=document.getElementById("themeV");if(e)e.textContent=THEME_NAMES[dk?s.dark:s.light]}
@@ -1400,7 +1403,7 @@ addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").f
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
         file_labels=file_labels, is_admin=is_admin(), n_iphones=manage_iphone_count() if is_admin() else 0, theme_names={n: p[1] for n, p in PALETTES.items()},
-        theme_name=PALETTES[THEMES["light"][0]][1], files=shared_files(), inv_name=invite_name(), fdl=lambda f: signed_url(f"/f/{f.name}"),
+        theme_name=PALETTES[THEMES["light"][0]][1], files=shared_files(), inv_name=invite_name(), guest=is_guest(), fdl=lambda f: signed_url(f"/f/{f.name}"),
         first_run=enrolled and first_run_due(token_udid(tok)), mk=mark_csrf(token_udid(tok)) if enrolled else ""))
     if enrolled and request.args.get("enrolled"):  # survives sign-out; re-checked against the profile on every load
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
@@ -2902,7 +2905,33 @@ def invite_link(tok):
     return page(INVITE_NO, title="Invite", msg=msg), 403
 
 
-LINK_BTNS = """<div class=lbtn><button type=button class="{{ cls }}" onclick="lnkCopy(this)">{{ copy }}</button><button type=button class="{{ cls }} grey shr" onclick="lnkShare(this)">{{ share }}</button></div>"""
+INVITE_GONE = INVITE_NO.replace("</div>", """<p class=ftr><a href=/logout>Sign in with a password instead</a></p></div>""")
+
+
+def invite_back():
+    """F31: the invite link is a guest's access, so a guest never gets the password form. Signed out (a Home Screen app that
+    lost its session, or a session from before the iPhone registered) on the iPhone a one-iPhone invite registered: its
+    device cookie signs it in again as that guest. A guest session the invite no longer lets in says why instead. None: the
+    password form is right (a friend, or nobody we know)."""
+    udid = token_udid(request.cookies.get("device", ""))
+    tok = next((t for t, inv in load_invites().items() if udid and inv.get("udid") == udid), None)
+    if tok:
+        session.pop("admin", None)
+        session.pop("csrf", None)
+        session.permanent, session["ok"], session["pv"] = True, True, ["g", tok, secrets.token_urlsafe(12)]
+        return redirect(request.full_path.rstrip("?"))
+    pv = session.get("pv") or ()
+    if is_guest() and len(pv) > 2:
+        try:
+            invite_check(pv[1], None)
+            msg = INVITE_USED
+        except InviteRefused as e:
+            msg = str(e)
+        return page(INVITE_GONE, title="Invite", msg=msg), 403
+    return None
+
+
+LINK_BTNS ="""<div class=lbtn><button type=button class="{{ cls }}" onclick="lnkCopy(this)">{{ copy }}</button><button type=button class="{{ cls }} grey shr" onclick="lnkShare(this)">{{ share }}</button></div>"""
 INVITES_PAGE = """<style>.lnk{font:13px/1.4 ui-monospace,Menlo,monospace;width:100%;box-sizing:border-box} .lbtn{display:flex;gap:8px} .lbtn button{flex:1}
 .lbtn button[hidden]{display:none} .irow>div:first-child{flex:1;min-width:0} .irow .lbtn{flex:none;gap:4px} .irow form{flex:none;margin-left:4px} .irow b{font-weight:700}</style>
 <h3 class=hdr>Anyone with the Link</h3>

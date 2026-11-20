@@ -1184,7 +1184,7 @@ html = boss.get("/admin/invites").data.decode(); csrf = re.search(r'name=csrf va
 assert "friends-pass-16" not in html and "Copy Link" in html and "navigator.clipboard.writeText" in html and "navigator.share" in html
 join_link = lambda: re.search(r'data-link="https://x.test(/join/[0-9a-f]{32})"', boss.get("/admin/invites").data.decode()).group(1)
 inv = lambda **f: boss.post("/admin/invites", data=dict(f, csrf=csrf))
-signed_in = lambda cl: b"action=/login" not in cl.get("/").data
+signed_in = lambda cl: (lambda r: r.status_code == 200 and b"action=/login" not in r.data)(cl.get("/"))
 # the anyone link signs in as a friend; a made-up one refuses
 anyone, j = I.app.test_client(), join_link()
 assert anyone.get(j).location == "/" and b"Register iPhone" in anyone.get("/").data
@@ -1204,6 +1204,11 @@ assert f'data-link="https://x.test/invite/{tok}"' in html and "New link for Sam 
 guest, early = I.app.test_client(), I.app.test_client()
 assert guest.get(f"/invite/{tok}").location == "/" and b"Register iPhone" in guest.get("/").data
 assert b'placeholder="Your name"' not in guest.get("/").data  # a named invite skips the name step
+# F31: the link is a guest's access: no password field anywhere on their pages, and no Sign Out (nothing to sign back in with)
+gh = guest.get("/").data
+assert b"type=password" not in gh and b"action=/login" not in gh and b"href=/logout>Sign Out" not in gh
+fr = I.app.test_client(); fr.get(join_link()); assert b"href=/logout>Sign Out" in fr.get("/").data  # friends keep Sign Out
+assert b"href=/logout>Sign Out" in boss.get("/").data
 gp = enroll(guest, name="Someone Else")
 assert b"/udid/Sam%20x/g/" in gp and b"Someone" not in gp, "registered under the invite's name, not the form's"
 assert early.get(f"/invite/{tok}").location == "/" and signed_in(early)  # someone else opening the shared link before it's used
@@ -1231,6 +1236,14 @@ hs = I.app.test_client(); hs.set_cookie("device", I.device_token("GUEST-1"))
 assert hs.get(f"/invite/{tok}").location == "/" and signed_in(hs)
 other = I.app.test_client(); other.set_cookie("device", I.device_token("GUEST-2"))
 assert other.get(f"/invite/{tok}").status_code == 403
+# F31: the registered iPhone with no session (a Home Screen app that lost it) is signed back in by its device cookie, no password;
+# a stale guest session (someone else's, after the link was used) is told why, not shown a password form
+lost = I.app.test_client(); lost.set_cookie("device", I.device_token("GUEST-1"))
+assert lost.get("/").location == "/" and signed_in(lost) and b"type=password" not in lost.get("/").data
+r = early.get("/"); assert r.status_code == 403 and I.INVITE_USED.encode() in r.data and b"type=password" not in r.data and b"href=/logout" in r.data
+assert b"action=/login" in early.get("/logout", follow_redirects=True).data  # its way to the password form, if it has one
+assert not signed_in(other) and b"action=/login" in other.get("/").data  # an iPhone no invite registered: the password form as before
+assert b"open it again: it signs you in with no password" in other.get("/").data
 # expired: refused, sessions from it out, its profile can't register
 etok = re.search(r"new=([\w-]+)$", inv(do="new").location).group(1)
 eg = I.app.test_client(); assert eg.get(f"/invite/{etok}").location == "/"
@@ -1246,6 +1259,8 @@ assert inv(do="revoke", tok=rtok).location == "/admin/invites?done=revoked"
 assert not signed_in(rg) and I.app.test_client().get(f"/invite/{rtok}").status_code == 403 and "Kim" not in boss.get("/admin/invites").data.decode()
 inv(do="revoke", tok=tok)
 assert not signed_in(guest) and not signed_in(hs) and I.profile_udids() == {"GUEST-1"}
+gone = I.app.test_client(); gone.set_cookie("device", I.device_token("GUEST-1"))
+assert not signed_in(gone)  # F31: a revoked invite's device cookie signs nobody in
 # B1: a cert.p12 with an RC2-40 certificate bag (Keychain exports) opens in Python but not in the image's zsign: it's saved again as
 # 3DES with the same key, certificate and password, the original kept as cert.p12.bak; on upload and at start
 import shutil, subprocess as SP
