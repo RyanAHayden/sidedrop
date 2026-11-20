@@ -2950,6 +2950,7 @@ def invite_link(tok):
             session.pop("admin", None)
             session.pop("csrf", None)
             session.permanent, session["ok"], session["pv"] = True, True, ["g", tok, secrets.token_urlsafe(12)]
+        invite_registered(tok, inv)
         return redirect(SETUP_LINK)
     try:
         invite_check(tok, None)
@@ -2959,6 +2960,18 @@ def invite_link(tok):
     if msg == INVITE_USED:  # B7: maybe the iPhone it registered, in a fresh cookie jar (a Home Screen app): the profile says which iPhone
         return page(INVITE_AGAIN, title="Invite", msg=msg, tok=tok), 403
     return page(INVITE_NO, title="Invite", msg=msg), 403
+
+
+def invite_registered(tok, inv):
+    """B9: an unused invite opened on an iPhone already in the profile (its device cookie), that no other invite holds (one the admin
+    revoked, then made this one): nothing would ever register through it, so it stayed unused, the iPhone's Home Screen app (its own
+    cookie jar: the revoked link's session) was refused, and Safari's guest session expired with the unused link after 7 days. That
+    iPhone uses it now, as registering again would, so its device cookie signs every cookie jar of it in as this guest."""
+    udid = token_udid(device_tok())
+    if inv.get("udid") or not udid or udid not in profile_udids() or any(i.get("udid") == udid for i in load_invites().values()):
+        return
+    name = re.sub(r"[^\w .'-]", "", inv.get("name") or "")[:30] or "friend"
+    invite_use(tok, session["pv"][2], udid, f"{name} {load_json(PRODUCTS).get(udid, '')}".strip())
 
 
 INVITE_AGAIN = """<div class="c"><p class=err>{{ msg }}</p>
