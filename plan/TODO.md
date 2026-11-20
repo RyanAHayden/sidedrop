@@ -2,7 +2,6 @@
 
 ### Next
 
-- [ ] **B21** iFizBox installed from SideDrop on a new iPhone asked to set up signing first, so its bundled identity (ifizbox-identity.plist, sign_ipa extra, app.py ~329-365) didn't import. Find why: is the served signed IPA stale or missing the plist/transfer.link (resign's deps skip P12/identity changes), or does iFizBox's first-launch BundledIdentity import fail (read iFizBox's source, don't change it; report what it needs). It must import on every fresh install. Check: unzip the served signed IPA and confirm Payload/*.app/ifizbox-identity.plist and web/transfer.link with current p12/profile; a test that resign re-signs iFizBox when the p12 or profile changes. | files: app.py, test_app.py | after: B20
 - [ ] **C2** SideDrop no longer manages updates or tracks installs: remove all update logic and installed/not-installed detection (Apps row states up/inst, Update badges/buttons, mkItems and the F27 /installed hold route, recorded versions, update push/notify of new versions, Updates counts) and the Apps rows' hold sheets/submenus entirely (B18 just restyled that sheet: remove it, keep the action-sheet CSS only if something else uses it). Every Apps row just offers Install. Delete dead helpers, stored state readers and tests for them. Check: test_app.py passes with the removed tests gone; grep app.py for installed/update/mkItems/hold finds nothing left of it; screenshot Apps at 375px. | files: app.py, test_app.py | after: B20
 ### Follow-ups
 
