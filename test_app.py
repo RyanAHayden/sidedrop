@@ -49,7 +49,7 @@ assert b"Register iPhone" in c.get("/").data
 # shareable link logs in and strips the password from the URL
 link = A.app.test_client()
 r = link.get("/?password=hunter2-but-longer")
-assert r.status_code == 302 and r.location == "/" and b"Register iPhone" in link.get("/").data
+assert r.status_code == 302 and r.location == "/?go=setup" and b"Register iPhone" in link.get("/").data  # F30: a setup link
 assert "err=1" in A.app.test_client().get("/?password=wrong").location
 
 # enrollment profile points at a signed /udid URL
@@ -1190,30 +1190,30 @@ inv = lambda **f: boss.post("/admin/invites", data=dict(f, csrf=csrf))
 signed_in = lambda cl: b"action=/login" not in cl.get("/").data
 # the anyone link signs in as a friend; a made-up one refuses
 anyone, j = I.app.test_client(), join_link()
-assert anyone.get(j).location == "/" and b"Register iPhone" in anyone.get("/").data
+assert anyone.get(j).location == "/?go=setup" and b"Register iPhone" in anyone.get("/").data
 assert I.app.test_client().get("/join/" + "0" * 32).status_code == 403 and I.app.test_client().get("/join/x").status_code == 403
 # Make New Link: the old link stops, sessions made with it stay; the new one works
 assert inv(do="rotate").location == "/admin/invites?done=newlink"
 assert I.app.test_client().get(j).status_code == 403 and signed_in(anyone)
-j = join_link(); assert I.app.test_client().get(j).location == "/"
+j = join_link(); assert I.app.test_client().get(j).location == "/?go=setup"
 # changing the friends' password with Sign Out Everyone kills the link too
 assert boss.post("/admin/passwords", data={"csrf": csrf, "password": "friends-pass-17", "replace_env": "1", "signout": "1"}).location == "/admin/passwords?done=passwords"
 assert I.app.test_client().get(j).status_code == 403 and not signed_in(anyone)
-assert I.app.test_client().get(join_link()).location == "/"
+assert I.app.test_client().get(join_link()).location == "/?go=setup"
 # a one-iPhone invite: the guest it signs in can register; Manage is 403 to them
 tok = re.search(r"new=([\w-]+)$", inv(do="new", name="Sam <x>").location).group(1)
 html = boss.get(f"/admin/invites?new={tok}").data.decode()
 assert f'data-link="https://x.test/invite/{tok}"' in html and "New link for Sam x" in html and "Not used" in html
 guest, early = I.app.test_client(), I.app.test_client()
-assert guest.get(f"/invite/{tok}").location == "/" and b"Register iPhone" in guest.get("/").data
+assert guest.get(f"/invite/{tok}").location == "/?go=setup" and b"Register iPhone" in guest.get("/").data
 assert b'placeholder="Your name"' not in guest.get("/").data  # a named invite skips the name step
 gp = enroll(guest, name="Someone Else")
 assert b"/udid/Sam%20x/g/" in gp and b"Someone" not in gp, "registered under the invite's name, not the form's"
-assert early.get(f"/invite/{tok}").location == "/" and signed_in(early)  # someone else opening the shared link before it's used
+assert early.get(f"/invite/{tok}").location == "/?go=setup" and signed_in(early)  # someone else opening the shared link before it's used
 for p in ("/admin", "/admin/invites", "/admin/passwords", "/admin/iphones", "/admin/devices.json", "/admin/files"):
     assert guest.get(p).status_code == 403, p
 assert guest.post("/admin/invites", data={"do": "new"}).status_code == 403 and guest.post("/admin", data={"password": "admin-pass-16"}).status_code == 403
-assert boss.get(f"/invite/{tok}").location == "/" and boss.get("/admin/invites").status_code == 200  # the admin trying it stays admin
+assert boss.get(f"/invite/{tok}").location == "/?go=setup" and boss.get("/admin/invites").status_code == 200  # the admin trying it stays admin
 # the first UDID through it uses it up; a second UDID is refused, the same one again is fine
 iurl = plistlib.loads(enroll(guest, name=""))["PayloadContent"]["URL"]
 assert "/udid/Sam%20x/g/" + tok + "/" in iurl, iurl
@@ -1231,12 +1231,12 @@ assert "Used by Sam x iPhone14,2 on" in boss.get("/admin/invites").data.decode()
 assert signed_in(guest) and not signed_in(early)
 r = I.app.test_client().get(f"/invite/{tok}"); assert r.status_code == 403 and I.INVITE_USED.encode() in r.data
 hs = I.app.test_client(); hs.set_cookie("device", I.device_token("GUEST-1"))
-assert hs.get(f"/invite/{tok}").location == "/" and signed_in(hs)
+assert hs.get(f"/invite/{tok}").location == "/?go=setup" and signed_in(hs)
 other = I.app.test_client(); other.set_cookie("device", I.device_token("GUEST-2"))
 assert other.get(f"/invite/{tok}").status_code == 403
 # expired: refused, sessions from it out, its profile can't register
 etok = re.search(r"new=([\w-]+)$", inv(do="new").location).group(1)
-eg = I.app.test_client(); assert eg.get(f"/invite/{etok}").location == "/"
+eg = I.app.test_client(); assert eg.get(f"/invite/{etok}").location == "/?go=setup"
 eurl = plistlib.loads(enroll(eg))["PayloadContent"]["URL"]
 invs = I.load_invites(); invs[etok]["exp"] = time.time() - 1; I.save_json(I.INVITES, invs)
 assert not signed_in(eg) and b"expired" in I.app.test_client().get(f"/invite/{etok}").data and I.app.test_client().get(f"/invite/{etok}").status_code == 403
@@ -1244,11 +1244,23 @@ assert I.app.test_client().post(path_qs(eurl), data=plistlib.dumps({"UDID": "GUE
 assert "Expired" in boss.get("/admin/invites").data.decode()
 # revoked: refused and its guest signed out; revoking the used one leaves its iPhone registered
 rtok = re.search(r"new=([\w-]+)$", inv(do="new", name="Kim").location).group(1)
-rg = I.app.test_client(); assert rg.get(f"/invite/{rtok}").location == "/"
+rg = I.app.test_client(); assert rg.get(f"/invite/{rtok}").location == "/?go=setup"
 assert inv(do="revoke", tok=rtok).location == "/admin/invites?done=revoked"
 assert not signed_in(rg) and I.app.test_client().get(f"/invite/{rtok}").status_code == 403 and "Kim" not in boss.get("/admin/invites").data.decode()
 inv(do="revoke", tok=tok)
 assert not signed_in(guest) and not signed_in(hs) and I.profile_udids() == {"GUEST-1"}
+# F30: every setup or invite link, opened in a fresh browser, lands on the setup steps unfolded at step 1 (Stolen Device Protection),
+# not on Home with them folded; plain / keeps them folded, a registered iPhone has none, the admin's own ?password= link stays on /
+setup_open = lambda h: '<div id=setup>' in h and 'id=setupT aria-expanded=true' in h and h.index('id=sdp open') < h.index('id=reg>')
+ftok = re.search(r"new=([\w-]+)$", inv(do="new", name="Lee").location).group(1)
+for link in (join_link(), f"/invite/{ftok}", "/?password=friends-pass-17"):
+    fresh = I.app.test_client(); r = fresh.get(link, follow_redirects=True)
+    assert r.status_code == 200 and r.request.path == "/" and r.request.args.get("go") == "setup" and setup_open(r.data.decode()), link
+    assert not setup_open(fresh.get("/").data.decode()) and "<div id=setup hidden>" in fresh.get("/").data.decode(), link
+    assert 'history.replaceState(history.state,"","/"+location.hash)' in r.data.decode()  # the page drops ?go=setup from the address bar
+assert I.app.test_client().get("/?password=admin-pass-16").location == "/"
+reg1 = I.app.test_client(); reg1.set_cookie("device", I.device_token("GUEST-1")); reg1.get("/?password=friends-pass-17")
+h = reg1.get("/?go=setup").data.decode(); assert "id=setup" not in h and "Registered" in h  # already registered: nothing to set up
 # B1: a cert.p12 with an RC2-40 certificate bag (Keychain exports) opens in Python but not in the image's zsign: it's saved again as
 # 3DES with the same key, certificate and password, the original kept as cert.p12.bak; on upload and at start
 import shutil, subprocess as SP

@@ -112,6 +112,7 @@ iPhones in it; both open Signing) and **Apps** (App Sources, Files for Friends, 
 - **Passwords**: a change signs out every iPhone signed in with the old one, and old `?password=` links stop working.
 - **Invite Friends**: **Anyone with the link** (`/join/<token>`) signs in without the password; **Make New Link** or
   a password change stops it. A **One iPhone** link (`/invite/<token>`) registers exactly one iPhone, so a shared link
-  can't fill the account; unused ones expire after 7 days.
+  can't fill the account; unused ones expire after 7 days. These links and the friends' `?password=` link open straight
+  on **Set up this iPhone**, at its first step.
 - **Files for Friends**: signed links work without a login (`wget`, `curl`) for 7 days. Uploads keep going while you
   use the rest of SideDrop.
