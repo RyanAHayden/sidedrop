@@ -1071,6 +1071,19 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .shade{position:fixed;inset:0;z-index:6;background:#000;opacity:0;pointer-events:none}
 .ghost{position:absolute;margin:0;pointer-events:none;z-index:1}
 .tabs a[aria-current] svg{fill:url(#tabglow);filter:drop-shadow(0 2.5px 2.5px rgba(0,0,0,.4))}
+/* F27: hold an Apps row for its options. The held row takes the cell selection, as a held UITableViewCell; the sheet is iOS 6's UIActionSheet
+   (default style): a smoky blue-grey panel sliding up from the bottom, white glossy 44pt buttons with bold black titles, a dark Cancel */
+#t-apps .g:not(.locked) .row{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+#t-apps .g .row.held,.dark #t-apps .g .row.held{background:var(--select);color:#fff;text-shadow:none} #t-apps .row.held>div,#t-apps .row.held small,#t-apps .row.held .ifv{color:#fff;text-shadow:none}
+.mks{position:fixed;inset:0;z-index:22;background:rgba(0,0,0,.4);animation:fadein .25s ease-out} .mks[hidden]{display:none}
+.mkp{position:absolute;left:0;right:0;bottom:0;box-sizing:border-box;padding:14px max(20px,env(safe-area-inset-right),(100% - 30rem)/2) calc(20px + env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left),(100% - 30rem)/2);
+ background:linear-gradient(rgba(148,156,173,.97),rgba(64,74,96,.97) 22px,rgba(38,46,66,.97));border-top:1px solid rgba(255,255,255,.55);box-shadow:0 -1px 0 rgba(0,0,0,.6);animation:mkup .3s cubic-bezier(.36,.66,.04,1)}
+@keyframes mkup{from{transform:translateY(100%)}}
+.mkp p{margin:0 0 12px;text-align:center;font-size:14px;line-height:18px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.7);overflow-wrap:anywhere}
+.mkp button{display:block;width:100%;height:46px;margin:0 0 9px;padding:0 10px;border:1px solid rgba(0,0,0,.75);border-radius:10px;font:bold 20px/44px -apple-system,"Helvetica Neue",Helvetica,sans-serif;
+ color:#000;text-shadow:0 1px 0 rgba(255,255,255,.75);background:linear-gradient(#fff,#f0f0f0 49%,#dfdfdf 51%,#e8e8e8);background-origin:border-box;box-shadow:0 1px 0 rgba(255,255,255,.3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mkp button.mkc{margin:9px 0 0;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.7);background:linear-gradient(#7d8495,#4b5263 49%,#353c4e 51%,#3c4355);background-origin:border-box}
+.mkp button.is-pressed{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.4);background:linear-gradient(#5d89f2,#2d63e3 49%,#1352dd 51%,#1a57de);background-origin:border-box}
 </style>
 {% if error %}<p class="c err">{{ error }}</p>{% endif %}
 {% set enroll_form %}<form method=post action=/enroll style="display:flex;flex-direction:column;gap:10px"
@@ -1197,6 +1210,8 @@ themeVal();addEventListener("popstate",themeVal);addEventListener("pageshow",the
 <h3 id=pushT>Get Notified of Updates?</h3><p>SideDrop can tell you when an app you installed has a new version.</p>
 <div id=pushWeb hidden><div><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open SideDrop from there</span></p></div></div>
 <div class=abtns><button type=button onclick="pushAsk.hidden=true">Not Now</button><button type=button class=ok id=pushOk>Allow</button></div></div></div>{% endif %}
+{% if enrolled %}<div class=mks id=mkSheet hidden data-csrf="{{ mk }}" onclick="if(event.target==this)mkClose()"><div class=mkp role=dialog aria-modal=true aria-labelledby=mkH>
+<p id=mkH></p><div id=mkB></div><button type=button class=mkc onclick="mkClose()">Cancel</button></div></div>{% endif %}
 <div class=con id=con hidden role=dialog aria-modal=true aria-labelledby=conT><header class=nav><span></span><h1 id=conT>Running</h1>
 <button type=button class="bar r" id=conX onclick="conClose()">Cancel</button></header><div class=conlog id=conL aria-live=polite><span class=concur id=conCur></span></div>
 <div class=confoot><div class=cons id=conS></div><button type=button class=confin id=conF hidden></button></div></div>
@@ -1327,7 +1342,28 @@ if(pushOK&&window.pushSw)pushSub().then(([r,s])=>pushSw.checked=!!s&&Notificatio
 /* change a GET button's label and colour with its width animating, like the App Store (a label swap alone jumps the width) */
 function morph(b,f){let w0=b.offsetWidth;f();let w1=b.offsetWidth;if(w0==w1)return;b.style.width=w0+"px";b.offsetWidth;b.style.width=w1+"px";clearTimeout(b.mt);b.mt=setTimeout(()=>b.style.width="",300)}
 function disarm(keep){document.querySelectorAll(".get.go[data-arm]").forEach(b=>{if(b!=keep)morph(b,()=>{b.classList.remove("go");b.textContent=b.dataset.arm})})}
-function arm(b){if(b.classList.contains("go")){mark(b);setTimeout(()=>disarm(),1500);return true}disarm(b);morph(b,()=>{b.classList.add("go");b.textContent="INSTALL"});return false}
+/* F27: GET arms as INSTALL and an installed app's button as REINSTALL (green, a second tap installs); UPDATE installs on its first tap */
+function arm(b){if(b.classList.contains("go")||b.dataset.arm=="UPDATE"){mark(b);setTimeout(()=>disarm(),1500);return true}disarm(b);morph(b,()=>{b.classList.add("go");b.textContent=b.dataset.arm=="INSTALLED"?"REINSTALL":"INSTALL"});return false}
+/* F27: hold an Apps row (iFizBox's card too) about half a second without moving it for an iOS 6 action sheet: Mark as Updated, Installed or
+   Not Installed, by what this iPhone has recorded. The row highlights while held; the click that ends the hold is eaten, so it installs nothing. */
+function mkState(r){return r.classList.contains("up")?"up":r.querySelector(".get.done")?"inst":"none"}
+function mkItems(st){return st=="up"?[["Mark as Updated","installed"],["Mark as Not Installed","forget"]]:st=="inst"?[["Mark as Not Installed","forget"]]:[["Mark as Installed","installed"]]}
+let mkTm=null,mkRow=null,mkXY=null,mkEat=0;
+function mkCancel(){clearTimeout(mkTm);mkTm=null;if(mkRow&&mkSheet.hidden)mkRow.classList.remove("held");if(mkSheet.hidden)mkRow=null}
+function mkRowAt(t){let r=t.closest&&t.closest("#t-apps .g:not(.locked) .row");return r&&r.querySelector(".get[data-app]")&&window.mkSheet?r:null}
+addEventListener("pointerdown",e=>{if(e.button||!window.mkSheet||!mkSheet.hidden)return;mkCancel();let r=mkRowAt(e.target);if(!r)return;mkRow=r;mkXY=[e.clientX,e.clientY];
+ if(!e.target.closest(".get"))setTimeout(()=>{if(mkRow==r&&mkTm)r.classList.add("held")},100);  // a cell highlights on touch; a button in it doesn't
+ mkTm=setTimeout(()=>{mkTm=null;mkEat=1;r.classList.add("held");if(window.hap)hap();mkOpen(r)},500)},true);
+addEventListener("pointermove",e=>{if(mkTm&&mkXY&&Math.hypot(e.clientX-mkXY[0],e.clientY-mkXY[1])>10)mkCancel()},true);
+["pointerup","pointercancel"].forEach(t=>addEventListener(t,()=>{if(mkTm)mkCancel()},true));
+addEventListener("scroll",()=>{if(mkTm)mkCancel()},{passive:true,capture:true});
+addEventListener("click",e=>{if(mkEat){mkEat=0;e.preventDefault();e.stopImmediatePropagation()}},true);  // capture: before the row's links and the first-run hook
+addEventListener("contextmenu",e=>{if(mkRow)e.preventDefault()});
+function mkOpen(r){let b=r.querySelector(".get[data-app]"),t=r.querySelector(":scope>div:not(.ico)");mkH.textContent=t?t.childNodes[0].textContent.trim():b.dataset.app;mkB.textContent="";
+ mkItems(mkState(r)).forEach(([l,d])=>{let x=document.createElement("button");x.type="button";x.textContent=l;x.onclick=()=>mkDo(b.dataset.app,d);mkB.append(x)});
+ setTimeout(()=>mkEat=0,700);mkSheet.hidden=false}
+function mkClose(){mkSheet.hidden=true;if(mkRow)mkRow.classList.remove("held");mkRow=null}
+function mkDo(n,d){mkClose();fetch("/installed/mark",{method:"POST",body:new URLSearchParams({name:n,do:d,csrf:mkSheet.dataset.csrf})}).then(r=>{if(!r.ok)throw 0;return refreshIn()}).catch(()=>location.reload())}
 addEventListener("click",e=>{if(!e.target.closest("[data-arm]"))disarm()});
 function steps(b){let open=b.getAttribute("aria-expanded")!="true";b.setAttribute("aria-expanded",open);b.closest(".row").nextElementSibling.classList.toggle("open",open)}
 function sdpDone(save){let d=document.getElementById("sdp");if(!d)return;d.classList.add("ok");d.open=false;regf.disabled=false;
@@ -1351,7 +1387,7 @@ addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").f
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
         file_labels=file_labels, is_admin=is_admin(), n_iphones=manage_iphone_count() if is_admin() else 0, theme_names={n: p[1] for n, p in PALETTES.items()},
         theme_name=PALETTES[THEMES["light"][0]][1], files=shared_files(), inv_name=invite_name(), fdl=lambda f: signed_url(f"/f/{f.name}"),
-        first_run=enrolled and first_run_due(token_udid(tok))))
+        first_run=enrolled and first_run_due(token_udid(tok)), mk=mark_csrf(token_udid(tok)) if enrolled else ""))
     if enrolled and request.args.get("enrolled"):  # survives sign-out; re-checked against the profile on every load
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
     return resp
@@ -1422,6 +1458,30 @@ def mark_installed():
     with installed_lock:
         data = installed()
         data.setdefault(udid, {})[p.stem] = f"{i['short']}/{i['version']}"
+        save_json(INSTALLED, data)
+    return "", 204
+
+
+def mark_csrf(udid):
+    """F27: the hold sheet's CSRF token, tied to this iPhone (friends' sessions carry no csrf): a page drawn for one phone can't mark another's."""
+    return hmac.new(SECRET, b"mark:" + udid.encode(), "sha256").hexdigest()[:32] if udid else ""
+
+
+@app.post("/installed/mark")
+def mark_app():
+    """F27: an Apps row's hold sheet. do=installed (Mark as Installed, and Mark as Updated: both record the current version) or
+    do=forget (Mark as Not Installed), for this registered iPhone's device token only."""
+    udid, p, do = token_udid(request.cookies.get("device", "")), SIGNED / f"{request.form.get('name', '')}.ipa", request.form.get("do", "")
+    if (not logged_in() or not udid or udid not in profile_udids() or do not in ("installed", "forget")
+            or not hmac.compare_digest(request.form.get("csrf", ""), mark_csrf(udid)) or p.parent != SIGNED or not p.is_file()):
+        abort(403)
+    with installed_lock:
+        data = installed()
+        if do == "forget":
+            data.get(udid, {}).pop(p.stem, None)
+        else:
+            i = ipa_info(p)
+            data.setdefault(udid, {})[p.stem] = f"{i['short']}/{i['version']}"
         save_json(INSTALLED, data)
     return "", 204
 
