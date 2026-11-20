@@ -2,6 +2,7 @@
 
 ### Next
 
+- [ ] **B20** Settings fixes after B19, the person still can't see Admin Login: (1) Settings doesn't scroll at all, so rows below the fold (B19's Admin Login row after Help, Sign Out) can't be reached; find what blocks scrolling (overflow/height on the pushed Settings view, likely since B18's action-sheet CSS or a body lock left on) and fix it. (2) B19 hides the row for invite guests (is_guest) and when no admin password is set (admin_enabled); the person expects it for every non-admin: show it to guests too, and make /admin take the password from a guest session (a right password makes that browser admin, like a normal login). Check: test_app.py asserts the row for a guest and a password user, and nothing sets overflow:hidden/height that stops Settings scrolling; screenshot Settings scrolled to the bottom at 375px, both as guest and as non-admin. | files: app.py, test_app.py
 ### Follow-ups
 
 - [~] **F34** (follow-up, normal) Control session 4 asked the person: "Want me to add that to the run's queue?" Carry on from their answer (the session, closed while it waited: https://claude.ai/code/session_012iEtdP3dUvBtpKQviukSVv) BLOCKED: DECIDE: Want me to add that to the run's queue? https://claude.ai/code/session_012iEtdP3dUvBtpKQviukSVv (asked 2026-11-20 14:37)
