@@ -261,7 +261,8 @@ def app_entitlements(bid):
     """The profile's entitlements, with a wildcard narrowed to this app, the way Xcode signs.
 
     zsign copies TEAM.com.you.* verbatim, and iOS can then match the app to a development
-    profile on the phone and demand Developer Mode. An explicit App ID (with push) keeps the profile's
+    profile on the phone and demand Developer Mode. (Narrowing doesn't spare the phone Developer Mode: iOS 27 asks
+    for it for these Ad Hoc apps too, get-task-allow false and all; F23.) An explicit App ID (with push) keeps the profile's
     application-identifier (TEAM.<App ID>), the way paid signing services sign: iOS checks it against
     the profile but not Info.plist, so the app keeps its own bundle ID and registers for push under it,
     and its developer's server can reach it. Either way the keychain group is narrowed to that one ID
@@ -1162,7 +1163,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class=row><span class=tic style="background:#40ae4c"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><path d="M12 7v7m-3-3 3 3 3-3" fill="none" stroke="#3c9a1d" stroke-width="2"/></svg></span><div><b>Signs on your iPhone</b><small>Install any IPA or AltStore app right on the phone: no computer, nothing uploaded.</small></div></div>
 <div class=row><span class=tic style="background:#e2382f"><svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zm0 2.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 1 1 0-13z" fill="#fff"/><path d="M11 7.5h2.2v4.4l3 2-1.2 1.8-4-2.7z" fill="#fff"/></svg></span><div><b>Updates in one tap</b><small>New versions of what you installed, ready to install.</small></div></div>
 <div class=row><span class=tic style="background:#8c9097"><svg viewBox="0 0 24 24"><path d="M12 3 21 7.5v9L12 21l-9-4.5v-9z" fill="#fff"/></svg></span><div><b>The iOS 6 look, at 120 Hz</b><small>A package manager with the classic look, smooth on today's iPhones.</small></div></div></div>
-<p class=ftr>It needs Developer Mode, like every app here. <a href="https://ifizbox.com">ifizbox.com</a></p>
+<p class=ftr>iOS 27 asks for Developer Mode once to open it, as for every app here. <a href="https://ifizbox.com">ifizbox.com</a></p>
 {% else %}<p class="c m">iFizBox isn't here yet. Tap Reload in a minute.</p>{% endif %}
 </section>
 
@@ -1198,12 +1199,12 @@ themeVal();addEventListener("popstate",themeVal);addEventListener("pageshow",the
 <script>function welcomeOk(){welcome.hidden=true;history.replaceState(null,"","/")}</script>{% endif %}
 
 {% if enrolled %}<div class=scrim id=devAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=devT>
-<h3 id=devT>Developer Mode Required</h3><p>When the app finishes installing, opening it will ask you to turn on Developer Mode.</p>
-<p>Turn it on in Settings, restart, and the app will open.</p>
+<h3 id=devT>Developer Mode Required</h3><p>{{ dev_why }}</p>
+<p>Opening the app after it installs takes you there.</p>
 <div class=abtns><button type=button onclick="devDone(1)">Show Me</button><button type=button class=ok onclick="devDone()">OK</button></div></div></div>{% endif %}
 {% if first_run %}<div class=fl id=firstRun hidden data-due=1 role=dialog aria-modal=true aria-labelledby=frT><header class=nav><button type=button class=bar onclick="firstRunGo()">Cancel</button><h1 id=frT>Before You Install</h1>
 <button type=button class="bar r" onclick="firstRunGo(1)">Install</button></header><div class=lscroll>
-<p class=lead>One setting, once per iPhone: apps from here open only with Developer Mode on.</p>{# F26: Stolen Device Protection left this sheet; it's in Help, under Register iPhone Didn't Work #}
+<p class=lead>{{ dev_why }}</p>{# F26: Stolen Device Protection left this sheet; it's in Help, under Register iPhone Didn't Work #}
 <div class=c><div class=sh><div>Turn on Developer Mode<small>After the app installs</small></div></div>{{ dev_steps }}</div>
 <button type=button class=gbtn onclick="firstRunGo(1)">Got It, Install</button></div></div>{% endif %}
 {% if enrolled %}<div class=scrim id=pushAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=pushT>
@@ -2307,6 +2308,11 @@ DEV_STEPS = _Markup("""<figure class=shot><figcaption><span class=num>a</span><s
 <div class=warn><span aria-hidden=true>💡</span><div>Don't see it? Install an app first, then look again.</div></div>""")
 A2HS_STEPS = _Markup("""<p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open SideDrop from there</span></p>""")
 app.jinja_env.globals.update(sdp_steps=SDP_STEPS, dev_steps=DEV_STEPS, a2hs_steps=A2HS_STEPS)
+# F23: why Developer Mode, said the same in the first-install sheet, the Developer Mode Required alert and Help. The user's iPhone 18 Pro
+# (iOS 27) asked for it opening Ad Hoc apps from here (get-task-allow false), though Apple documents it only for development-signed
+# apps; so it's shown for every profile kind, with no iOS-version check (Safari's user agent freezes the iOS version)
+DEV_WHY = "iOS 27 asks for Developer Mode once for apps installed outside the App Store. Turn it on, restart, then the app opens."
+app.jinja_env.globals["dev_why"] = DEV_WHY
 
 # row icons for Settings > Manage, Help and Manage > Signing (in the rowicons.js style: one colour, a white glyph on a 24-unit square)
 ROW_ICONS.update({
@@ -2333,7 +2339,7 @@ HELP = """<h3 class=hdr>Problems</h3><div class="g hlp">
 <li>Registered before but the apps are locked? Register again, it's instant.</li>
 <li>An app stuck half-installed (a grey icon): delete it from the Home Screen, then tap GET again.</li>
 <li>Installed but it won't open? Turn on Developer Mode, below.</li></ol></details>
-<details id=dev><summary>{{ icon('devMode') }}<span>Turn on Developer Mode</span></summary>{{ dev_steps }}</details></div>
+<details id=dev><summary>{{ icon('devMode') }}<span>Turn on Developer Mode</span></summary><p>{{ dev_why }}</p>{{ dev_steps }}</details></div>
 <p class=ftr>Apps here are signed with a friend's developer certificate for each registered iPhone. iOS asks for Developer Mode once, then they open like any other app.</p>
 <h3 class=hdr>Getting Started</h3><div class="g hlp">
 <details id=a2hs><summary>{{ icon('homeScreen') }}<span>Add to Home Screen</span></summary>{{ a2hs_steps }}</details>

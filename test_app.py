@@ -161,6 +161,10 @@ assert anon.get(path_qs(mf["assets"][0]["url"])).status_code == 200
 # first install tap: a one-time splash (Developer Mode, Help's screenshots; F26: no Stolen Device Protection) holds the tap, then carries it on; remembered per phone
 fr = html.split("id=firstRun")
 assert len(fr) == 2 and "hidden data-due=1" in fr[1][:40] and "/static/sdp1.jpg" not in fr[1] and "Stolen Device" not in fr[1] and "/static/dev3.jpg" in fr[1] and "firstRunGo(1)" in fr[1]
+# F23: Developer Mode stays for every profile kind (iOS 27 asks for it for Ad Hoc too) and each place says why, the same words
+why = "iOS 27 asks for Developer Mode once for apps installed outside the App Store. Turn it on, restart, then the app opens."
+assert A.DEV_WHY == why and f"<p class=lead>{why}</p>" in fr[1] and "One setting, once per iPhone" not in html
+assert f"<h3 id=devT>Developer Mode Required</h3><p>{why}</p>" in html and "It needs Developer Mode, like every app here" not in html
 assert "e.target.closest('a[href^=\"itms-services:\"],#ifzb')" in html and html.count("/static/dev1.jpg") == 1  # catches every install link; Developer Mode's steps also in Help (its own page)
 assert A.app.test_client().post("/first-run").status_code == 403
 assert c.post("/first-run").status_code == 204 and list(A.load_json(A.FIRST_RUN)) == ["00008130-AAAA"]
@@ -368,6 +372,7 @@ assert re.findall(r"<details id=(\w+)><summary>.*?<span>([^<]+)</span>", hp) == 
 reg = hp[hp.index("<details id=register>"):hp.index("<details id=install>")]
 assert "Tap <b>Register iPhone</b> again, then <b>Allow</b>" in reg and "<b>Profile Downloaded</b>" in reg and "<b>Install</b>" in reg
 assert "wait timer" in reg and "/static/sdp1.jpg" in reg and "at home" in reg and hp.count("/static/sdp1.jpg") == 1
+assert f"<span>Turn on Developer Mode</span></summary><p>{A.DEV_WHY}</p>" in hp  # F23: Help says why too
 assert "/static/dev3.jpg" in hp[hp.index("<details id=dev>"):] and "class=shot" in hp and ".shot{" in hp  # its own copy of the steps' look
 assert c.get("/home-screen", base_url="https://localhost").status_code == 200 and "<h1>Add to Home Screen</h1>" in c.get("/home-screen", base_url="https://localhost").data.decode()
 assert A.app.test_client().get("/help").status_code == 302 and A.app.test_client().get("/home-screen").status_code == 302  # signed out: the sign-in page

@@ -167,8 +167,9 @@ Editing the lists on GitHub, `deploy.sh`, and having CI sign new releases right 
 - **100 iPhones** per developer account per membership year. Disabling a device only frees its slot at renewal.
 - **One year**: ad hoc apps stop launching when the distribution certificate expires. Make a new one on Manage →
   Signing and everything is signed again.
-- **Developer Mode** must be on, once per phone (iOS 16 and later; only App Store, TestFlight and enterprise apps are
-  exempt). The page explains how.
+- **Developer Mode** must be on, once per phone. Apple documents it only for development-signed apps, but iOS 27
+  asks for it for these Ad Hoc apps too (an iPhone 18 Pro, 2026-11-19), so the page always shows the step and says
+  why: "iOS 27 asks for Developer Mode once for apps installed outside the App Store."
 - **Speed** is capped by your server's upload bandwidth. Cloudflare's free plan won't cache files this large.
 - **Your certificate is shared**: anyone who installs iFizBox from your site can extract it.
 - **One App ID for every app**: the apps share a keychain group, so one app could read another's saved sign-ins.
