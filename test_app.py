@@ -1357,6 +1357,19 @@ for cl in (safari, homeapp):
 ntok = re.search(r"new=([\w-]+)$", inv(do="new", name="Sam").location).group(1)
 assert I.app.test_client().get(f"/invite/{ntok}").location == "/?go=setup"  # a link-preview crawler (no cookies) uses nothing up
 assert "Not used" in boss.get("/admin/invites").data.decode()
+# B10: a preview crawler (Discord, iMessage's facebookexternalhit, WhatsApp) gets a 200 with the og: card from both kinds of link, valid
+# or not (a 403 shows no embed), and is neither signed in nor uses anything up, even when it keeps cookies
+for ua in ("Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)", "facebookexternalhit/1.1 Facebot Twitterbot/1.0", "WhatsApp/2.23.20.0"):
+    for link in (join_link(), f"/invite/{ntok}", f"/invite/{tok}", "/join/" + "0" * 32, "/invite/nope"):
+        bot = I.app.test_client()
+        r = bot.get(link, headers={"User-Agent": ua})
+        assert r.status_code == 200 and "Set-Cookie" not in r.headers, (ua, link, r.status_code)
+        h = r.data.decode()
+        assert 'property=og:title content="You\'re invited to SideDrop"' in h and 'property=og:image content="https://x.test/static/og.png"' in h
+        assert f'property=og:url content="https://x.test{link}"' in h and "type=password" not in h and len(r.data) < 4000
+        assert not signed_in(bot)
+assert I.app.test_client().get("/static/og.png").status_code == 200  # the card's image needs no session either
+assert "Not used" in boss.get("/admin/invites").data.decode()
 assert safari.get(f"/invite/{ntok}").location == "/?go=setup" and signed_in(safari)
 assert "Used by Sam iPhone14,2 on" in boss.get("/admin/invites").data.decode() and I.profile_udids() == {"GUEST-1"}
 assert homeapp.get("/").status_code == 302 and signed_in(homeapp), homeapp.get("/").data[:300]

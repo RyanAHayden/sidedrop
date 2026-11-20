@@ -3007,8 +3007,35 @@ def guests_stay_out():
 INVITE_NO = """<div class="c"><p class=err>{{ msg }}</p></div>"""
 
 
+# B10: chat apps fetch a pasted link with a crawler and embed its og: tags, but only from a 200: a used, expired, revoked or
+# rotated invite answered 403 (no embed), and a valid one 302'd to / after signing the crawler in (a cookie-keeping crawler then got
+# the whole signed-in page, after any pending re-sign). A crawler gets this small page instead: same card, no session, nothing used.
+# iMessage's LinkPresentation sends "facebookexternalhit/1.1 Facebot Twitterbot/1.0"; Signal and WhatsApp send WhatsApp/x.
+PREVIEW_UA = re.compile(r"bot\b|bot/|crawler|spider|facebookexternalhit|facebot|whatsapp|telegram|slack|discord|embedly|iframely|"
+                        r"skypeuripreview|linkedin|pinterest|redditbot|mastodon|vkshare|google-pagerenderer|preview", re.I)
+PREVIEW_PAGE = """<!doctype html><meta charset=utf-8><title>You're invited to SideDrop</title>
+<meta name=description content="{{ desc }}"><meta property=og:title content="You're invited to SideDrop">
+<meta property=og:description content="{{ desc }}"><meta property=og:site_name content=SideDrop><meta property=og:type content=website>
+<meta property=og:url content="{{ url }}"><meta property=og:image content="%PUBLIC_URL%/static/og.png"><meta property=og:image:width content=1200>
+<meta property=og:image:height content=630><meta name=twitter:card content=summary_large_image><meta name=twitter:title content="You're invited to SideDrop">
+<meta name=twitter:image content="%PUBLIC_URL%/static/og.png"><meta name=theme-color content="#4f698b">
+<p>{{ desc }} Open the link on your iPhone to get started.</p>""".replace("%PUBLIC_URL%", PUBLIC_URL)
+
+
+def link_preview():
+    """The preview page when a link-preview crawler asks (no session is made or read), else None."""
+    if not PREVIEW_UA.search(request.headers.get("User-Agent", "")):
+        return None
+    resp = make_response(render_template_string(PREVIEW_PAGE, url=PUBLIC_URL + request.path,
+                                                desc="Share an Apple developer account with friends and sideload apps."))
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @app.get("/join/<tok>")
 def join(tok):
+    if r := link_preview():
+        return r
     if logged_in() and not is_guest():
         return redirect(SETUP_LINK)  # a friend or the admin trying the link stays who they are (F30: on the setup steps, unless registered)
     if needs_setup() or not hmac.compare_digest(tok.encode(), join_token().encode()):
@@ -3020,6 +3047,8 @@ def join(tok):
 
 @app.get("/invite/<tok>")
 def invite_link(tok):
+    if r := link_preview():
+        return r
     if logged_in() and not is_guest():
         return redirect(SETUP_LINK)
     inv = load_invites().get(tok)
