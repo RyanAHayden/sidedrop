@@ -25,6 +25,14 @@
   and Sign Out; the guest's with Admin Login and no Sign Out, per F31). `*-admin-login.png` is the pushed prompt.
   `*-admin-after.png` is Manage after the right password.
 
+## Spec review
+- It flagged keeping `admin_on` as partial against "every non-admin". I kept it on purpose: with no admin password there is no
+  admin to become and `/admin` is a 404, so the row would be a dead end (see above).
+- It flagged dropping F29's no-rubber-band rule as reversing F29. That rule is the only Settings-specific scroll CSS and is the
+  fix for (1), so it goes. Settings now bounces like every other tab.
+- It noted that the `*-admin-login.png` and `*-admin-after.png` pairs are byte-identical. They are: the prompt and the Manage
+  menu look the same whether a password user or a guest reached them. That repeat is the proof the guest gets the same pages.
+
 ## Tried and failed
 - `Input.synthesizeScrollGesture` (touch) scrolled nothing, not even a plain test scroller, so it couldn't tell me anything.
   Raw `Input.dispatchTouchEvent` drags work, and I used them.
