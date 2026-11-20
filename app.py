@@ -2339,9 +2339,7 @@ HELP = """<h3 class=hdr>Problems</h3><div class="g hlp">
 <li>Stuck on a wait timer? That's <b>Stolen Device Protection</b>: turn it off as below, or do it at home, where there's no wait.</li></ol>
 {{ sdp_steps }}</details>
 <details id=install><summary>{{ icon('alert') }}<span>An App Won't Install</span></summary>
-<ol><li>Settings should say this iPhone is <b>Registered</b>. If it doesn't, register it on the Apps tab.</li>
-<li>Registered before but the apps are locked? Register again, it's instant.</li>
-<li>An app stuck half-installed (a grey icon): delete it from the Home Screen, then tap GET again.</li>
+<ol><li>An app stuck half-installed (a grey icon): delete it from the Home Screen, then tap GET again.</li>
 <li>Installed but it won't open? Turn on Developer Mode, below.</li></ol></details>
 <details id=dev><summary>{{ icon('devMode') }}<span>Turn on Developer Mode</span></summary><p>{{ dev_why }}</p>{{ dev_steps }}</details></div>
 <p class=ftr>Apps here are signed with a friend's developer certificate for each registered iPhone. iOS asks for Developer Mode once, then they open like any other app.</p>
