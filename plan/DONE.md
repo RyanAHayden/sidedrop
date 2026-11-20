@@ -39,3 +39,4 @@
 
 ### Follow-ups
 - [x] **B3** (follow-up, low) Dark themes: an armed green INSTALL (.get.go) has grey text, because '.dark .get{color:var(--getc);border-color:...}' (app.py ~1041) comes after '.get.go{color:#fff;border-color:#2f7a17}' with the same specificity. Give .dark .get.go white text and the green border (F25 did it only for Home's iFizBox card, .dark .ifzr .get.go). | files: app.py, test_app.py
+- [x] **B4** (follow-up, low) Main page's pageshow handler calls themeMarks(), which only exists after Settings > Theme was pushed (THEME_JS): every main-page load logs 'themeMarks is not defined' (seen in F26's headless check). Guard it (window.themeMarks&&themeMarks()) or define a main-page one. | files: app.py

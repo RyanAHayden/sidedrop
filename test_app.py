@@ -342,6 +342,8 @@ for n, (tone, label, color, css) in A.PALETTES.items():
     assert f"data-v={n} " not in theme_lists["dark" if tone == "light" else "light"], n
     assert toks(A.PALETTES[A.THEMES[tone][0]][3]) <= toks(css), (n, toks(A.PALETTES[A.THEMES[tone][0]][3]) - toks(css))
     assert f"html[data-palette={n}]{{--seg:" in html and n in A.SWATCH, n  # F20: its segmented control's colours and its swatch
+# B4: themeMarks is defined only by Settings > Theme's script, so the main page calls it only behind a guard
+assert "function themeMarks(" not in html and html.count("themeMarks()") == html.count("if(window.themeMarks)themeMarks()"), "an unguarded themeMarks() on the main page"
 assert "darkSw" not in html and "data-tk=" not in html and "Display" not in html  # F20: the theme lists left the Settings tab for Settings > Theme
 
 # F20 Settings > Theme, as iFizBox's: a Theme row (its tile) in Settings pushes it; Mode is a segmented control, Themes' Light and Dark rows
