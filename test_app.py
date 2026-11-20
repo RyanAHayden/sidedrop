@@ -277,6 +277,16 @@ assert html.index("<h3 class=hdr>iFizBox</h3>") < html.index("<h3 class=hdr>Apps
 # its GET opens the iFizBox tab (the install is that page's button); the tab has the install button with the manifest and the benefits
 assert 'href=#ifizbox onclick="go(\'ifizbox\');return false"' in html and 'id=t-ifizbox' in html and 'id=ifzb data-app="com.ryha.ifizbox" data-m="https://x.test/m/com.ryha.ifizbox.plist?e=' in html
 assert "Your certificate, already in it" in html and "10 sources" in html
+# F25: Home's iFizBox card: no "Why iFizBox" footer, the "Recommended" line, a green INSTALL that opens the page and starts the install once
+card = html[html.index("<h3 class=hdr>iFizBox</h3>"):html.index("<h3 class=hdr>Apps</h3>")]
+assert "Why" not in card and "class=ftr" not in card and '<small class=rec>Recommended: get update alerts and install more apps</small>' in card
+assert '<a class="get go" data-app="com.ryha.ifizbox" aria-label="Install com.ryha.ifizbox" href=#ifizbox onclick="return ifzGo(this)">INSTALL</a>' in card
+assert ".get.go{min-width:76px" in html and ".get:before{" in html and "background:var(--greenbtn)" in html, "the green is the INSTALL state's --greenbtn"
+assert 'addEventListener("hashchange",()=>{if(ifzAuto&&cur=="ifizbox"){ifzAuto=0;ifzRun()}});' in html, "the page runs the install once, off the flag"
+assert 'function ifzGo(c){ifzAuto=1;go("ifizbox");ifzAuto=0;' in html, "the flag is set only for the card's tap"
+c.post("/installed", data={"name": "com.ryha.ifizbox"})
+card = (h := c.get("/").data.decode())[h.index("<h3 class=hdr>iFizBox</h3>"):h.index("<h3 class=hdr>Apps</h3>")]
+assert 'class="get done"' in card and ">INSTALLED</a>" in card and " go" not in card, "current: the grey INSTALLED"
 # tabs: Apps, iFizBox, Settings (no Feather, no More, no Changes, and no Files tab while there are no files: F14)
 assert re.findall(r"<a href=#(\w+)><svg", html) == ["apps", "ifizbox", "settings"] and "t-feather" not in html and "id=t-files" not in html and "t-changes" not in html
 (tmp / "signed" / "com.ryha.ifizbox.ipa").unlink()

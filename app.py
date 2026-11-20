@@ -970,6 +970,12 @@ def home():
  background:linear-gradient(#79a1f3,#3b71e1 49%,#215fdd 51%,#2361dd);background-origin:border-box;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 1px 1px rgba(0,0,0,.2)}
 .get.upd:not(.go):not(.done):not([aria-expanded=true]).is-pressed{background:linear-gradient(#5f86d6,#2a5bc0 49%,#164bb8 51%,#184db9);background-origin:border-box;box-shadow:none}
 /* a row with an update: the iOS 6 red badge (the Apps tab's, without a number) on its icon's top-right corner; gone with .up once installed */
+/* Home's iFizBox card (F25): icon, name and its green INSTALL on top, the "Recommended" line under the whole row: in Helvetica Neue 13px it is
+   323px, which fits the row's 333px at 375pt but not the 273px beside the icon; narrower screens cut it with an ellipsis, still one line */
+.ifzr{display:grid;grid-template-columns:50px minmax(0,1fr) auto;column-gap:10px;row-gap:6px;align-items:center}
+.ifzr>div:not(.ico){grid-column:2;grid-row:1} .ifzr>.get{grid-column:3;grid-row:1}
+.ifzr>.rec{grid-column:1/4;grid-row:2;font-size:13px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .ifv{margin-left:6px;font-size:14px;color:var(--sub)}
+.dark .ifzr .get.go{color:#fff;border-color:#2f7a17}  /* .dark .get comes later and would grey the green button's label */
 .row.up{position:relative} .ub{display:none} .row.up .ub{display:block;position:absolute;left:47px;top:calc(50% - 32px);width:20px;min-width:0;padding:0;pointer-events:none}
 .steps{background:linear-gradient(#f3f5f8,#fff);display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s cubic-bezier(.25,.1,.25,1)} .steps.open{grid-template-rows:1fr}
 .steps>div{overflow:hidden;min-height:0} .steps .step:first-child{box-shadow:inset 0 1px var(--sep)}  /* real-height animation; max-height snapped */
@@ -1136,11 +1142,10 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <button type=button class=gbtn onclick="sdpDone(true)">I turned it off</button></details>
 <div class=c id=reg><div class=sh><span class=num>2</span><div>Register this iPhone<small>In Safari on this iPhone</small></div></div>
 <fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>This adds your iPhone to the shared developer account, so the apps here can be signed for it. Registered before but the apps are locked? Register again, it's instant.</small></div></div>{% endif %}
-{% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class="row{{ ' up' if ifz.name in mine and mine[ifz.name] != ifz.vkey }}">{{ ifz_icon(ifz) }}{{ ubadge(ifz) }}
-<div>{{ ifz.title }}<small>Version {{ ifz.short }}{% if ifz.name in mine and mine[ifz.name] != ifz.vkey %}{{ upnote(ifz) }}{% else %} · your certificate inside{% endif %}</small></div>
-{% if enrolled %}<a class="get{{ ' done' if mine.get(ifz.name) == ifz.vkey else ' upd' if ifz.name in mine }}" data-app="{{ ifz.name }}" aria-label="{{ ifz.title }}: why and install" href=#ifizbox onclick="go('ifizbox');return false">{{ 'GET' if ifz.name not in mine else 'INSTALLED' if mine[ifz.name] == ifz.vkey else 'UPDATE' }}</a>
-{% else %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>{% endif %}</div></div>
-<p class=ftr>Installs apps right on your iPhone. <a href=#ifizbox onclick="go('ifizbox');return false">Why iFizBox</a></p>{% endif %}
+{% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class="row ifzr{{ ' up' if ifz.name in mine and mine[ifz.name] != ifz.vkey }}">{{ ifz_icon(ifz) }}{{ ubadge(ifz) }}
+<div>{{ ifz.title }}<span class=ifv>{{ ifz.short }}</span></div><small class=rec>Recommended: get update alerts and install more apps</small>
+{% if enrolled %}<a class="get{{ ' done' if mine.get(ifz.name) == ifz.vkey else ' go' }}" data-app="{{ ifz.name }}" aria-label="Install {{ ifz.title }}" href=#ifizbox onclick="return ifzGo(this)">{{ 'INSTALL' if ifz.name not in mine else 'INSTALLED' if mine[ifz.name] == ifz.vkey else 'UPDATE' }}</a>
+{% else %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>{% endif %}</div></div>{% endif %}
 <h3 class=hdr>Apps</h3>{% if apps %}{{ install_list(apps) }}{% else %}<p class="c m">No apps yet.</p>{% endif %}
 {% if third %}<h3 class=hdr>Third-party apps</h3>{{ install_list(third) }}<p class=ftr>Made by other people, mirrored from their sources.</p>{% endif %}
 {{ vfoot }}
@@ -1306,6 +1311,11 @@ function mark(b,quiet){let n=b.dataset.app;if(!n)return;navigator.sendBeacon("/i
  document.querySelectorAll('.row .get[data-app="'+n+'"]').forEach(x=>{x.classList.add("done");if(x.dataset.arm)x.dataset.arm="INSTALLED";if(!x.classList.contains("go"))x.textContent="INSTALLED"});if(!quiet)setTimeout(devMaybe,1500);  // after iOS's install prompt
  document.querySelectorAll("#t-apps .row.up").forEach(r=>{if(r.querySelector('[data-app="'+n+'"]')){r.classList.remove("up");r.querySelectorAll(".upn,.ub").forEach(s=>s.remove());r.querySelectorAll(".get.upd").forEach(x=>x.classList.remove("upd"))}});navR()}  // installed now: no longer an update
 addEventListener("hashchange",show);
+/* Home's iFizBox card (F25): its INSTALL opens the iFizBox page and starts the install in the same tap (still a tap for Safari's itms-services),
+   as its Install button would. The flag is read once, so coming back to the page later doesn't run it again; then the card reads INSTALLED. */
+let ifzAuto=0;
+addEventListener("hashchange",()=>{if(ifzAuto&&cur=="ifizbox"){ifzAuto=0;ifzRun()}});
+function ifzGo(c){ifzAuto=1;go("ifizbox");ifzAuto=0;if(c&&document.getElementById("ifzb")){c.classList.remove("go");c.classList.add("done");c.textContent="INSTALLED"}return false}
 /* check sources in the background (the page no longer waits on it); swap the lists in only if a new build got signed */
 /* and when the Home Screen app comes back: iOS keeps it running for days, so a new deploy (another build) reloads the whole page, not just the lists */
 const BUILD=document.querySelector("meta[name=build]").content;
