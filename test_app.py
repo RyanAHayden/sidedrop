@@ -385,7 +385,14 @@ for gone in (">iFizBox<", "#ifizbox", "About", "iPhones used", ico("slots"), "St
 # F29: no 'This iPhone' title; a user has no Admin Settings or Share row; Theme sits under Preferences; Settings doesn't rubber-band
 assert "This iPhone</h3>" not in settings_tab and "Admin Settings" not in settings_tab and "id=shareRow" not in settings_tab and "<div>Share</div>" not in settings_tab
 assert re.findall(r"<h3 class=hdr>([^<]+)</h3>", settings_tab) == ["Preferences"] and settings_tab.index("Preferences</h3>") < settings_tab.index("<div>Theme</div>")
-assert "#scr:has(>#t-settings:not([hidden])){overscroll-behavior-y:none} #t-settings{min-height:0}" in html
+# B20: Settings scrolls: F29's overscroll-behavior-y:none on #scr (by :has while Settings showed) left it not scrolling on the iPhone, so
+# Admin Login and Sign Out were out of reach. No rule for #scr or #t-settings may set overflow:hidden, a height or overscroll-behavior:none
+assert "#t-settings{min-height:0}" in html and "overscroll-behavior-y:none" not in html and ":has(>#t-settings" not in html
+page_css = re.sub(r"/\*.*?\*/", "", "".join(re.findall(r"<style>(.*?)</style>", html, re.S)), flags=re.S)
+scr_rules = [(s, b) for s, b in re.findall(r"([^{}]*)\{([^{}]*)\}", page_css) if re.search(r"#scr\b|#t-settings\b", s)]
+assert any("overflow-y:auto" in b for s, b in scr_rules), scr_rules
+for s, b in scr_rules:
+    assert not re.search(r"overflow(-y)?:hidden|(?<![-\w])(max-)?height:|overscroll-behavior(-y)?:none|touch-action:none", b), (s, b)
 order = [settings_tab.index(s) for s in ("<div>Status</div>", "Every app on the Apps tab can install on this iPhone.</p>",
                                          "<div>Theme</div>", "<div>Update Alerts</div>", "Tells you when an app you installed has a new version.</p>",
                                          '<a class="row mrow" href=/home-screen data-push>' + ico("homeScreen") + "<div>Add to Home Screen</div></a>",
@@ -1257,15 +1264,23 @@ assert b'placeholder="Your name"' not in guest.get("/").data  # a named invite s
 # F31: the link is a guest's access: no password field anywhere on their pages, and no Sign Out (nothing to sign back in with)
 gh = guest.get("/").data
 assert b"type=password" not in gh and b"action=/login" not in gh and b"href=/logout>Sign Out" not in gh
-assert b"Admin Login" not in gh  # B19: /admin is 403 to a guest, so no login row
+# B20: a guest gets Settings' Admin Login row too (B19 hid it), pushing /admin's password prompt
+assert b'<a class="row mrow" href=/admin data-push id=adminRow>' in gh and b"<div>Admin Login</div>" in gh
 fr = I.app.test_client(); fr.get(join_link()); assert b"href=/logout>Sign Out" in fr.get("/").data  # friends keep Sign Out
 assert b"href=/logout>Sign Out" in boss.get("/").data
 gp = enroll(guest, name="Someone Else")
 assert b"/udid/Sam%20x/g/" in gp and b"Someone" not in gp, "registered under the invite's name, not the form's"
 assert early.get(f"/invite/{tok}").location == "/?go=setup" and signed_in(early)  # someone else opening the shared link before it's used
-for p in ("/admin", "/admin/invites", "/admin/passwords", "/admin/iphones", "/admin/devices.json", "/admin/files"):
+for p in ("/admin/invites", "/admin/passwords", "/admin/iphones", "/admin/devices.json", "/admin/files"):
     assert guest.get(p).status_code == 403, p
-assert guest.post("/admin/invites", data={"do": "new"}).status_code == 403 and guest.post("/admin", data={"password": "admin-pass-16"}).status_code == 403
+assert guest.post("/admin/invites", data={"do": "new"}).status_code == 403
+# B20: /admin itself is the password prompt for a guest (not 403); a right admin password there makes that browser admin, as a normal
+# login does (another guest of the same invite, so `guest` stays a guest for the tests below)
+gr = guest.get("/admin"); assert gr.status_code == 200 and b"Admin password" in gr.data and b"href=/admin/invites" not in gr.data
+g2 = I.app.test_client(); assert g2.get(f"/invite/{tok}").location == "/?go=setup"
+assert g2.post("/admin", data={"password": "admin-pass-16"}).location == "/admin"
+assert "href=/admin/invites" in g2.get("/admin").data.decode() and g2.get("/admin/invites").status_code == 200
+g2s = g2.get("/").data.decode(); assert "Admin Settings" in g2s and "id=adminRow" not in g2s and "href=/logout>Sign Out" in g2s
 assert boss.get(f"/invite/{tok}").location == "/?go=setup" and boss.get("/admin/invites").status_code == 200  # the admin trying it stays admin
 # the first UDID through it uses it up; a second UDID is refused, the same one again is fine
 iurl = plistlib.loads(enroll(guest, name=""))["PayloadContent"]["URL"]
