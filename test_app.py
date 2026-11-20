@@ -1203,6 +1203,8 @@ boss = I.app.test_client(); assert boss.get("/?password=admin-pass-16").location
 assert "href=/admin/invites" in boss.get("/admin").data.decode()
 html = boss.get("/admin/invites").data.decode(); csrf = re.search(r'name=csrf value="([^"]+)"', html).group(1)
 assert "friends-pass-16" not in html and "Copy Link" in html and "navigator.clipboard.writeText" in html and "navigator.share" in html
+# B11: an unused row's COPY, SHARE and REVOKE wrap onto their own line in equal parts (squished beside the name at 320-375px)
+assert ".irow[data-link]{flex-wrap:wrap" in html and ".irow[data-link] .lbtn{display:contents}" in html and "form{flex:1 1 40px" in html
 join_link = lambda: re.search(r'data-link="https://x.test(/join/[0-9a-f]{32})"', boss.get("/admin/invites").data.decode()).group(1)
 inv = lambda **f: boss.post("/admin/invites", data=dict(f, csrf=csrf))
 signed_in = lambda cl: (lambda r: r.status_code == 200 and b"action=/login" not in r.data)(cl.get("/"))

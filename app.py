@@ -3057,7 +3057,13 @@ INVITE_ROWS = """{% if invites %}<div class=g>{% for i in invites %}<div class="
 <p class=ftr>Revoking a used link signs its guest out and leaves the iPhone registered: turn it off on iPhones.</p>{% endif %}"""
 
 INVITES_PAGE = """<style>.lnk{font:13px/1.4 ui-monospace,Menlo,monospace;width:100%;box-sizing:border-box} .lbtn{display:flex;gap:8px} .lbtn button{flex:1}
-.lbtn button[hidden]{display:none} .irow>div:first-child{flex:1;min-width:0} .irow .lbtn{flex:none;gap:4px} .irow form{flex:none;margin-left:4px} .irow b{font-weight:700}</style>
+.lbtn button[hidden]{display:none} .irow>div:first-child{flex:1;min-width:0} .irow .lbtn{flex:none;gap:4px} .irow form{flex:none;margin-left:4px} .irow b{font-weight:700}
+/* B11: an unused row's COPY, SHARE and REVOKE go on their own line under the name, equal buttons the row's 10px gap apart (.lbtn
+steps aside, so the row lays them out with the form, and COPY and REVOKE share the line in halves where there's no SHARE): they fit
+a 320px screen and the name and date keep the row's width. The basis is 40px, not 0: a button's 22px of padding and border floors
+its basis, the form has none, so at 0 REVOKE came out 22px narrower */
+.irow[data-link]{flex-wrap:wrap;row-gap:8px} .irow[data-link]>div:first-child{flex-basis:100%} .irow[data-link] .lbtn{display:contents}
+.irow[data-link] .lbtn button,.irow[data-link] form{flex:1 1 40px;min-width:0;margin:0} .irow[data-link] form button{width:100%;min-width:0}</style>
 <h3 class=hdr>Anyone with the Link</h3>
 <div class="c mg" data-link="{{ join }}"><input class=lnk readonly value="{{ join }}" aria-label=Link onfocus="this.select()">
 """ + LINK_BTNS.replace("{{ cls }}", "").replace("{{ copy }}", "Copy Link").replace("{{ share }}", "Share") + """
