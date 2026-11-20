@@ -382,6 +382,9 @@ assert re.findall(r"<details id=(\w+)><summary>.*?<span>([^<]+)</span>", hp) == 
     ("a2hs", "Add to Home Screen"), ("notify", "Notifications in Apps"), ("more", "More Apps with iFizBox")], re.findall(r"<details id=(\w+)><summary>.*?<span>([^<]+)</span>", hp)
 reg = hp[hp.index("<details id=register>"):hp.index("<details id=install>")]
 assert "Tap <b>Register iPhone</b> again, then <b>Allow</b>" in reg and "<b>Profile Downloaded</b>" in reg and "<b>Install</b>" in reg
+ins = hp[hp.index("<details id=install>"):hp.index("<details id=dev>")]  # F33: Install only shows once registered, so no registration step
+assert "Registered" not in ins and "egister" not in ins and re.findall(r"<li>(.*?)</li>", ins) == [
+    "An app stuck half-installed (a grey icon): delete it from the Home Screen, then tap GET again.", "Installed but it won't open? Turn on Developer Mode, below."]
 assert "wait timer" in reg and "/static/sdp1.jpg" in reg and "at home" in reg and hp.count("/static/sdp1.jpg") == 1
 assert f"<span>Turn on Developer Mode</span></summary><p>{A.DEV_WHY}</p>" in hp  # F23: Help says why too
 assert "/static/dev3.jpg" in hp[hp.index("<details id=dev>"):] and "class=shot" in hp and ".shot{" in hp  # its own copy of the steps' look
