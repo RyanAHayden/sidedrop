@@ -2,6 +2,7 @@
 
 ### Next
 
+- [ ] **B19** Settings page has no admin login button: a non-admin sees no way in to Admin Settings (~app.py:1264 shows the group only when is_admin). Add an 'Admin Login' row in Settings for non-admins that opens the admin password prompt (admin_fails ~2169 already rate-limits it); admins keep the Admin Settings group. Check: test in test_app.py that Settings for a logged-in non-admin has the row and admins don't. | files: app.py, test_app.py
 - [ ] **B18** Apps row 'Mark as Installed' hold sheet (mkItems, ~app.py:1449, F27 /installed route ~1574) doesn't look like the iFizBox action sheet, and on choosing it vanishes at once instead of sliding down. Match iFizBox's sheet look (use the same UIKit-art action sheet styling iFizBox uses) and run the slide-away animation before removing it. Check: test_app.py covers the markup/class; screenshot open and dismiss on a 375px iPhone. | files: app.py, test_app.py
 ### Follow-ups
 
