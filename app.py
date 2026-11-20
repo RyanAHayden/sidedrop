@@ -1038,6 +1038,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
  box-shadow:0 0 0 2.5px #000,0 3.5px 0 0 rgba(211,211,211,.19);background:linear-gradient(#878787,#686868 7%,#545454 23%,#383838 38%,#1a1a1a 54%,#020202 69%,#000 77%,#131313)} .con .confin[hidden]{display:none}
 .con .confin.is-pressed{background:linear-gradient(#c7cde9,#c7cde9 .5px,#818fce .5px,#7a8acb 8%,#6577c3 18%,#485db8 31%,#2b45ae 44%,#253eaa 50%,#001d9d 50%,#04229e 56%,#1330a7 69%,#1940b4 82%,#1354cd calc(100% - .5px),#2c68d4 calc(100% - .5px))}
 .dark .get{color:var(--getc);border-color:var(--baredge);box-shadow:inset 0 1px 0 var(--btnhi)} .dark .get[aria-expanded=true]{color:var(--getoff);background:var(--getdown);box-shadow:inset 0 1px 3px #000}
+.dark .get.go{color:#fff;border-color:#2f7a17} .dark .get.go.is-pressed{border-color:#255e12}  /* B3: an armed INSTALL stays white on green, not .dark .get's grey */
 .dark .steps{background:var(--steps)} .dark .step+.step{border-top-color:var(--keyline)}
 .dark .green{background:var(--greenbg)} .dark .kv{border-top-color:var(--greenline)}
 .dark .tile{background:var(--rowbg);color:var(--text)} .dark .pair .tile{border-color:var(--line);box-shadow:0 1px 0 var(--inset)} .dark .split .tile+.tile{border-left-color:var(--div)}

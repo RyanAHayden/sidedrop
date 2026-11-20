@@ -292,6 +292,9 @@ card = html[html.index("<h3 class=hdr>iFizBox</h3>"):html.index("<h3 class=hdr>A
 assert "Why" not in card and "class=ftr" not in card and '<small class=rec>Recommended: get update alerts and install more apps</small>' in card
 assert '<a class="get go" data-app="com.ryha.ifizbox" aria-label="Install com.ryha.ifizbox" href=#ifizbox onclick="return ifzGo(this)">INSTALL</a>' in card
 assert ".get.go{min-width:76px" in html and ".get:before{" in html and "background:var(--greenbtn)" in html, "the green is the INSTALL state's --greenbtn"
+# B3: in dark themes every armed INSTALL keeps white text and the green border: .dark .get.go (0,3,0) outranks .dark .get, which sits after .get.go
+assert ".dark .get.go{color:#fff;border-color:#2f7a17}" in html and ".dark .get.go.is-pressed{border-color:#255e12}" in html
+assert html.index(".dark .get{") < html.index(".dark .get.go.is-pressed{"), "the pressed border comes after the ifzr rule and .dark .get"
 assert 'addEventListener("hashchange",()=>{if(ifzAuto&&cur=="ifizbox"){ifzAuto=0;ifzRun()}});' in html, "the page runs the install once, off the flag"
 assert 'function ifzGo(c){ifzAuto=1;go("ifizbox");ifzAuto=0;' in html, "the flag is set only for the card's tap"
 c.post("/installed", data={"name": "com.ryha.ifizbox"})
