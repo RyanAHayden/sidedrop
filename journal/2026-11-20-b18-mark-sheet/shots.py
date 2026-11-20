@@ -36,8 +36,6 @@ with sync_playwright() as p:
         pg.wait_for_timeout(500)
         pg.screenshot(path=f"{out}/{theme}-open.png")
         print(theme, "open:", pg.evaluate(STATE), "buttons:", pg.locator("#mkB button").all_inner_texts())
-        if theme == "dark":
-            break
         pg.click("#mkB button")
         samples = []
         for i in range(6):

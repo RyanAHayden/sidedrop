@@ -1156,7 +1156,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 /* B18: the sheet is iFizBox's (its packages.css .action-sheet and nav/actionsheet.js; values copied, no file shared), from the 4S's
    UIAlertSheet* art: the panel (UIAlertSheetDefaultBackground, 84%) a 1pt #3f4347 top edge, half a point of white, #acb1b9 -> #5c626d
    over 33pt; 44pt buttons with 10pt corners and an inward-fading dark edge (UIAlertSheetDefaultButton), pressed blue; Cancel after a
-   wider gap; the Black style in dark themes. It rises in .35s over a dim that fades in on its own layer (.mkd), and leaves (.out) by
+   wider gap; the Black style in dark themes. It rises in .3s (iFizBox's DURATION) over a dim that fades in on its own layer (.mkd), and leaves (.out) by
    sliding back down in .25s while the dim fades, then hides. */
 .mks{position:fixed;inset:0;z-index:22} .mks[hidden]{display:none} .mks.out{pointer-events:none}
 .mkd{position:absolute;inset:0;background:rgba(0,0,0,.4);animation:fadein .3s ease-out} .mks.out .mkd{animation:mkfade .25s ease-in forwards}
@@ -1164,7 +1164,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
  padding:21px max(21px,env(safe-area-inset-right),(100% - 30rem)/2) calc(22px + env(safe-area-inset-bottom)) max(21px,env(safe-area-inset-left),(100% - 30rem)/2);
  background:linear-gradient(#3f4347,#3f4347) top/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.84),rgba(255,255,255,.84)) 0 1px/100% .5px no-repeat,
  linear-gradient(rgba(172,177,185,.84) 1.5px,rgba(142,148,158,.84) 12px,rgba(107,113,123,.84) 26px,rgba(92,98,109,.84) 33px);
- will-change:transform;animation:mkup .35s cubic-bezier(.25,.1,.25,1)}
+ will-change:transform;animation:mkup .3s cubic-bezier(.25,.1,.25,1)}
 .mks.out .mkp{animation:mkdown .25s cubic-bezier(.25,.1,.25,1) forwards}
 @keyframes mkup{from{transform:translateY(100%)}} @keyframes mkdown{to{transform:translateY(100%)}} @keyframes mkfade{to{opacity:0}}
 .mkp p{margin:-6px 0 2px;text-align:center;font-size:13px;line-height:17px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);overflow-wrap:anywhere}
@@ -1180,7 +1180,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .dark .mkp{background:linear-gradient(rgba(35,35,35,.89),rgba(35,35,35,.89)) top/100% 1px no-repeat,linear-gradient(rgba(167,167,167,.82),rgba(167,167,167,.82)) 0 1px/100% .5px no-repeat,
  linear-gradient(rgba(106,106,106,.73) 1.5px,rgba(81,81,81,.7) 12px,rgba(44,44,44,.65) 24px,rgba(9,9,9,.62) 36px,rgba(1,1,1,.6))}
 .dark .mkp button:not(.mkc):not(.is-pressed){background:linear-gradient(#fbfbfb,#f5f5f5 15%,#f0f0f0 38%,#eee 46%,#e4e4e4 54%,#e4e4e4);background-origin:border-box}
-.dark .mkp button.mkc:not(.is-pressed){background:linear-gradient(#878787,#686868 7%,#545454 23%,#383838 38%,#1a1a1a 54%,#020202 69%,#000 77%,#131313);background-origin:border-box}
+.dark .mkp button.mkc{background:linear-gradient(#878787,#686868 7%,#545454 23%,#383838 38%,#1a1a1a 54%,#020202 69%,#000 77%,#131313);background-origin:border-box}
 </style>
 {% if error %}<p class="c err">{{ error }}</p>{% endif %}
 {% set enroll_form %}<form method=post action=/enroll style="display:flex;flex-direction:column;gap:10px"
