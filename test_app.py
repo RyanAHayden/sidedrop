@@ -35,6 +35,8 @@ A.register = lambda u, n, **kw: (calls.append((u, n)), orig_register(u, n, **kw)
 
 c = A.app.test_client()
 path_qs = lambda url: (lambda s: f"{s.path}?{s.query}")(urlsplit(url))
+# B2: POST /enroll answers 303 to a signed GET link that serves the profile (Safari refetches downloads with GET)
+enroll = lambda cl, **d: cl.get(path_qs(cl.post("/enroll", data=d).location)).data
 
 # login gate
 assert b"Password" in c.get("/").data and b"The friend who sent you the link has the password." in c.get("/").data
@@ -51,7 +53,14 @@ assert r.status_code == 302 and r.location == "/" and b"Register iPhone" in link
 assert "err=1" in A.app.test_client().get("/?password=wrong").location
 
 # enrollment profile points at a signed /udid URL
-prof = plistlib.loads(c.post("/enroll", data={"name": "Sam <script>"}).data)
+r = c.post("/enroll", data={"name": "Sam <script>"})
+assert r.status_code == 303 and "/enroll/profile/Sam%20script?e=" in r.location, r.location
+g = c.get(path_qs(r.location)); assert g.status_code == 200 and g.content_type == "application/x-apple-aspen-config"
+assert A.app.test_client().get(path_qs(r.location)).status_code == 200  # no session needed: the signature is the auth
+assert c.get(path_qs(r.location)).status_code == 200  # fetched twice: still fine
+assert c.get(path_qs(r.location).replace("&s=", "&s=0")).status_code == 403
+assert c.get("/enroll").status_code == 302
+prof = plistlib.loads(g.data)
 url = prof["PayloadContent"]["URL"]
 assert "/udid/Sam%20script?" in url, url
 # F17: what the Settings app shows says SideDrop; the identifier installed phones carry stays sidedrop.udid
@@ -71,7 +80,7 @@ cd = tmp / "tls"; cd.mkdir()
 (cd / "fullchain.pem").write_bytes(crt.public_bytes(S.Encoding.PEM) * 2)  # leaf + "intermediate"
 (cd / "privkey.pem").write_bytes(k.private_bytes(S.Encoding.PEM, S.PrivateFormat.PKCS8, S.NoEncryption()))
 A.PROFILE_CERT_DIR = str(cd)
-der = c.post("/enroll", data={"name": "Sam"}).data
+der = enroll(c, name="Sam")
 assert der[:1] == b"\x30" and A.embedded_plist(der)["PayloadType"] == "Profile Service"
 assert len(P7.load_der_pkcs7_certificates(der)) == 2
 A.PROFILE_CERT_DIR = ""
@@ -948,15 +957,15 @@ assert f'data-link="https://x.test/invite/{tok}"' in html and "New link for Sam 
 guest, early = I.app.test_client(), I.app.test_client()
 assert guest.get(f"/invite/{tok}").location == "/" and b"Register iPhone" in guest.get("/").data
 assert b'placeholder="Your name"' not in guest.get("/").data  # a named invite skips the name step
-r = guest.post("/enroll", data={"name": "Someone Else"})
-assert b"/udid/Sam%20x/g/" in r.data and b"Someone" not in r.data, "registered under the invite's name, not the form's"
+gp = enroll(guest, name="Someone Else")
+assert b"/udid/Sam%20x/g/" in gp and b"Someone" not in gp, "registered under the invite's name, not the form's"
 assert early.get(f"/invite/{tok}").location == "/" and signed_in(early)  # someone else opening the shared link before it's used
 for p in ("/admin", "/admin/invites", "/admin/passwords", "/admin/iphones", "/admin/devices.json", "/admin/files"):
     assert guest.get(p).status_code == 403, p
 assert guest.post("/admin/invites", data={"do": "new"}).status_code == 403 and guest.post("/admin", data={"password": "admin-pass-16"}).status_code == 403
 assert boss.get(f"/invite/{tok}").location == "/" and boss.get("/admin/invites").status_code == 200  # the admin trying it stays admin
 # the first UDID through it uses it up; a second UDID is refused, the same one again is fine
-iurl = plistlib.loads(guest.post("/enroll", data={"name": ""}).data)["PayloadContent"]["URL"]
+iurl = plistlib.loads(enroll(guest, name=""))["PayloadContent"]["URL"]
 assert "/udid/Sam%20x/g/" + tok + "/" in iurl, iurl
 ipost = lambda udid: I.app.test_client().post(path_qs(iurl), data=b"\x30\x80" + plistlib.dumps({"UDID": udid, "PRODUCT": "iPhone14,2"}) + b"\x00")
 r = ipost("GUEST-1"); assert r.status_code == 301 and r.location.endswith("/?enrolled=" + I.device_token("GUEST-1")) and iudids == ["GUEST-1"]
@@ -978,7 +987,7 @@ assert other.get(f"/invite/{tok}").status_code == 403
 # expired: refused, sessions from it out, its profile can't register
 etok = re.search(r"new=([\w-]+)$", inv(do="new").location).group(1)
 eg = I.app.test_client(); assert eg.get(f"/invite/{etok}").location == "/"
-eurl = plistlib.loads(eg.post("/enroll").data)["PayloadContent"]["URL"]
+eurl = plistlib.loads(enroll(eg))["PayloadContent"]["URL"]
 invs = I.load_invites(); invs[etok]["exp"] = time.time() - 1; I.save_json(I.INVITES, invs)
 assert not signed_in(eg) and b"expired" in I.app.test_client().get(f"/invite/{etok}").data and I.app.test_client().get(f"/invite/{etok}").status_code == 403
 assert I.app.test_client().post(path_qs(eurl), data=plistlib.dumps({"UDID": "GUEST-E"})).location == f"https://x.test/invite/{etok}" and "GUEST-E" not in iudids

@@ -2981,7 +2981,22 @@ def enroll():
     pv = session.get("pv") or ()
     guest = len(pv) > 2 and pv[0] == "g"
     name = re.sub(r"[^\w .'-]", "", invite_name() or request.form.get("name", ""))[:30] or "friend"  # a named invite's name wins over the form
-    url = signed_url(f"/udid/{name}/g/{pv[1]}/{pv[2]}" if guest else f"/udid/{name}", ttl=1800)  # F16: a guest's goes through its invite
+    tail = f"{name}/g/{pv[1]}/{pv[2]}" if guest else name  # F16: a guest's goes through its invite
+    # B2: answer with a signed GET link, not the profile itself: Safari's download manager on recent iOS fetches a
+    # download again with GET, and a POST-only URL then shows "Method Not Allowed".
+    return redirect(signed_url(f"/enroll/profile/{tail}", ttl=1800), 303)
+
+
+@app.get("/enroll")
+def enroll_get():
+    return redirect("/")
+
+
+@app.get("/enroll/profile/<path:tail>")
+def enroll_profile(tail):
+    """B2: the registration profile, behind a signed link (iOS may fetch it more than once, without a form)."""
+    check_sig()
+    url = signed_url(f"/udid/{tail}", ttl=1800)
     profile = plistlib.dumps({
         "PayloadContent": {"URL": url, "DeviceAttributes": ["UDID", "PRODUCT"]},
         "PayloadOrganization": "SideDrop", "PayloadDisplayName": "SideDrop device registration",
