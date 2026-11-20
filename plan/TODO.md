@@ -2,7 +2,6 @@
 
 ### Next
 
-- [ ] **B7** (follow-up, critical) Invite guest still lands on the password form after installing the profile (seen live on apps.hayde.in, invite for Rhys, udid bound). Cause: iOS returns to /?enrolled=<tok> after the profile install, often without the Safari session; home() calls invite_back() when not logged_in(), and invite_back() (and guest_ok/invite_link) only read request.cookies['device'], which is set later in home() and only for a logged-in load. Fix: invite_back() takes request.args.get('enrolled') or the cookie, signs the guest in when that UDID matches a used invite, and the response sets the device cookie (as home() does) so guest_ok passes on the next load. Also: a guest who opens the invite link again in a fresh cookie jar (Home Screen app) should be told to tap Install Profile again, which re-identifies the iPhone, not shown the password form. Check: test that a request to /?enrolled=<valid token for an invite's udid> with no session and no cookie ends signed in as that guest with the device cookie set; no password form. | files: app.py, test_app.py
 ### Follow-ups
 
 - [ ] **F32** (follow-up, low) Register step screenshots: capture Settings' Profile Downloaded row (under the name) and the Install Profile sheet with Install top-right, on a current-iOS iPhone, as static/reg1.jpg/reg2.jpg, and show them under the register steps and Help's Register iPhone Didn't Work like sdp1-3 (R1 changed the wording only) | files: app.py, static/**, test_app.py

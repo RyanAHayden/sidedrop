@@ -1280,6 +1280,24 @@ assert '.then(r=>r.status==403?location.reload():refreshIn(1),()=>refreshIn(1))'
 assert 'fetch("/",{credentials:"same-origin",cache:"no-store"}).then(r=>{if(!r.ok)throw"page";return r.text()},()=>{throw"net"})' in h
 assert '.catch(e=>{if(!loud)return;if(e=="net")return reloadFail();location.reload()})' in h and 'rbarT.textContent="Couldn\'t Reach SideDrop"' in h
 assert "#rbar.fail .spin{display:none}" in h and "i.oninput&&i.oninput()" in h
+# B7: iOS returns to /?enrolled=<tok> after the profile install, often with no session and no cookie: that signs in the invite's
+# guest on that one request (no password form), sets the device cookie, and the next plain load stays in
+back = I.app.test_client(); r = back.get("/?enrolled=" + I.device_token("GUEST-1"))
+assert r.status_code == 200 and b"type=password" not in r.data and b"action=/login" not in r.data and b"id=t-apps" in r.data, r.data[:300]
+assert f"device={I.device_token('GUEST-1')}" in r.headers.get("Set-Cookie", "") and b"id=welcome" in r.data
+with back.session_transaction() as s:
+    assert s["pv"][:2] == ["g", tok]
+assert signed_in(back) and back.get("/").status_code == 200
+nope = I.app.test_client(); assert b"action=/login" in nope.get("/?enrolled=" + I.device_token("GUEST-2")).data  # an iPhone no invite registered
+assert b"action=/login" in nope.get("/?enrolled=GUEST-1.forged").data and not signed_in(nope)
+# a fresh cookie jar (Home Screen app) opening the used invite is told to install the profile again, which re-identifies the
+# iPhone: that profile's GUEST-1 post lands on ?enrolled= (signed in as above), another iPhone's is refused
+r = I.app.test_client().get(f"/invite/{tok}"); assert b"Install Profile" in r.data and f'action="/invite/{tok}/profile"'.encode() in r.data and b"type=password" not in r.data
+pr = I.app.test_client().get(f"/invite/{tok}/profile"); assert pr.status_code == 303 and "/enroll/profile/Sam%20x/g/" + tok + "/" in pr.location
+again = plistlib.loads(I.app.test_client().get(path_qs(pr.location)).data)["PayloadContent"]["URL"]
+apost = lambda udid: I.app.test_client().post(path_qs(again), data=plistlib.dumps({"UDID": udid, "PRODUCT": "iPhone14,2"}))
+assert apost("GUEST-1").location.endswith("/?enrolled=" + I.device_token("GUEST-1")) and apost("GUEST-2").location == f"https://x.test/invite/{tok}"
+assert iudids == ["GUEST-1"] and I.app.test_client().get("/invite/nope/profile").location == "/invite/nope"
 # expired: refused, sessions from it out, its profile can't register
 etok = re.search(r"new=([\w-]+)$", inv(do="new").location).group(1)
 eg = I.app.test_client(); assert eg.get(f"/invite/{etok}").location == "/?go=setup"

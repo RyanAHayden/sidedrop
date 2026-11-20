@@ -152,6 +152,15 @@ def token_udid(tok):
     return udid if udid and hmac.compare_digest(tok, device_token(udid)) else None
 
 
+def device_tok():
+    """B7: this iPhone's signed device token: the ?enrolled= iOS returns to after the profile install (often without the Safari
+    session or the device cookie), else the device cookie. "" when neither is a valid token."""
+    for tok in (request.args.get("enrolled", ""), request.cookies.get("device", "")):
+        if token_udid(tok):
+            return tok
+    return ""
+
+
 def profile_udids():
     return set(embedded_plist(PROFILE.read_bytes()).get("ProvisionedDevices", [])) if PROFILE.exists() else set()
 
@@ -916,6 +925,7 @@ def home():
     if not logged_in():
         if r := invite_back():  # F31: someone who came in by an invite link never lands on a password form
             return r
+    if not logged_in():  # B7: invite_back may have signed in the guest whose iPhone ?enrolled= names; the page renders as theirs
         return page("""<form class=c method=post action=/login>
 <label>Password<input type=password name=password autofocus required></label>
 {% if err %}<p class=err>Wrong password.</p>{% endif %}<button>Sign in</button></form>
@@ -1426,7 +1436,7 @@ addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").f
         file_labels=file_labels, is_admin=is_admin(), n_iphones=manage_iphone_count() if is_admin() else 0, theme_names={n: p[1] for n, p in PALETTES.items()},
         theme_name=PALETTES[THEMES["light"][0]][1], files=shared_files(), inv_name=invite_name(), guest=is_guest(), fdl=lambda f: signed_url(f"/f/{f.name}"),
         first_run=enrolled and first_run_due(token_udid(tok)), mk=mark_csrf(token_udid(tok)) if enrolled else ""))
-    if enrolled and request.args.get("enrolled"):  # survives sign-out; re-checked against the profile on every load
+    if (enrolled or is_guest()) and request.args.get("enrolled") and token_udid(tok):  # survives sign-out; re-checked against the profile on every load (B7: and against the invite for a guest)
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
     return resp
 
@@ -2881,7 +2891,7 @@ def guest_ok(tok="", sid=""):
     if not inv:
         return False
     if inv.get("udid"):
-        return token_udid(request.cookies.get("device", "")) == inv["udid"] or bool(sid) and hmac.compare_digest(sid.encode(), inv.get("sid", "").encode())
+        return token_udid(device_tok()) == inv["udid"] or bool(sid) and hmac.compare_digest(sid.encode(), inv.get("sid", "").encode())
     return time.time() < inv.get("exp", 0)
 
 
@@ -2934,7 +2944,7 @@ def invite_link(tok):
     if logged_in() and not is_guest():
         return redirect(SETUP_LINK)
     inv = load_invites().get(tok)
-    if inv and (inv["udid"] == token_udid(request.cookies.get("device", "")) if inv.get("udid") else time.time() < inv.get("exp", 0)):
+    if inv and (inv["udid"] == token_udid(device_tok()) if inv.get("udid") else time.time() < inv.get("exp", 0)):
         if not (is_guest() and session["pv"][1:2] == [tok] and logged_in()):  # a guest session already made with it keeps its id
             session.pop("admin", None)
             session.pop("csrf", None)
@@ -2945,7 +2955,25 @@ def invite_link(tok):
         msg = INVITE_USED
     except InviteRefused as e:
         msg = str(e)
+    if msg == INVITE_USED:  # B7: maybe the iPhone it registered, in a fresh cookie jar (a Home Screen app): the profile says which iPhone
+        return page(INVITE_AGAIN, title="Invite", msg=msg, tok=tok), 403
     return page(INVITE_NO, title="Invite", msg=msg), 403
+
+
+INVITE_AGAIN = """<div class="c"><p class=err>{{ msg }}</p>
+<p>If it registered this iPhone, tap <b>Install Profile</b> and install it again. That tells SideDrop which iPhone this is and signs you back in.</p></div>
+<form class=c method=get action="/invite/{{ tok }}/profile"><button>Install Profile</button></form>"""
+
+
+@app.get("/invite/<tok>/profile")
+def invite_profile(tok):
+    """B7: the registration profile for a used one-iPhone invite, with no session: installing it posts this iPhone's UDID, which
+    udid_guest() accepts only if it is the one the invite registered, then ?enrolled= signs that guest in (invite_back)."""
+    inv = load_invites().get(tok)
+    if not (inv and inv.get("udid")):
+        return redirect(f"/invite/{quote(tok)}")
+    name = re.sub(r"[^\w .'-]", "", inv.get("name") or "")[:30] or "friend"
+    return redirect(signed_url(f"/enroll/profile/{name}/g/{tok}/again", ttl=1800), 303)
 
 
 INVITE_GONE = INVITE_NO.replace("</div>", """<p class=ftr><a href=/logout>Sign in with a password instead</a></p></div>""")
@@ -2955,13 +2983,17 @@ def invite_back():
     """F31: the invite link is a guest's access, so a guest never gets the password form. Signed out (a Home Screen app that
     lost its session, or a session from before the iPhone registered) on the iPhone a one-iPhone invite registered: its
     device cookie signs it in again as that guest. A guest session the invite no longer lets in says why instead. None: the
-    password form is right (a friend, or nobody we know)."""
-    udid = token_udid(request.cookies.get("device", ""))
+    password form is right (a friend, or nobody we know). B7: the ?enrolled= iOS opens after the profile install counts like
+    the cookie (it often comes without the session); that sign-in returns None and home() goes on to render the guest's page
+    and set the device cookie."""
+    udid = token_udid(device_tok())
     tok = next((t for t, inv in load_invites().items() if udid and inv.get("udid") == udid), None)
     if tok:
         session.pop("admin", None)
         session.pop("csrf", None)
         session.permanent, session["ok"], session["pv"] = True, True, ["g", tok, secrets.token_urlsafe(12)]
+        if token_udid(request.args.get("enrolled", "")):
+            return None
         return redirect(request.full_path.rstrip("?"))
     pv = session.get("pv") or ()
     if is_guest() and len(pv) > 2:
