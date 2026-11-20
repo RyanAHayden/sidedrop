@@ -754,6 +754,12 @@ a,img{-webkit-user-drag:none}  /* iFizBox's B24: holding a link row or an image 
 .alert .abtns button,.alert .abtns .ok{background-origin:border-box!important}  /* the background shorthands reset it; without it the gradient tiles into the see-through border and its bright top shows as a line at the bottom */
 .alert .abtns button.is-pressed{background:linear-gradient(#6d7da3,#3c4e7d 49%,#22325e 51%,#2f3f6c)}
 .sw.is-pressed .k{background:linear-gradient(#bcbcbc,#e6e6e6)} .dark .sw.is-pressed .k{background:var(--swheld)}
+/* B5: plain blue action buttons outside a form (Copy Link) hold like the form ones (PurchaseButtonBluePressed). :where keeps it at one class, so
+   the controls with their own looks (segments, alerts, bars, tiles, GET) still win; dark themes keep the blue, as iFizBox's do */
+:where(button:not(.grey,.act,.gbtn,.get,.tile,.bar,.ok,.mkc,.confin)).is-pressed{border-color:#1f3b67;background:linear-gradient(#5c7cb3,#2c569f 50%,#1e4997 51%,#2c56a4);box-shadow:none}
+/* B5: dark grey buttons (Share, Make New Link): .dark button.grey below outranked the light pressed look, so a held one never changed;
+   iFizBox's dark button press, --dk-btn-pressed, which is each dark palette's --barpress */
+.dark a.b.grey.is-pressed,.dark label.b.grey.is-pressed,.dark button.grey.is-pressed{color:var(--text);border-color:var(--barpe);background:var(--barpress);background-origin:border-box;box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
 .sw{touch-action:none} .sw.drag i:before,.sw.drag i:after,.sw.drag .k{transition:none}  /* while dragging, everything follows --x with the finger */
 #sb.on{pointer-events:auto}
 *{-webkit-tap-highlight-color:transparent}  /* no grey tap flash; controls have their own pressed looks */
@@ -846,6 +852,9 @@ addEventListener("touchstart",e=>{unpress(1);let el=e.target.closest&&e.target.c
 addEventListener("touchmove",e=>{let t=e.touches[0];if(pd&&!pd.contains(document.elementFromPoint(t.clientX,t.clientY)))unpress(1)},{passive:true});
 addEventListener("touchend",()=>unpress(),{passive:true});addEventListener("touchcancel",()=>unpress(1),{passive:true});
 addEventListener("scroll",()=>unpress(1),{passive:true,capture:true});  // scroll doesn't bubble: capture catches every scroller
+/* B5: a mouse held on a control in a desktop browser shows the same look (what :active would), off when it lifts or leaves the control */
+addEventListener("pointerdown",e=>{if(e.pointerType!=="mouse"||e.button)return;unpress(1);let el=e.target.closest&&e.target.closest(PRESS);if(!el||el.disabled)return;pd=el;pdAt=performance.now();el.classList.add("is-pressed")});
+addEventListener("pointerup",e=>{if(e.pointerType==="mouse")unpress()});addEventListener("pointermove",e=>{if(e.pointerType==="mouse"&&pd&&!pd.contains(e.target))unpress(1)});
 addEventListener("DOMContentLoaded",()=>{
  /* haptic tick: Safari has no vibration API, but toggling a hidden <input switch> plays the system switch haptic (iOS 18+); elsewhere navigator.vibrate. Only from a touch handler. */
  window.hap=()=>{if(navigator.vibrate){navigator.vibrate(10);return}let l=document.createElement("label"),i=document.createElement("input");i.type="checkbox";i.setAttribute("switch","");l.style.cssText="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";l.append(i);document.body.append(l);l.click();l.remove()};

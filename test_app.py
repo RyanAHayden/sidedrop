@@ -295,6 +295,11 @@ assert ".get.go{min-width:76px" in html and ".get:before{" in html and "backgrou
 # B3: in dark themes every armed INSTALL keeps white text and the green border: .dark .get.go (0,3,0) outranks .dark .get, which sits after .get.go
 assert ".dark .get.go{color:#fff;border-color:#2f7a17}" in html and ".dark .get.go.is-pressed{border-color:#255e12}" in html
 assert html.index(".dark .get{") < html.index(".dark .get.go.is-pressed{"), "the pressed border comes after the ifzr rule and .dark .get"
+# B5: plain blue buttons outside forms (Copy Link) take the blue pressed look at one class of weight; dark grey buttons hold with --barpress
+# (iFizBox's --dk-btn-pressed), a rule that outranks .dark button.grey; a held mouse presses too, not through :active
+assert ":where(button:not(.grey,.act,.gbtn,.get,.tile,.bar,.ok,.mkc,.confin)).is-pressed{border-color:#1f3b67;background:linear-gradient(#5c7cb3," in html
+assert ".dark button.grey.is-pressed{color:var(--text);border-color:var(--barpe);background:var(--barpress);" in html and ".dark button.grey{" in html
+assert 'addEventListener("pointerdown",e=>{if(e.pointerType!=="mouse"||e.button)return;' in html and 'addEventListener("pointerup",e=>{if(e.pointerType==="mouse")unpress()})' in html
 assert 'addEventListener("hashchange",()=>{if(ifzAuto&&cur=="ifizbox"){ifzAuto=0;ifzRun()}});' in html, "the page runs the install once, off the flag"
 assert 'function ifzGo(c){ifzAuto=1;go("ifizbox");ifzAuto=0;' in html, "the flag is set only for the card's tap"
 c.post("/installed", data={"name": "com.ryha.ifizbox"})
