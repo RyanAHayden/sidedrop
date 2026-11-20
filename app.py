@@ -43,7 +43,7 @@ PASSWORD = os.environ.get("PASSWORD", "")  # unset: the first sign-in uses DEFAU
 PUBLIC_URL = os.environ["PUBLIC_URL"].rstrip("/")  # must be https with a real cert, iOS refuses otherwise
 SECRET = os.environ.get("SECRET_KEY", "").encode() or data_secret()  # unset: made once and kept in the data folder
 P12_PASSWORD = os.environ.get("P12_PASSWORD", "")
-BUNDLE_ID = os.environ.get("BUNDLE_ID", "")  # wildcard like com.you.*; apps outside it get re-IDed to fit
+BUNDLE_ID = os.environ.get("BUNDLE_ID", "")  # explicit App ID with Push (apps keep their IDs); a wildcard com.you.* re-IDs apps to fit
 PROFILE_NAME = os.environ.get("PROFILE_NAME", "sidedrop adhoc")
 LINK_TTL = int(os.environ.get("LINK_TTL", 7 * 86400))
 # AltStore sources to mirror into apps/: one per line, a URL then optionally the bundle IDs to take (else all its apps);
@@ -1919,7 +1919,7 @@ def setup():
         elif need("ASC_KEY_ID") or need("ASC_ISSUER_ID"):
             err = "Fill in the API key's Key ID and Issuer ID."
         elif need("BUNDLE_ID") or "BUNDLE_ID" not in ENV_SET and not re.fullmatch(r"[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(\.\*)?", BUNDLE_ID):
-            err = "Fill in the App ID (BUNDLE_ID), such as com.you.* or com.you.sideload."
+            err = "Fill in the App ID (BUNDLE_ID), such as com.you.sideload (or a wildcard, com.you.*, which gets no notifications)."
         elif not P12.exists() and (got := api_signing(s, f.get("revoke", "")))[0]:  # no cert.p12 uploaded: make one, and the App ID
             err, certs = got
         else:
@@ -2781,7 +2781,7 @@ def admin_signing():
     f, s = request.form, load_json(SETUP)
     bid = f.get("bundle_id", "").strip()
     if bid and "BUNDLE_ID" not in ENV_SET and not re.fullmatch(r"[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(\.\*)?", bid):
-        return signing_page("That App ID doesn't look right: com.you.* or com.you.sideload.")
+        return signing_page("That App ID doesn't look right: com.you.sideload, or a wildcard such as com.you.*.")
     old_bid, key_at = BUNDLE_ID, ASC_KEY.stat().st_mtime if ASC_KEY.exists() else None
     uploads = request.files.getlist("files")
     manual = bool(f.get("p12_password")) or any((u.filename or "").lower().endswith((".p12", ".pfx")) for u in uploads)

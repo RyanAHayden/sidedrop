@@ -24,7 +24,7 @@ That's all you make by hand. When you're done you have:
 | --- | --- |
 | `AuthKey_<Key ID>.p8` | the App Store Connect API key; SideDrop uses it to make the certificate and App ID and to register iPhones |
 | Issuer ID | shown above the list of API keys |
-| App ID | the one you want, e.g. `com.yourname.sideload` (SideDrop makes it with Push) or `com.yourname.*` |
+| App ID | an explicit one, e.g. `com.yourname.sideload`: SideDrop makes it with Push and every other capability Apple's API allows, and apps keep their own bundle IDs and notifications. (A wildcard, `com.yourname.*`, renames apps and gets no notifications.) |
 
 Put the key somewhere your iPhone can reach it, such as iCloud Drive, ideally in one `.zip` with a text file that
 holds the Issuer ID:
@@ -109,7 +109,7 @@ Do this right after deploying. Until it's done, anyone who finds the site can se
 3. Tap **Choose API Key** and pick `apikey.zip` (or the `.p8` alone). The Key ID is read from the `.p8`'s name and
    the Issuer ID from the text file. Check them, or type them in.
 4. Fill in the **App ID** from step 1, e.g. `com.yourname.sideload`.
-5. Tap **Save**. SideDrop makes the App ID (with Push) if your account lacks it, has Apple make an Apple
+5. Tap **Save**. SideDrop makes the App ID (with Push and the other capabilities) if your account lacks it, has Apple make an Apple
    Distribution certificate, and saves it as `data/cert.p12` with a random password. The default password stops
    working, and you're signed in.
 

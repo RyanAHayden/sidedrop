@@ -3,7 +3,9 @@
 How to set up a developer account so SideDrop signs apps the way paid signing services do: each app keeps its own
 bundle ID (so it replaces the original, not a copy beside it) and gets its own notifications. iOS checks the
 entitlements' `application-identifier` against the profile, but never the app's Info.plist bundle ID, and registers
-the app for push under the Info.plist one. iFizBox confirmed it on a stock iPhone 15 Pro.
+the app for push under the Info.plist one. Apple delivers a notification to that bundle ID whichever team signed the
+app, so the app's own servers reach it as long as the profile has `aps-environment`. iFizBox confirmed it on a stock
+iPhone 15 Pro.
 
 SideDrop needs three things from the account: an App Store Connect API key (`asc.p8`), an Apple Distribution
 certificate (`cert.p12` and its password) and an App ID. You make only the API key: SideDrop makes the certificate and
@@ -116,8 +118,7 @@ so iOS sees them as different apps. Friends install them again from SideDrop and
 doesn't carry over). If the App Store copy of an app is on the phone, delete it first: iOS won't put a signed app
 over it.
 
-An app whose ID already fitted the wildcard (`com.yourname.app`, iFizBox when the wildcard is `com.ryha.*`) keeps
-the same ID, but its `application-identifier` changes from `TEAM.com.yourname.app` to `TEAM.<App ID>`. iOS may refuse
+An app whose ID already fitted the wildcard (`com.yourname.app` under `com.yourname.*`) keeps the same ID, but its `application-identifier` changes from `TEAM.com.yourname.app` to `TEAM.<App ID>`. iOS may refuse
 to install that over the old copy; if it does, delete the old copy first.
 
 ## Manual setup

@@ -140,7 +140,10 @@ about to expire or can't sign. The details are in [docs/configuration.md](docs/c
 `.env` needs only `PUBLIC_URL`. The setup screen sets the rest, and **Manage → Signing** changes it later. Anything
 you do put in `.env` (passwords, API key IDs, `BUNDLE_ID`) wins over both.
 
-Use an explicit App ID such as `com.you.sideload`: apps keep their own bundle IDs and push works.
+Use an explicit App ID such as `com.you.sideload`. SideDrop gives it Push and every other capability Apple's API
+allows, and signs each app under it while the app keeps its own bundle ID: it replaces the original app rather than
+sitting beside it, and the app's own notifications arrive (Apple delivers them to the bundle ID, whichever team
+signed). A wildcard (`com.you.*`) still works, but it renames apps and gets no notifications.
 
 <p align="center"><img src="docs/img/crop-signing.png" alt="Signing's Certificate group: type, expiry, team and App ID" width="239"></p>
 
@@ -168,6 +171,7 @@ Editing the lists on GitHub, `deploy.sh`, and having CI sign new releases right 
   exempt). The page explains how.
 - **Speed** is capped by your server's upload bandwidth. Cloudflare's free plan won't cache files this large.
 - **Your certificate is shared**: anyone who installs iFizBox from your site can extract it.
+- **One App ID for every app**: the apps share a keychain group, so one app could read another's saved sign-ins.
 
 The name people see is SideDrop. The lowercase `sidedrop` stays wherever a deployment or an installed iPhone depends
 on it: the repo, the Docker image and TrueNAS app, the `SIDEDROP_*` variables, the profile identifier
