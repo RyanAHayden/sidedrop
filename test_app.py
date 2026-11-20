@@ -97,7 +97,7 @@ assert b"Set up this iPhone" in html and b"/static/sdp1.jpg" in html and b'href=
 assert b"just under your name" in html and b"<b>Install</b> in the top-right corner" in html and b"VPN &amp; Device Management" in html  # R1: where each tap is
 assert b"Welcome to SideDrop" in html and b"<title>SideDrop</title>" in html and b"<h1 id=navT>SideDrop</h1>" in html and b"Ryan Hayden (Fizlo)</a>" in html and b"go('ifizbox')" in html and b"id=setupT" in html and b"<div id=setup hidden>" in html
 # F26: the About alert, its nav button and its tiles are gone; Help is a pushed page
-assert b"About" not in html and b"id=about" not in html and b"aboutT" not in html and b'<a class=tile href=/help onclick="return helpOpen()">' in html
+assert b"About" not in html and b"id=about" not in html and b"aboutT" not in html and b'<a class=tile href=/help onclick="return helpOpen(null,this)">' in html
 # F17: the SideDrop name and what it's for, in the head, the header, the register step and Help; no lowercase name a person sees
 assert html.count(b"Share an Apple developer account with friends and sideload apps.") == 2 and b"og:site_name content=SideDrop" in html
 assert b"with a friend's Apple developer account.</p>" in html
@@ -115,6 +115,13 @@ html = c.get(r.location.replace("https://x.test", ""), base_url="https://localho
 assert b"Every app on the Apps tab can install on this iPhone." in html and b"href=/admin" not in html and b"/static/sdp1.jpg" not in html  # Manage is the admin's only; F26: SDP only in Help
 assert b"id=sManage" not in html and b"<div>Manage</div>" not in html  # F26: the Manage row is the admin's only
 assert b'class="tile reg"' in html and b"id=setupT" not in html and b"id=setup " not in html  # registered: the green tile
+# B6: the Registered tile pushes This iPhone over Apps (no jump to Settings); Help's tile pushes /help over the tab showing
+assert b'<a class="tile reg" href=/this-iphone data-push>' in html and b"go('settings')" not in html and b'go("settings")' not in html
+assert b"function helpOpen(id,from){" in html and b"function tabTop(t){" in html and b"let under=tabTop();" in html
+r = c.get("/this-iphone", base_url="https://localhost"); tp = r.data.decode()
+assert r.status_code == 200 and "<h1>This iPhone</h1>" in tp and '<a class="bar back" href="/#apps"' in tp and ">SideDrop</a>" in tp
+assert "<div>Status</div><span class=val>Registered</span>" in tp and "<div>Model</div><span class=val>" in tp and "id=rDev" in tp
+assert A.app.test_client().get("/this-iphone").status_code == 302  # signed out: the sign-in page
 assert b"#changes" not in html and b"'changes'" not in html and b"t-changes" not in html and b"/sign" not in html and b"Sign IPA" not in html
 c.get("/logout", base_url="https://localhost"); c.post("/login", data={"password": "hunter2-but-longer"}, base_url="https://localhost")
 assert b"Every app on the Apps tab can install on this iPhone." in c.get("/", base_url="https://localhost").data
@@ -394,7 +401,7 @@ assert f"<span>Turn on Developer Mode</span></summary><p>{A.DEV_WHY}</p>" in hp 
 assert "/static/dev3.jpg" in hp[hp.index("<details id=dev>"):] and "class=shot" in hp and ".shot{" in hp  # its own copy of the steps' look
 assert c.get("/home-screen", base_url="https://localhost").status_code == 200 and "<h1>Add to Home Screen</h1>" in c.get("/home-screen", base_url="https://localhost").data.decode()
 assert A.app.test_client().get("/help").status_code == 302 and A.app.test_client().get("/home-screen").status_code == 302  # signed out: the sign-in page
-assert "function helpOpen(id)" in html and 'function devDone(show){devAsk.hidden=true;if(show)helpOpen("dev")' in html  # Show Me opens Help at Developer Mode
+assert "function helpOpen(id,from)" in html and 'function devDone(show){devAsk.hidden=true;if(show)helpOpen("dev")' in html  # Show Me opens Help at Developer Mode
 assert A.ROW_ICONS["theme"][0] == "#4650b4"  # rowicons.js ROW_ICONS.theme: indigo "contrast"
 r = c.get("/theme", base_url="https://localhost"); tp = r.data.decode()
 assert r.status_code == 200 and "<h1>Theme</h1>" in tp and '<a class="bar back" href="/#settings"' in tp and ">Settings</a>" in tp

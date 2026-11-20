@@ -1149,8 +1149,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class=hx><div class=hp>
 <a class=tile href="https://github.com/RyanAHayden"><span class=tic style="background:#333"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/></svg></span>GitHub</a>
 <a class=tile href=#ifizbox onclick="go('ifizbox');return false"><span class=tic style="background:#1a82fb"><svg viewBox="0 0 30 30" fill="#fff"><path d="M15 3l11 5.5-11 5.5L4 8.5zM4 10.7l10 5v11.1l-10-5zM16 15.7l10-5v11.1l-10 5z"/></svg></span>iFizBox</a></div>
-<div class=hw><a class=tile href=/help onclick="return helpOpen()"><span class=tic style="background:#8a929c"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M8.8 9a3.3 3.3 0 1 1 4.6 3c-.9.4-1.4 1.1-1.4 2.2"/><path d="M12 18.3v.2"/></svg></span>Help</a></div>
-{% if enrolled %}<a class="tile reg" href=#settings onclick="go('settings');return false"><span class=tic style="background:#34a84a"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.5 4.5 8.5-10"/></svg></span>Registered{% if stats and stats[1] %}<span class=hdt>until {{ stats[1].strftime('%b %-d, %Y') }}</span>{% endif %}</a>
+<div class=hw><a class=tile href=/help onclick="return helpOpen(null,this)"><span class=tic style="background:#8a929c"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M8.8 9a3.3 3.3 0 1 1 4.6 3c-.9.4-1.4 1.1-1.4 2.2"/><path d="M12 18.3v.2"/></svg></span>Help</a></div>
+{% if enrolled %}<a class="tile reg" href=/this-iphone data-push><span class=tic style="background:#34a84a"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.5 4.5 8.5-10"/></svg></span>Registered{% if stats and stats[1] %}<span class=hdt>until {{ stats[1].strftime('%b %-d, %Y') }}</span>{% endif %}</a>
 {% else %}<button type=button class="tile todo" id=setupT aria-expanded={{ 'true' if open_setup else 'false' }} aria-controls=setup onclick="setupOpen(setup.hidden)"><span class=tic style="background:#f08a12"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#f08a12"/></svg></span><div>Set up this iPhone<small>2 steps, then every app unlocks</small></div></button>{% endif %}</div>
 <p class=ftr id=tagline>Sideload apps on your iPhone with a friend's Apple developer account.</p>
 {% if not enrolled %}<div id=setup{% if not open_setup %} hidden{% endif %}>
@@ -1254,7 +1254,9 @@ function show(){let t=location.hash.slice(1);if(t=="more")t="settings";/* more: 
  document.querySelectorAll(".tabs a").forEach(a=>a.getAttribute("href")=="#"+t?a.setAttribute("aria-current","page"):a.removeAttribute("aria-current"));
  navT.textContent=document.getElementById("t-"+t).dataset.title;if(cur!=t)scr.scrollTo(0,pos[t]||0);cur=t;LS.forEach(l=>l.hidden=l.dataset.tab!=t);navR()}
 document.querySelectorAll(".tabs a").forEach(a=>a.addEventListener("click",e=>{e.preventDefault();let t=a.getAttribute("href").slice(1);
- if(t!=cur)return go(t);if(L)history.back();else scr.scrollTo({top:0,behavior:"smooth"})}));
+ if(t!=cur)return go(t);let tp=tabTop();if(tp)history.go(LS.indexOf(tp)-LS.length);else scr.scrollTo({top:0,behavior:"smooth"})}));  // B6: back to this tab's root (another tab's pages above it go too)
+/* B6: each tab can have its own pushed pages (Apps' Help and This iPhone, Settings' rows); the one showing is the top one of the open tab */
+function tabTop(t){t=t||cur;for(let i=LS.length-1;i>=0;i--)if(LS[i].dataset.tab==t)return LS[i];return null}
 /* a pushed page: fetched and drawn over the tab (its own nav with Back), one history entry, so Back, iOS's edge swipe and forward all work.
    The server still serves each page whole (a reload, or no JS, gets the old full-page screen); anything unexpected falls back to that. */
 function parsePage(r,h){if(!r.ok||new URL(r.url).pathname=="/")return null;let d=new DOMParser().parseFromString(h,"text/html"),s=d.querySelector("section.page"),n=d.querySelector(".nav h1");return s&&n?{title:n.textContent,body:s.innerHTML,url:r.url}:null}
@@ -1267,7 +1269,7 @@ function slide(l,from,to,done,under){  /* p: 0 the tab (or the pushed page under
  let an=[l.animate([{transform:`translate3d(${(1-from)*100}%,0,0)`},{transform:`translate3d(${(1-to)*100}%,0,0)`}],o),sh.animate([{opacity:.1*from},{opacity:.1*to}],o),
   ...base.map(b=>b.animate([{transform:`translate3d(${-30*from}%,0,0)`},{transform:`translate3d(${-30*to}%,0,0)`}],o))];
  an[0].finished.then(()=>{an.forEach(a=>a.cancel());sh.remove();done&&done()})}
-function open(p,from,anim,id){let under=L;
+function open(p,from,anim,id){let under=tabTop();
  L=document.createElement("div");L.className="layer";L.dataset.tab=cur;L.pid=id;LS.push(L);
  L.innerHTML='<header class=nav><button type=button class="bar back"></button><h1></h1><span></span></header><div class=lscroll><section class=page></section></div>';
  L.querySelector(".back").textContent=(under?under.querySelector("h1"):navT).textContent;L.querySelector(".back").onclick=()=>history.back();L.sel=from;fill(p);document.body.append(L);
@@ -1277,18 +1279,18 @@ function close(anim){let l=LS.pop();L=LS[LS.length-1]||null;if(!l)return;if(!ani
  let el=l.sel,g=null;if(el&&el.offsetParent){g=el.cloneNode(true);g.removeAttribute("href");g.classList.add("sel","ghost");
   Object.assign(g.style,{left:el.offsetLeft+"px",top:el.offsetTop+"px",width:el.offsetWidth+"px",height:el.offsetHeight+"px"});el.parentElement.style.position="relative";el.parentElement.append(g);
   g.animate([{opacity:1},{opacity:0}],{duration:350,easing:EASE,fill:"forwards"})}
- slide(l,1,0,()=>{l.remove();g&&g.remove()},L)}
+ slide(l,1,0,()=>{l.remove();g&&g.remove()},tabTop(l.dataset.tab))}
 function push(url,init,from,nest){return fetchPage(url,init).then(p=>{if(!p)return false;let id=Date.now();cache[id]=p;
  if(L&&!nest){fill(p);L.pid=id;history.replaceState({push:id},"");return true}  // a form on the pushed page: its answer replaces it (the server redirects back to the same page)
  history.pushState({push:id},"");open(p,from,true,id);return true})}  // nest: a row on a pushed page pushes another over it (Manage → iPhones → an iPhone)
 if(history.state&&history.state.push)history.replaceState(null,"");  // a reload forgets pushed pages
 addEventListener("popstate",e=>{let id=e.state&&e.state.push,anim=!e.hasUAVisualTransition,i=id?LS.findIndex(l=>l.pid==id):-1;  // iOS's edge swipe animates it already
  if(id&&i<0){if(cache[id])open(cache[id],null,anim,id)}else for(let n=LS.length-i-1;n>0;n--)close(anim&&n==1)});  // back pops down to that page (the last one slides); forward opens it again
-document.addEventListener("click",e=>{let a=e.target.closest("a[data-push]");if(!a||e.defaultPrevented)return;e.preventDefault();if(L&&!L.contains(a)||a.classList.contains("sel"))return;
+document.addEventListener("click",e=>{let a=e.target.closest("a[data-push]");if(!a||e.defaultPrevented)return;e.preventDefault();let tp=tabTop();if(tp&&!tp.contains(a)||a.classList.contains("sel"))return;
  a.classList.add("sel");push(a.href,{},a,!!L).then(ok=>{if(!ok)location.href=a.href})});
 document.querySelectorAll("form button").forEach(b=>b.dataset.t=b.textContent);
 /* a form with no action posts to its own page: on a pushed page that's the page's URL, not / */
-document.addEventListener("submit",e=>{let f=e.target;if(e.defaultPrevented||!(f.matches("[data-push]")||f.closest(".layer")))return;e.preventDefault();
+document.addEventListener("submit",e=>{let f=e.target;if(e.defaultPrevented||!(f.matches("[data-push]")||f.closest(".layer"))||f.closest(".layer")&&f.closest(".layer")!=L)return;e.preventDefault();
  push(L&&L.contains(f)?new URL(f.getAttribute("action")||"",L.url).href:f.action,{method:"POST",body:new FormData(f)}).then(ok=>{if(!ok)return f.submit();f.querySelectorAll("button[data-t]").forEach(b=>b.textContent=b.dataset.t)})});
 /* iFizBox's install, as on ifizbox.com: iOS's prompt straight from the tap, then a log that follows iOS's own requests for the manifest and
    the app (the server sees them, /install/<token>). The page completes once iOS starts the download: the rest happens on the Home Screen. */
@@ -1353,12 +1355,13 @@ function pushSet(on){if(!pushOK){pushSw.checked=false;pushShow();return}  // Saf
 /* first INSTALL on this phone: warn that opening the app will ask for Developer Mode; then the notifications ask */
 function devMaybe(){let a=null;try{a=localStorage.devTold}catch(e){}if(a||!window.devAsk)return pushMaybe();try{localStorage.devTold=1}catch(e){}devAsk.hidden=false}
 function devDone(show){devAsk.hidden=true;if(show)helpOpen("dev");else setTimeout(pushMaybe,400)}
-/* F26: Help is a page pushed on Settings (/help); helpOpen(id) goes there from anywhere and opens that item (Developer Mode from the alert) */
-function helpOpen(id){go("settings");let a=document.getElementById("helpRow");
- if(L&&L.url&&new URL(L.url).pathname=="/help")return helpItem(id),false;
+/* F26: Help is a page (/help); helpOpen(id) opens that item (Developer Mode from the alert). B6: pushed over the tab showing, as iFizBox's
+   Home pushes its Help (Back returns to that tab), not by switching to Settings first; from: the tile or row tapped */
+function helpOpen(id,from){let a=from||null,tp=tabTop();if(a){if(a.classList.contains("sel"))return false;a.classList.add("sel")}
+ if(tp&&tp.url&&new URL(tp.url).pathname=="/help")return helpItem(id),false;
  push("/help",{},a,!!L).then(ok=>{if(!ok)location.href="/help"+(id?"#"+id:"");else helpItem(id)});return false}
-function helpItem(id){let d=id&&L&&L.querySelector("details#"+id);if(!d)return;d.open=true;
- setTimeout(()=>{let s=L.querySelector(".lscroll");s.scrollTo({top:s.scrollTop+d.getBoundingClientRect().top-56,behavior:"smooth"})},400)}
+function helpItem(id){let t=tabTop(),d=id&&t&&t.querySelector("details#"+id);if(!d)return;d.open=true;
+ setTimeout(()=>{let s=t.querySelector(".lscroll");s.scrollTo({top:s.scrollTop+d.getBoundingClientRect().top-56,behavior:"smooth"})},400)}
 function pushMaybe(){let a=null;try{a=localStorage.pushAsked}catch(e){}if(a||!window.pushAsk||(pushOK&&Notification.permission!="default"))return;
  try{localStorage.pushAsked=1}catch(e){}pushShow()}
 function pushShow(){pushWeb.hidden=pushOK;pushOk.textContent=pushOK?"Allow":"OK";let bs=pushOk.parentNode;bs.style.gridTemplateColumns=pushOK?"":"1fr";bs.firstElementChild.style.display=pushOK?"":"none";
@@ -2388,6 +2391,28 @@ def help_page():
 @app.get("/home-screen")
 def home_screen_page():
     return page(HELP_CSS + HOME_SCREEN, back=MORE, title="Add to Home Screen") if logged_in() else redirect("/")
+
+
+# B6: the Apps tab's Registered tile pushes this over Apps (as iFizBox's Home pushes its pages), instead of jumping to the Settings tab.
+# The rows are Settings' status group (Status, Apps Work Until) plus the name and model this iPhone registered with.
+THIS_IPHONE = """<div class="g grp sg" id=rThis>
+{% if enrolled %}<div class="row irow">{{ row_icon('status') }}<div>Status</div><span class=val>Registered</span></div>
+{% else %}<div class="row irow">{{ row_icon('device') }}<div>Status</div><span class=val>Not registered</span></div>{% endif %}
+{% if enrolled and stats and stats[1] %}<div class="row irow">{{ row_icon('calendar') }}<div>Apps Work Until</div><span class=val>{{ stats[1].strftime('%b %-d, %Y') }}</span></div>{% endif %}</div>
+{% if enrolled %}<div class="g grp sg" id=rDev>{% if name %}<div class="row irow">{{ row_icon('device') }}<div>Name</div><span class=val>{{ name }}</span></div>{% endif %}
+<div class="row irow">{{ row_icon('device') }}<div>Model</div><span class=val>{{ model }}</span></div></div>{% endif %}
+<p class=ftr>{% if enrolled %}Every app on the Apps tab can install on this iPhone.{% else %}Register this iPhone on the Apps tab, then every app there can install on it.{% endif %}</p>"""
+
+
+@app.get("/this-iphone")
+def this_iphone_page():
+    if not logged_in():
+        return redirect("/")
+    udid = token_udid(request.cookies.get("device", ""))
+    enrolled = bool(udid) and udid in profile_udids()
+    name = next(((d.get("attributes") or {}).get("name", "") for d in cached_devices()[0] or [] if (d.get("attributes") or {}).get("udid") == udid), "") if enrolled else ""
+    return page(THIS_IPHONE, back=("SideDrop", "/#apps"), title="This iPhone", row_icon=row_icon, enrolled=enrolled,
+                name=name, model=device_model(udid) if enrolled else "")
 
 
 def manage_iphone_count():
