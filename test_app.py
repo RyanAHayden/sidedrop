@@ -305,13 +305,75 @@ if shutil.which("node"):
         r = subprocess.Popen(["node", "--check", str(tmp / "inline.js")], stderr=subprocess.PIPE, text=True)  # subprocess.run is stubbed above
         assert r.wait() == 0, r.stderr.read()
 
-# F18 themes: the nine palettes in iFizBox's order, each a CSS block on the page with every token its tone's default sets, and a row in Settings > Display
+# F18 themes: the nine palettes in iFizBox's order, each a CSS block on the page with every token its tone's default sets, and (F20) a row
+# in its tone's Settings > Theme checklist
 assert A.THEMES == {"light": ["classic", "sepia", "solarized"], "dark": ["oled", "gunmetal", "midnight", "linen", "nord", "dracula"]}
 toks = lambda css: set(re.findall(r"--([a-z]+):", css))
+theme_lists = {t: c.get(f"/theme/{t}", base_url="https://localhost").data.decode() for t in ("light", "dark")}
 for n, (tone, label, color, css) in A.PALETTES.items():
-    assert f"html[data-theme={tone}][data-palette={n}]{{" in html and f"data-v={n} " in html and f"<div>{label}</div>" in html, n
+    assert f"html[data-theme={tone}][data-palette={n}]{{" in html and f"data-v={n} " in theme_lists[tone] and f"<div>{label}</div>" in theme_lists[tone], n
+    assert f"data-v={n} " not in theme_lists["dark" if tone == "light" else "light"], n
     assert toks(A.PALETTES[A.THEMES[tone][0]][3]) <= toks(css), (n, toks(A.PALETTES[A.THEMES[tone][0]][3]) - toks(css))
-assert "darkSw" not in html and "data-k=mode" in html and "data-k=lightTheme" in html and "data-k=darkTheme" in html
+    assert f"html[data-palette={n}]{{--seg:" in html and n in A.SWATCH, n  # F20: its segmented control's colours and its swatch
+assert "darkSw" not in html and "data-tk=" not in html and "Display" not in html  # F20: the theme lists left the Settings tab for Settings > Theme
+
+# F20 Settings > Theme, as iFizBox's: a Theme row (its tile) in Settings pushes it; Mode is a segmented control, Themes' Light and Dark rows
+# push their checklists (the tone's default ticked until themeMarks reads the stored choice) with a preview under them
+settings_tab = html[html.index("id=t-settings"):]; settings_tab = settings_tab[:settings_tab.index("</section>")]
+ico = lambda name: str(A.row_icon(name))  # str: Markup + str would escape the str
+assert '<a class="row mrow" href=/theme data-push>' + ico("theme") + "<div>Theme</div></a>" in settings_tab
+assert ico("notifications") + "<div>Update Alerts</div>" in settings_tab and ico("help") + "Help" in settings_tab
+for name in ("status", "slots", "devMode", "homeScreen"):  # (calendar: Apps work until, only with the profile's expiry, not in this fake one)
+    assert ico(name) in settings_tab, name
+order = [settings_tab.index(s) for s in ("<b>Status</b>", ">iFizBox<", ">Theme<", ">Update Alerts<", ">About<", "id=help", ">Sign out<")]
+assert order == sorted(order), order  # this iPhone first, then Theme and Notifications, then Help and About, Sign out last
+assert A.ROW_ICONS["theme"][0] == "#4650b4"  # rowicons.js ROW_ICONS.theme: indigo "contrast"
+r = c.get("/theme", base_url="https://localhost"); tp = r.data.decode()
+assert r.status_code == 200 and "<h1>Theme</h1>" in tp and '<a class="bar back" href="/#settings"' in tp and ">Settings</a>" in tp
+seg = re.search(r'<div class="seg" role=radiogroup aria-label="Mode" data-tk=mode>(.*?)</div>', tp).group(1)
+assert re.findall(r"data-v=(\w+) aria-checked=(\w+)[^>]*>(\w+)<", seg) == [("auto", "true", "Automatic"), ("light", "false", "Light"), ("dark", "false", "Dark")]
+assert "onclick=\"themeSet('mode',this.dataset.v)\"" in seg and "<h3 class=hdr>Mode</h3>" in tp and "<h3 class=hdr>Themes</h3>" in tp
+assert '<a class="row mrow" href=/theme/light data-push><div>Light</div><span class=val data-tv=lightTheme>Classic</span></a>' in tp
+assert '<a class="row mrow" href=/theme/dark data-push><div>Dark</div><span class=val data-tv=darkTheme>OLED Black</span></a>' in tp
+assert "Automatic switches between your Light and Dark themes" in tp and 'themePreview("' not in tp
+assert c.get("/display", base_url="https://localhost").data.decode() == tp  # Display's old address still opens Theme
+for tone, first in (("light", "classic"), ("dark", "oled")):
+    tl = theme_lists[tone]
+    assert f"<h1>{tone.title()}</h1>" in tl and '<a class="bar back" href="/theme"' in tl and f'themePreview("{tone}");' in tl
+    ticks = re.findall(r'class="row ck" role=radio data-v=(\w+) aria-checked=(\w+)', tl)
+    assert ticks == [(n, str(n == first).lower()) for n in A.THEMES[tone]], ticks
+    assert f"data-tk={tone}Theme" in tl and A.THEME_FOOTERS[tone] in tl and "<div class=tpv aria-hidden=true inert>" in tl
+assert c.get("/theme/blue", base_url="https://localhost").status_code == 404
+assert A.app.test_client().get("/theme").status_code == 302 and A.app.test_client().get("/theme/dark").status_code == 302  # signed out: home
+if shutil.which("node"):  # the Theme pages' scripts: they parse, and in node (boot script first, fake storage and <html>) preview and pick
+    import json
+    for page_html in (tp, *theme_lists.values()):
+        for js in re.findall(r"<script>(.*?)</script>", page_html, re.S):
+            (tmp / "inline.js").write_text(js)
+            r = subprocess.Popen(["node", "--check", str(tmp / "inline.js")], stderr=subprocess.PIPE, text=True)
+            assert r.wait() == 0, r.stderr.read()
+    (tmp / "theme-run.js").write_text("""const vm=require("vm"),fs=require("fs"),[boot,pg]=[2,3].map(i=>fs.readFileSync(process.argv[i],"utf8"));
+const out=JSON.parse(process.argv[4]).map(([store,steps])=>{let at={},meta={content:""},ls=Object.assign(Object.create({removeItem(k){delete this[k]}}),store);
+ let ctx={localStorage:ls,window:{},matchMedia:()=>({matches:false,addEventListener(){}}),addEventListener(){},
+  document:{querySelector:()=>meta,querySelectorAll:()=>[],currentScript:null,documentElement:{setAttribute:(k,v)=>at[k]=v,classList:{toggle(){}}}}};
+ vm.createContext(ctx);vm.runInContext(boot,ctx);vm.runInContext(pg,ctx);let seen=[at["data-theme"]];
+ for(const s of steps){vm.runInContext(s,ctx);seen.push(at["data-theme"])}return [seen,{...ls}]});console.log(JSON.stringify(out))""")
+    (tmp / "boot.js").write_text(re.search(r"<script>(/\* F18 themes.*?)</script>", tp, re.S).group(1))
+    for page_html, cases in [
+        (theme_lists["dark"], [  # (stored, calls) -> (data-theme after load and after each call, stored after)
+            ({"mode": "light"}, ["themeSet('darkTheme','nord')", "themeTone=null;theme()"], ["dark", "dark", "dark"], {"mode": "dark", "darkTheme": "nord"}),
+            ({"mode": "dark", "darkTheme": "linen"}, ["themeSet('darkTheme','oled')"], ["dark", "dark"], {"mode": "dark", "darkTheme": "oled"})]),
+        (theme_lists["light"], [  # the light list previews light on a dark Mode; picking there switches Mode, and the old key goes
+            ({"mode": "dark", "dark": "1"}, ["themeSet('lightTheme','sepia')"], ["light", "light"], {"mode": "light", "lightTheme": "sepia"})]),
+        (tp, [  # Theme itself previews nothing; Mode's segments store it and drop the pre-F18 key
+            ({"dark": "1"}, ["themeSet('mode','auto')", "themeSet('mode','dark')"], ["dark", "light", "dark"], {"mode": "dark"})])]:
+        (tmp / "page.js").write_text(re.search(r"<script>(/\* F20 Settings > Theme.*?)</script>", page_html, re.S).group(1))
+        tproc = subprocess.Popen(["node", str(tmp / "theme-run.js"), str(tmp / "boot.js"), str(tmp / "page.js"), json.dumps([c_[:2] for c_ in cases])],
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        tout, terr = tproc.communicate()
+        assert tproc.returncode == 0, terr
+        for (t_store, t_calls, t_seen, t_stored), t_got in zip(cases, json.loads(tout)):  # (names of their own: k, s and p are used further down)
+            assert t_got == [t_seen, t_stored], (t_store, t_calls, t_got)
 assert html.index("data-palette") < html.index("<style>"), "the boot script runs before the CSS, so the first paint has the theme"
 assert ":root,html[data-theme=light][data-palette=classic]{" in html and "html.dark,html[data-theme=dark][data-palette=gunmetal]{" in html
 assert "base64," in A.PALETTES["sepia"][3] and "#c4a77d" in __import__("base64").b64decode(A.PALETTES["sepia"][3].split("base64,")[1].split('"')[0]).decode()
