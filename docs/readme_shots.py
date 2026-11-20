@@ -36,7 +36,7 @@ SAFE = {"top": 62, "bottom": 34, "left": 0, "right": 0}
 SCALE = 0.4  # of the 3x bezel: sharp at the README's ~200 px per phone on a 2x screen
 PAD = 24
 LABELS = {  # name: (the label's pill, the line under it), drawn under the phone (crops get none)
-    "apps": ("Apps", "your apps, ready to install"), "changes": ("Changes", "new versions, updates on top"),
+    "apps": ("Apps", "your apps and their updates"),
     "install": ("Install", "apps that bring their files"), "settings": ("Settings", "this iPhone's status"),
     "manage": ("Manage", "the admin's menu"), "iphones": ("iPhones", "switch one off any time"),
     "signing": ("Signing", "certificate and API key"), "passwords": ("Passwords", "change who gets in"),
@@ -306,7 +306,7 @@ def serve():
 def browse(p):
     browser = p.chromium.launch(executable_path=os.environ.get("CHROMIUM", "/usr/bin/chromium"))
     ctx = browser.new_context(**IPHONE)
-    ctx.add_init_script("try{localStorage.pushAsked=1}catch(e){}")  # no notifications prompt over Changes
+    ctx.add_init_script("try{localStorage.pushAsked=1}catch(e){}")  # no notifications prompt over the shots
     pg = ctx.new_page()
     ctx.new_cdp_session(pg).send("Emulation.setSafeAreaInsetsOverride", {"insets": SAFE})
     return browser, pg
@@ -445,7 +445,7 @@ t = time.time()
 A.save_json(A.INVITES, {"demoUsedInvite0001": {"name": "Sam", "made": t - 3 * 86400, "exp": t + 4 * 86400, "udid": DEVICES[3]["attributes"]["udid"],
                                               "device": "iPhone 15", "used": t - 2 * 86400},
                         "demoExpiredInvite01": {"name": "Riley", "made": t - 10 * 86400, "exp": t - 3 * 86400}})
-# the demo iPhone: installed an older Trailhead (so Changes shows an update), seen today, through the first-install splash
+# the demo iPhone: installed an older Trailhead (so its Apps row shows an update), seen today, through the first-install splash
 A.save_json(A.INSTALLED, {UDID: {"Notepad": "3.1/3.1", "Trailhead": "4.2/4.2"}})
 A.save_json(A.SEEN, {UDID: time.time() - 3600, DEVICES[1]["attributes"]["udid"]: time.time() - 2 * 86400,
                      DEVICES[3]["attributes"]["udid"]: time.time() - 5 * 3600})
@@ -468,10 +468,8 @@ with sync_playwright() as p:
     pg.goto(f"{BASE}/?password=demo-admin-pass")  # the admin's sign-in, so Settings shows Manage
     pg.goto(f"{BASE}/?enrolled={A.device_token(UDID)}")  # the 301 after the profile install: sets the device cookie
     pg.goto(f"{BASE}/#apps")
+    pg.evaluate("scr.scrollTop+=document.querySelector('#t-apps .row.up').getBoundingClientRect().top-520")  # Trailhead's update in view
     shot(pg, raw, "apps")
-    pg.goto(f"{BASE}/#changes")
-    shot(pg, raw, "changes")
-    pg.goto(f"{BASE}/#apps")
     pg.click("button.get[data-app=RetroArcade]")  # an app with a file: GET opens its install steps
     pg.evaluate("scr.scrollTop+=document.querySelector('button.get[data-app=RetroArcade]').getBoundingClientRect().top-330")
     shot(pg, raw, "install")

@@ -50,14 +50,15 @@ can install the apps you share on their own iPhones without a computer, a cable 
 That's once per iPhone. After that:
 
 - **Apps** lists your apps and, under **Third-party apps**, other people's, mirrored from AltStore sources. An app can
-  bring files with it (a game pack, say), listed under its Install button.
-- **Changes** lists apps by release date, Cydia style. Installs are remembered per phone, so new versions of what a
-  friend installed show under **Available Updates**, with a badge on the tab, an **Update** button and, from the Home
-  Screen app, a web push notification.
-- **Sign IPA** (on Settings): drop any IPA or paste a link, get an install link signed for every registered phone.
+  bring files with it (a game pack, say), listed under its Install button. Installs are remembered per phone, so when
+  an app a friend installed has a new version, its row says **Update available** with an **UPDATE** button in place of
+  GET, the Apps tab gets a badge with the count and, from the Home Screen app, an Update Alert (a web push) opens it.
 - **iFizBox** installs [iFizBox](https://ifizbox.com), a package manager that signs apps on the phone, with your
   certificate and your sources already inside it.
 - **Files** shows files the admin shared with everyone.
+
+SideDrop serves the apps you put on it and nothing else. For their own IPAs and apps from any other source, friends
+use iFizBox.
 
 ```mermaid
 graph TD
@@ -75,10 +76,9 @@ What a friend sees: a local run with demo data (made-up apps, iPhones and accoun
 iPhone 18 Pro's screen size, framed in its bezel. [`docs/readme_shots.py`](docs/readme_shots.py) makes them again.
 
 <p align="center">
-  <img src="docs/img/apps.png" alt="Apps: the apps and their install state" width="24%">
-  <img src="docs/img/changes.png" alt="Changes: new versions, the update waiting on top" width="24%">
-  <img src="docs/img/install.png" alt="Install: an app that brings a file" width="24%">
-  <img src="docs/img/settings.png" alt="Settings: this iPhone's status" width="24%">
+  <img src="docs/img/apps.png" alt="Apps: the apps, their install state and an update waiting" width="30%">
+  <img src="docs/img/install.png" alt="Install: an app that brings a file" width="30%">
+  <img src="docs/img/settings.png" alt="Settings: this iPhone's status" width="30%">
 </p>
 
 ## Quick start

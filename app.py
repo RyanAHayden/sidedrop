@@ -1,5 +1,5 @@
 """SideDrop: password-gated UDID enrollment, ad hoc OTA installs and private file downloads."""
-import base64, datetime, gzip, hashlib, hmac, itertools, json, os, plistlib, re, secrets, subprocess, threading, time, uuid, zipfile, zlib
+import base64, datetime, gzip, hashlib, hmac, json, os, plistlib, re, secrets, subprocess, threading, time, uuid, zipfile, zlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import quote
@@ -16,7 +16,6 @@ DATA = Path(os.environ.get("DATA", "/data"))
 APPS, SIGNED = DATA / "apps", DATA / "signed"
 APP_FILES = DATA / "appfiles"  # appfiles/<ipa name>/* are listed under that app's Install button
 FILES = DATA / "files"  # files the admin uploads on Manage for every friend, listed on the Files tab (shown only when there are some)
-CUSTOM = SIGNED / "custom"  # one-off IPAs friends upload or link on the page
 HERE = Path(__file__).parent  # config files edited on GitHub; the NAS pulls and rebuilds (deploy.sh)
 CONFIG = DATA / "config"  # the admin's edits of the repo's config files (Manage); the repo copies stay the defaults
 conf = lambda f: CONFIG / f if (CONFIG / f).exists() else HERE / f
@@ -62,7 +61,7 @@ app.secret_key = SECRET
 app.config.update(SESSION_COOKIE_SECURE=PUBLIC_URL.startswith("https"), SESSION_COOKIE_HTTPONLY=True,
                   SESSION_COOKIE_SAMESITE="Lax", PERMANENT_SESSION_LIFETIME=10 * 365 * 86400)
 lock = threading.Lock()  # ponytail: one global lock for ASC + signing, fine for a handful of friends
-INSTALLED, installed_lock = DATA / "installed.json", threading.Lock()  # {udid: {app: "short/build"}} from INSTALL taps, for Changes
+INSTALLED, installed_lock = DATA / "installed.json", threading.Lock()  # {udid: {app: "short/build"}} from INSTALL taps, for Home's update rows
 PUSH, push_lock = DATA / "push.json", threading.Lock()  # {endpoint: {sub, udid, sent: {app: "short/build"}}} web push subscriptions
 VAPID = DATA / "vapid.pem"  # web push signing key, made on first use
 SEEN = DATA / "seen.json"  # {udid: unix time} last page load per registered iPhone, for the admin page
@@ -351,9 +350,6 @@ def sync_source(url, ids, third):
         # the source's name for it (YouMod, not the IPA's own "YouTube"), shown on its Install button
         (APPS / f".{slug}.third").write_text(a.get("name", "")) if third else (APPS / f".{slug}.third").unlink(missing_ok=True)
         (APPS / f".{slug}.icon").write_text(a.get("iconURL", ""))  # ponytail: hotlinked, cache locally if a host goes flaky
-        desc = (v.get("localizedDescription") or a.get("subtitle") or a.get("localizedDescription") or "").strip()
-        for k, val in {"source": src.get("name", ""), "date": v.get("date", ""), "desc": desc.splitlines()[0] if desc else ""}.items():
-            (APPS / f".{slug}.{k}").write_text(val)  # shown on the Changes tab
         marker = APPS / f".{slug}.version"
         if not v.get("downloadURL") or (marker.exists() and marker.read_text() == v["version"]):
             continue
@@ -401,7 +397,7 @@ def notify_upgrades():
             names = [vers[n]["title"] for n in new]
             body = f"{names[0]} {vers[next(iter(new))]['short']} is available." if len(new) == 1 else f"New versions of {', '.join(names)}."
             try:
-                webpush(s["sub"], json.dumps({"title": "Update Available" if len(new) == 1 else f"{len(new)} Updates Available", "body": body, "url": "/#changes"}),
+                webpush(s["sub"], json.dumps({"title": "Update Available" if len(new) == 1 else f"{len(new)} Updates Available", "body": body, "url": "/#apps"}),
                         vapid_private_key=str(VAPID), vapid_claims={"sub": PUBLIC_URL}, timeout=10)
             except WebPushException as e:
                 if e.response is not None and e.response.status_code in (404, 410):  # unsubscribed or app removed
@@ -798,7 +794,7 @@ function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.leng
 {% else %}<header class=nav><button type=button class=bar onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button><h1 id=navT>SideDrop</h1>
 <button type=button class="bar r" onclick="reloadData()">Reload</button></header>{% endif %}
 <div class=scrim id=about hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
-<h3 id=aboutT>About SideDrop</h3><p>SideDrop shares one Apple developer account with friends, so everyone can sideload apps. Register your iPhone once in Safari, then tap GET.</p>
+<h3 id=aboutT>About SideDrop</h3><p>SideDrop shares one Apple developer account with friends, so everyone can sideload apps. Register your iPhone once in Safari, then tap GET. It serves the apps listed here; for your own IPAs and other sources, use iFizBox.</p>
 {% if stats %}<p>{{ stats[0] }} of 100 iPhones registered.{% if stats[1] %} Apps keep working until {{ stats[1].strftime('%B %-d, %Y') }}.{% endif %}</p>{% endif %}
 {{ vfoot }}
 <div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){go('settings');d.open=true;setTimeout(()=>goTo(d),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
@@ -892,17 +888,10 @@ def home():
         a["title"] = (APPS / f".{a['name']}.third").read_text().strip() or a["title"]
     for a in apps:
         a["icon"] = (APPS / f".{a['name']}.icon").read_text().strip() if (APPS / f".{a['name']}.icon").exists() else ""
-    meta = lambda a, k: (APPS / f".{a['name']}.{k}").read_text().strip() if (APPS / f".{a['name']}.{k}").exists() else ""
     for a in apps:
-        a["vkey"], a["source"], a["desc"] = f"{a['short']}/{a['version']}", meta(a, "source") or "SideDrop", meta(a, "desc")
-        try:
-            a["when"] = datetime.date.fromisoformat(meta(a, "date")[:10])
-        except ValueError:  # no release date from a source: when the IPA arrived
-            src = APPS / f"{a['name']}.ipa"
-            a["when"] = datetime.date.fromtimestamp((src if src.exists() else SIGNED / f"{a['name']}.ipa").stat().st_mtime)
+        a["vkey"] = f"{a['short']}/{a['version']}"
     mine = installed().get(token_udid(tok), {}) if enrolled else {}
-    updates = [a for a in apps if a["name"] in mine and mine[a["name"]] != a["vkey"]]
-    recent = [(d, list(g)) for d, g in itertools.groupby(sorted(apps, key=lambda a: a["when"], reverse=True)[:30], key=lambda a: a["when"])]
+    updates = [a for a in apps if a["name"] in mine and mine[a["name"]] != a["vkey"]]  # Home's UPDATE rows; their count is the Apps tab's badge
     ifizbox = [a for a in apps if IFIZBOX_ID in (a["id"], a["name"])]  # its own category, on top
     apps = [a for a in apps if a not in third and a not in ifizbox]
     ifz = ifizbox[0] if ifizbox else None
@@ -1003,18 +992,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .dark .tile{background:var(--rowbg);color:var(--text)} .dark .pair .tile{border-color:var(--line);box-shadow:0 1px 0 var(--inset)} .dark .split .tile+.tile{border-left-color:var(--div)}
 .dark .sw i{border-color:var(--baredge);background:var(--swtrack);box-shadow:inset 0 1px 3px rgba(0,0,0,.8)} .dark .sw i:after{color:var(--swoff)}
 .dark .sw i:before{background:var(--swon)} .dark .sw .k{background:var(--swknob);border-color:var(--baredge)}
-/* Changes tab: Cydia's plain list with sticky section strips (top is inside body's 56px padding, so -12px lands under the 44px nav) */
-.cy{margin:-12px -10px 0;background:var(--plain);border-bottom:1px solid #d0d4d9}
-.cyh{position:sticky;top:-12px;z-index:2;padding:1px 10px;font-size:19px;font-weight:700;color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.5);
- background:var(--cyh);border-top:1px solid #8f9aa5;border-bottom:1px solid #a6afb8}
-.cyr{display:flex;align-items:flex-start;gap:9px;padding:8px 10px;border-top:1px solid #e0e0e0} .cyh+.cyr{border-top:0}
-.cyi{flex:none;width:30px;height:30px;margin-top:3px;border-radius:7px;object-fit:cover;display:grid;place-items:center;color:#fff;font-weight:700;font-size:15px;box-shadow:0 1px 2px rgba(0,0,0,.35)}
-.cyt{flex:1;min-width:0} .cyt b{display:block;font-size:19px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cyt small{display:block;padding-left:12px;color:#000;font-size:13px} .cyt p{margin:2px 0 0;color:#6d7480;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cyr .get{align-self:center}
-.dark .cy{background:var(--table);border-color:var(--line)} .dark .cyr{border-color:var(--keyline)} .dark .cyt small{color:var(--getc)}
-.dark .cyh{border-color:var(--baredge)}
-/* iOS 5 red count badge on the Changes tab */
+/* iOS 5 red count badge on the Apps tab: how many of this iPhone's apps have an update */
 .badge{position:absolute;top:-2px;left:calc(50% + 5px);min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:10px;border:2px solid #fff;color:#fff;letter-spacing:-.02em;
  font:700 13px/16px "Helvetica Neue",Helvetica,sans-serif;text-align:center;background:linear-gradient(#f7b3b7,#e92d35 48.8%,#e70f19 50.5%,#c50103);box-shadow:0 2px 2.5px rgba(0,0,0,.6)}
 /* Cydia: while it checks for updates the badge spins instead of counting. As iFizBox's: the white UIActivityIndicatorView (spokes drawn from the
@@ -1023,14 +1001,14 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cg stroke='%23fff' stroke-width='2' stroke-linecap='round'%3E%3Cline x1='10' y1='1' x2='10' y2='4' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(30 10 10)' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(60 10 10)' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(90 10 10)' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(120 10 10)' opacity='0.369'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(150 10 10)' opacity='0.463'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(180 10 10)' opacity='0.561'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(210 10 10)' opacity='0.659'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(240 10 10)' opacity='0.753'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(270 10 10)' opacity='0.851'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(300 10 10)' opacity='0.271'/%3E%3Cline x1='10' y1='1' x2='10' y2='4' transform='rotate(330 10 10)' opacity='0.271'/%3E%3C/g%3E%3C/svg%3E") center/16px no-repeat}
 /* Cydia tab bar: 3pt + 44pt tabs + 2pt, then the home indicator's area. --tabh, in CSS (not measured once by script, before iOS has applied
    the safe area), so the reload bar and pushed pages always sit right on top of it */
-.tabs{position:fixed;left:0;right:0;bottom:0;z-index:8;height:var(--tabh);box-sizing:border-box;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;  /* one column a tab: 4, or 5 with Files */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:8;height:var(--tabh);box-sizing:border-box;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;  /* one column a tab: 3, or 4 with Files */
  padding:0 max(2px,env(safe-area-inset-right)) calc(2px + env(safe-area-inset-bottom)) max(2px,env(safe-area-inset-left));
  background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,.7)) top/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.1),rgba(255,255,255,.1)) 0 1px/100% 1px no-repeat,linear-gradient(#2f2f2f,#151515 49.5%,#000 49.5%) 0 1px/100% 48px no-repeat,#000}
 .tabs:before{content:"";position:absolute;left:0;right:0;bottom:100%;height:2.5px;pointer-events:none;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.18))}
 .tabs a{position:relative;display:flex;flex-direction:column;align-items:center;height:44px;box-sizing:border-box;margin:3px 2px 0;padding-top:3.5px;border-radius:2.5px;color:#a8a8a8;font-size:10px;font-weight:700;line-height:12px}
 .tabs svg{width:28px;height:28px;margin-bottom:1px;fill:url(#taboff);filter:drop-shadow(0 -1px 0 rgba(0,0,0,.75))}
 .tabs a[aria-current]{background:rgba(255,255,255,.15);color:#fff;box-shadow:inset 0 0 1px rgba(0,0,0,.31)}
-/* a pushed page (Manage, Sign) in place over its tab: the iOS slide (350 ms, UINavigationController's curve), the page below moving a third as far and
+/* a pushed page (Manage) in place over its tab: the iOS slide (350 ms, UINavigationController's curve), the page below moving a third as far and
    darkening 10%; transform and opacity only */
 .layer{position:fixed;z-index:6;top:0;left:0;right:0;bottom:var(--tabh,0);background:var(--pin);background-color:var(--ground)}
 .layer[hidden]{display:none} .layer .nav{position:absolute;z-index:1}  /* above its own scroller, as the main nav is above #scr */ .layer .nav h1{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
@@ -1073,9 +1051,11 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% if a.files %}<button type=button class="get{{ ' done' if lbl == 'INSTALLED' }}" data-app="{{ a.name }}" aria-expanded=false onclick="steps(this)">{{ lbl }}</button>
 {% else %}<a class="get{{ ' done' if lbl == 'INSTALLED' }}" data-arm={{ lbl }} data-app="{{ a.name }}" aria-label="Install {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">{{ lbl }}</a>{% endif %}{% endif %}{% endmacro %}
 {% macro ifz_icon(a) %}{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}{% endmacro %}
+{# a newer signed version than this iPhone last installed: the row says so (.up, counted for the Apps tab's badge) and its button says UPDATE #}
+{% macro upnote(a) %}{% if a.name in mine and mine[a.name] != a.vkey %}<span class=upn> · Update available</span>{% endif %}{% endmacro %}
 {% macro install_list(apps) %}<div class="g{{ '' if enrolled else ' locked' }}">{% for a in apps %}
-<div class=row>{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
-<div>{{ a.title }}<small>Version {{ a.short }}{% if a.files %} · needs {{ a.files|length }} file{{ 's' if a.files|length > 1 }}{% endif %}</small></div>{{ install(a) }}</div>
+<div class="row{{ ' up' if a.name in mine and mine[a.name] != a.vkey }}">{% if a.icon %}<img class=ico src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=ico style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
+<div>{{ a.title }}<small>Version {{ a.short }}{{ upnote(a) }}{% if a.files %} · needs {{ a.files|length }} file{{ 's' if a.files|length > 1 }}{% endif %}</small></div>{{ install(a) }}</div>
 {% if enrolled and a.files %}{% set labels = file_labels(a.files[0].parent) %}<div class=steps><div>
 <div class=step><span class=num>1</span><div><b>Install the app</b></div><a class="get go" data-app="{{ a.name }}" aria-label="Install {{ a.title }}" onclick="mark(this);this.closest('.step').classList.add('ok')"
  href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}">INSTALL</a></div>
@@ -1096,9 +1076,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class=hx><div class=hp>
 <a class=tile href="https://github.com/RyanAHayden"><span class=tic style="background:#333"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/></svg></span>GitHub</a>
 <a class=tile href=#ifizbox onclick="go('ifizbox');return false"><span class=tic style="background:#1a82fb"><svg viewBox="0 0 30 30" fill="#fff"><path d="M15 3l11 5.5-11 5.5L4 8.5zM4 10.7l10 5v11.1l-10-5zM16 15.7l10-5v11.1l-10 5z"/></svg></span>iFizBox</a></div>
-<div class=hw>{% if enrolled %}<a class=tile href=#changes onclick="go('changes');return false"><span class=tic style="background:#e0322f"><svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zm0 2.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 1 1 0-13z" fill="#fff"/><path d="M11 7.5h2.2v4.4l3 2-1.2 1.8-4-2.7z" fill="#fff"/></svg></span>Changes</a>
-{% else %}<a class=tile href=#settings onclick="go('settings');goTo(document.getElementById('help'));return false"><span class=tic style="background:#8a929c"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M8.8 9a3.3 3.3 0 1 1 4.6 3c-.9.4-1.4 1.1-1.4 2.2"/><path d="M12 18.3v.2"/></svg></span>Help</a>{% endif %}
-<a class=tile href=#sign onclick="go('settings');goTo(document.getElementById('sign'));return false"><span class=tic style="background:#8e44c9"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</a></div>
+<div class=hw><a class=tile href=#settings onclick="go('settings');goTo(document.getElementById('help'));return false"><span class=tic style="background:#8a929c"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M8.8 9a3.3 3.3 0 1 1 4.6 3c-.9.4-1.4 1.1-1.4 2.2"/><path d="M12 18.3v.2"/></svg></span>Help</a>
+<button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:#3f80e0"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
 {% if enrolled %}<a class="tile reg" href=#settings onclick="go('settings');return false"><span class=tic style="background:#34a84a"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.5 4.5 8.5-10"/></svg></span>Registered{% if stats and stats[1] %}<span class=hdt>until {{ stats[1].strftime('%b %-d, %Y') }}</span>{% endif %}</a>
 {% else %}<button type=button class="tile todo" id=setupT aria-expanded=false aria-controls=setup onclick="setupOpen(setup.hidden)"><span class=tic style="background:#f08a12"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#f08a12"/></svg></span><div>Set up this iPhone<small>2 steps, then every app unlocks</small></div></button>{% endif %}</div>
 <p class=ftr id=tagline>Sideload apps on your iPhone with a friend's Apple developer account.</p>
@@ -1108,8 +1087,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <button type=button class=gbtn onclick="sdpDone(true)">I turned it off</button></details>
 <div class=c id=reg><div class=sh><span class=num>2</span><div>Register this iPhone<small>In Safari on this iPhone</small></div></div>
 <fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>This adds your iPhone to the shared developer account, so the apps here can be signed for it. Registered before but the apps are locked? Register again, it's instant.</small></div></div>{% endif %}
-{% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class=row>{{ ifz_icon(ifz) }}
-<div>{{ ifz.title }}<small>Version {{ ifz.short }} · your certificate inside</small></div>
+{% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class="row{{ ' up' if ifz.name in mine and mine[ifz.name] != ifz.vkey }}">{{ ifz_icon(ifz) }}
+<div>{{ ifz.title }}<small>Version {{ ifz.short }}{% if ifz.name in mine and mine[ifz.name] != ifz.vkey %}{{ upnote(ifz) }}{% else %} · your certificate inside{% endif %}</small></div>
 {% if enrolled %}<a class="get{{ ' done' if mine.get(ifz.name) == ifz.vkey }}" data-app="{{ ifz.name }}" aria-label="{{ ifz.title }}: why and install" href=#ifizbox onclick="go('ifizbox');return false">{{ 'GET' if ifz.name not in mine else 'INSTALLED' if mine[ifz.name] == ifz.vkey else 'UPDATE' }}</a>
 {% else %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>{% endif %}</div></div>
 <p class=ftr>Installs apps right on your iPhone. <a href=#ifizbox onclick="go('ifizbox');return false">Why iFizBox</a></p>{% endif %}
@@ -1122,16 +1101,6 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <p class=ftr>The links work without signing in for 7 days, so wget and curl can use them.</p>
 </section>{% endif %}
 
-{% macro cyrow(a, up) %}<div class="cyr{{ ' up' if up }}">{% if a.icon %}<img class=cyi src="{{ a.icon }}" alt="" loading=lazy>{% else %}<div class=cyi style="background:hsl({{ a.name|hue }} 65% 50%)">{{ a.title[:1] }}</div>{% endif %}
-<div class=cyt><b>{{ a.title }}</b><small>from {{ a.source }} · {{ a.short }}</small>{% if a.desc %}<p>{{ a.desc }}</p>{% endif %}</div>
-{% if up %}<a class=get data-arm=UPDATE data-app="{{ a.name }}" aria-label="Update {{ a.title }}" href="itms-services://?action=download-manifest&url={{ manifest(a.name) }}" onclick="return arm(this)">UPDATE</a>{% endif %}</div>{% endmacro %}
-<section class=page id=t-changes data-title=Changes><div class=cy>
-{% if updates %}<div class=cyh id=uph>Available Updates</div>{% for a in updates %}{{ cyrow(a, True) }}{% endfor %}{% endif %}
-{% for day, group in recent %}<div class=cyh>New at {{ day.strftime('%b %-d, %Y') }}</div>{% for a in group %}{{ cyrow(a, False) }}{% endfor %}{% endfor %}</div>
-{% if not recent %}<p class="c m">No apps yet.</p>{% endif %}
-<p class=ftr>{% if enrolled %}Updates show for apps you installed from here on this iPhone.{% else %}Register this iPhone to get updates.{% endif %}</p>
-</section>
-
 <section class=page id=t-ifizbox data-title=iFizBox>
 {% if ifz %}<div class=splash>{% if ifz.icon %}<img src="{{ ifz.icon }}" alt="">{% else %}<div class=ico style="width:76px;height:76px;border-radius:15px;background:hsl({{ ifz.name|hue }} 65% 50%)">{{ ifz.title[:1] }}</div>{% endif %}
 <div><h2>{{ ifz.title }}</h2><p>A package manager for your iPhone</p></div></div>
@@ -1142,7 +1111,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class=row><span class=tic style="background:#f08b1d"><svg viewBox="0 0 24 24"><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="#fff" stroke-width="2.4"/><rect x="5" y="11" width="14" height="10" rx="2" fill="#fff"/></svg></span><div><b>Your certificate, already in it</b><small>No .p12 to find and no password to type: it signs with this site's certificate from the first launch.</small></div></div>
 <div class=row><span class=tic style="background:#3f80e0"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="4" rx="1.5" fill="#fff"/><rect x="4" y="10" width="16" height="4" rx="1.5" fill="#fff"/><rect x="4" y="16" width="16" height="4" rx="1.5" fill="#fff"/></svg></span><div><b>Comes with the sources</b><small>{{ n_sources }} sources, ready the first time it opens.</small></div></div>
 <div class=row><span class=tic style="background:#40ae4c"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><path d="M12 7v7m-3-3 3 3 3-3" fill="none" stroke="#3c9a1d" stroke-width="2"/></svg></span><div><b>Signs on your iPhone</b><small>Install any IPA or AltStore app right on the phone: no computer, nothing uploaded.</small></div></div>
-<div class=row><span class=tic style="background:#e2382f"><svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zm0 2.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 1 1 0-13z" fill="#fff"/><path d="M11 7.5h2.2v4.4l3 2-1.2 1.8-4-2.7z" fill="#fff"/></svg></span><div><b>Updates in one tap</b><small>Changes lists the new versions of what you installed.</small></div></div>
+<div class=row><span class=tic style="background:#e2382f"><svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zm0 2.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 1 1 0-13z" fill="#fff"/><path d="M11 7.5h2.2v4.4l3 2-1.2 1.8-4-2.7z" fill="#fff"/></svg></span><div><b>Updates in one tap</b><small>New versions of what you installed, ready to install.</small></div></div>
 <div class=row><span class=tic style="background:#8c9097"><svg viewBox="0 0 24 24"><path d="M12 3 21 7.5v9L12 21l-9-4.5v-9z" fill="#fff"/></svg></span><div><b>The iOS 6 look, at 120 Hz</b><small>A package manager with the classic look, smooth on today's iPhones.</small></div></div></div>
 <p class=ftr>It needs Developer Mode, like every app here. <a href="https://ifizbox.com">ifizbox.com</a></p>
 {% else %}<p class="c m">iFizBox isn't here yet. Tap Reload in a minute.</p>{% endif %}
@@ -1157,7 +1126,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class="g split">
 {% if is_admin %}<a class=tile href=/admin data-push><span class=tic style="background:#f08b1d"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="#fff"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z" fill="#fff"/></svg></span>Manage</a>
 {% else %}<a class=tile href=#apps><span class=tic style="background:#40ae4c"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#3c9a1d"/></svg></span>Register</a>{% endif %}
-<button type=button class=tile onclick="goTo(document.getElementById('sign'))"><span class=tic style="background:#8e44c9"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M4 20c3-1 5-4 7-4s1 3 3 3 3-2 6-3M15 4l5 5-8 8H7v-5z"/></svg></span>Sign IPA</button></div>
+<a class=tile href=#ifizbox onclick="go('ifizbox');return false"><span class=tic style="background:#1a82fb"><svg viewBox="0 0 30 30" fill="#fff"><path d="M15 3l11 5.5-11 5.5L4 8.5zM4 10.7l10 5v11.1l-10-5zM16 15.7l10-5v11.1l-10 5z"/></svg></span>iFizBox</a></div>
 <div class=pair>
 <button type=button class=tile onclick="let d=document.getElementById('dev');d.open=true;goTo(d)"><span class=tic style="background:#8a929c"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-dasharray="2.4 2"><circle cx="12" cy="12" r="7"/></svg></span>Help</button>
 <button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:#3f80e0"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
@@ -1170,12 +1139,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <details id=dev><summary>Turn on Developer Mode</summary>
 {{ dev_steps }}</details>
 <details id=a2hs><summary>Add to Home Screen</summary><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open SideDrop from there</span></p></details></div>
-<p class=ftr id=helpNote>Apps here are signed with a friend's developer certificate for each registered iPhone. iOS asks for Developer Mode once, then they open like any other app.</p>
-<h3 class=hdr id=sign>Sign your own IPA</h3>
-<form class=c method=post action=/sign enctype=multipart/form-data data-push onsubmit="this.querySelector('button').textContent='Signing…'">
-<input type=file name=ipa id=ipaf accept=.ipa class=vh onchange="ipal.textContent=this.files[0]?this.files[0].name:'Choose .ipa File'"><label class="b grey" for=ipaf id=ipal>Choose .ipa File</label>
-<input type=url name=url placeholder="…or paste a link to an .ipa" aria-label="Link to an .ipa">
-<button>Sign</button><small>Signed for registered iPhones. The install link lasts 7 days.</small></form>
+<p class=ftr id=helpNote>Apps here are signed with a friend's developer certificate for each registered iPhone. iOS asks for Developer Mode once, then they open like any other app.
+SideDrop serves the apps listed on its Apps tab; for your own IPAs and other sources, use <a href=#ifizbox onclick="go('ifizbox');return false">iFizBox</a>.</p>
 <a class="b grey out" href=/logout>Sign out</a>
 {{ vfoot }}
 </section>
@@ -1184,8 +1149,6 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <h3 id=welT>Setup Complete</h3><p>This iPhone is registered. Enjoy!</p><p>Tap GET to install apps.</p>
 <div class=abtns style="grid-template-columns:1fr"><button type=button class=ok onclick="welcomeOk()">OK</button></div></div></div>
 <script>function welcomeOk(){welcome.hidden=true;history.replaceState(null,"","/")}</script>{% endif %}
-<div class=scrim id=upq hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=upqT>
-<h3 id=upqT>Update</h3><p id=upqL></p><div class=abtns><button type=button onclick="upq.hidden=true">Cancel</button><button type=button class=ok onclick="upgradeGo()">Confirm</button></div></div></div>
 
 {% if enrolled %}<div class=scrim id=devAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=devT>
 <h3 id=devT>Developer Mode Required</h3><p>When the app finishes installing, opening it will ask you to turn on Developer Mode.</p>
@@ -1205,8 +1168,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <button type=button class="bar r" id=conX onclick="conClose()">Cancel</button></header><div class=conlog id=conL aria-live=polite><span class=concur id=conCur></span></div>
 <div class=confoot><div class=cons id=conS></div><button type=button class=confin id=conF hidden></button></div></div>
 <nav class=tabs aria-label=Sections>
-<a href=#apps><svg viewBox="0 0 30 30"><path d="M4 4h9v9H4zm13 0h9v9h-9zM4 17h9v9H4zm13 0h9v9h-9z"/></svg>Apps</a>
-<a href=#changes><svg viewBox="0 0 30 30"><path fill-rule=evenodd d="M15 3a12 12 0 1 0 0 24a12 12 0 1 0 0-24zm0 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18z"/><path d="M14 8h2.4v6.8l4.8 3.1-1.3 2-5.9-3.8z"/></svg>Changes<span class=badge id=badge{% if not updates %} hidden{% endif %}>{{ updates|length }}</span></a>
+<a href=#apps><svg viewBox="0 0 30 30"><path d="M4 4h9v9H4zm13 0h9v9h-9zM4 17h9v9H4zm13 0h9v9h-9z"/></svg>Apps<span class=badge id=badge{% if not updates %} hidden{% endif %}>{{ updates|length }}</span></a>
 <a href=#ifizbox><svg viewBox="0 0 30 30"><path d="M15 3l11 5.5-11 5.5L4 8.5zM4 10.7l10 5v11.1l-10-5zM16 15.7l10-5v11.1l-10 5z"/></svg>iFizBox</a>
 {% if files %}<a href=#files><svg viewBox="0 0 30 30"><path d="M3 8a1.5 1.5 0 0 1 1.5-1.5h7.2l2.6 3h11.2A1.5 1.5 0 0 1 27 11v13.5a1.5 1.5 0 0 1-1.5 1.5h-21A1.5 1.5 0 0 1 3 24.5z"/></svg>Files</a>{% endif %}
 <a href=#settings><svg viewBox="0 0 30 30"><path fill-rule=evenodd d="M15 7.5a7.5 7.5 0 1 0 0 15a7.5 7.5 0 1 0 0-15zm0 4.3a3.2 3.2 0 1 1 0 6.4a3.2 3.2 0 1 1 0-6.4z"/>{% for r in range(0, 360, 45) %}<rect x="12.8" y="3" width="4.4" height="6" rx="1" transform="rotate({{ r }} 15 15)"/>{% endfor %}</svg>Settings</a></nav>
@@ -1283,21 +1245,16 @@ function refreshIn(){return fetch("/",{credentials:"same-origin"}).then(r=>r.tex
  if(!d.getElementById("t-files")!=!document.getElementById("t-files"))return location.reload();  // the Files tab came or went: the tab bar changes
  if(d.getElementById("t-files"))document.getElementById("t-files").innerHTML=d.getElementById("t-files").innerHTML;
  if(newBuild((d.querySelector("meta[name=build]")||{}).content))return;  // a new deploy: newBuild reloads the whole page
- ["t-apps","t-changes","t-ifizbox"].forEach(i=>document.getElementById(i).innerHTML=d.getElementById(i).innerHTML);STAMP=+d.getElementById("stamp").dataset.v;
+ ["t-apps","t-ifizbox"].forEach(i=>document.getElementById(i).innerHTML=d.getElementById(i).innerHTML);STAMP=+d.getElementById("stamp").dataset.v;
  try{if(localStorage.sdp)sdpDone()}catch(e){}document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());navR()}).catch(()=>{})}
 let held=0,pulled=0;addEventListener("touchstart",()=>{held=1;pulled=0},{passive:true});
 scr.addEventListener("scroll",()=>{if(held&&!pulled&&scr.scrollTop<-70){pulled=1;hap()}},{passive:true});  // the tick as it arms, like UIRefreshControl
 addEventListener("touchend",()=>{held=0;if(pulled){pulled=0;reloadData()}},{passive:true});
-/* on Changes with upgrades, the nav is Cydia's: Refresh (reloads data) on the left, Update (n) on the right */
-function navR(){let n=document.querySelectorAll(".cyr.up").length,r=document.querySelector(".nav .bar.r"),l=document.querySelector(".nav .bar:not(.r)"),ch=location.hash=="#changes",c=ch&&n;
- r.textContent=c?"Update ("+n+")":"Reload";r.onclick=c?upgradeAll:reloadData;
- l.textContent=c?"Refresh":"About";l.onclick=c?reloadData:()=>{about.hidden=false;about.querySelector(".ok").focus()};badge.textContent=n;badge.hidden=!n&&!badge.classList.contains("busy");let h=document.getElementById("uph");if(h)h.hidden=!n}
+/* the Apps tab's badge counts its rows with an update (.row.up) */
+function navR(){let n=document.querySelectorAll("#t-apps .row.up").length;badge.textContent=n;badge.hidden=!n&&!badge.classList.contains("busy")}
 function mark(b,quiet){let n=b.dataset.app;if(!n)return;navigator.sendBeacon("/installed",new URLSearchParams({name:n}));
  document.querySelectorAll('.row .get[data-app="'+n+'"]').forEach(x=>{x.classList.add("done");if(x.dataset.arm)x.dataset.arm="INSTALLED";if(!x.classList.contains("go"))x.textContent="INSTALLED"});if(!quiet)setTimeout(devMaybe,1500);  // after iOS's install prompt
- setTimeout(()=>{document.querySelectorAll('.cyr.up [data-app="'+n+'"]').forEach(x=>x.closest(".cyr").remove());navR()},500)}  // after the link has followed: a removed link doesn't navigate
-function upgradeAll(){let l=[...document.querySelectorAll(".cyr.up b")].map(b=>b.textContent);upqT.textContent="Update "+l.length+(l.length>1?" Apps":" App");upqL.textContent=l.join(", ");upq.hidden=false}
-/* ponytail: one install link every 3 s; iOS shows one install prompt per link, re-tap UPDATE on any it drops */
-function upgradeGo(){upq.hidden=true;[...document.querySelectorAll(".cyr.up a.get")].map(b=>[b,b.href]).forEach(([b,h],i)=>setTimeout(()=>{mark(b);location.href=h},i*3000))}
+ document.querySelectorAll("#t-apps .row.up").forEach(r=>{if(r.querySelector('[data-app="'+n+'"]')){r.classList.remove("up");r.querySelectorAll(".upn").forEach(s=>s.remove())}});navR()}  // installed now: no longer an update
 addEventListener("hashchange",show);
 /* check sources in the background (the page no longer waits on it); swap the lists in only if a new build got signed */
 /* and when the Home Screen app comes back: iOS keeps it running for days, so a new deploy (another build) reloads the whole page, not just the lists */
@@ -1314,7 +1271,7 @@ function pushSet(on){if(!pushOK){pushSw.checked=false;pushShow();return}  // Saf
  if(!on){pushSub().then(([r,s])=>s&&s.unsubscribe());return}  // the server drops it the next time a push gets a 410
  Notification.requestPermission().then(p=>{if(p!="granted")throw 0;return pushSub()}).then(([r,s])=>s||r.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:Uint8Array.from(atob(PUSHKEY.replace(/-/g,"+").replace(/_/g,"/")),c=>c.charCodeAt(0))}))
   .then(s=>fetch("/push",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(s)})).catch(()=>{if(window.pushSw)pushSw.checked=false})}
-/* asked once per phone: after the first INSTALL tap or the first visit to Changes */
+/* asked once per phone: after the first INSTALL tap */
 /* first INSTALL on this phone: warn that opening the app will ask for Developer Mode; then the notifications ask */
 function devMaybe(){let a=null;try{a=localStorage.devTold}catch(e){}if(a||!window.devAsk)return pushMaybe();try{localStorage.devTold=1}catch(e){}devAsk.hidden=false}
 function devDone(show){devAsk.hidden=true;if(show){go("settings");let d=document.getElementById("dev");d.open=true;setTimeout(()=>goTo(d),50)}else setTimeout(pushMaybe,400)}
@@ -1323,7 +1280,6 @@ function pushMaybe(){let a=null;try{a=localStorage.pushAsked}catch(e){}if(a||!wi
 function pushShow(){pushWeb.hidden=pushOK;pushOk.textContent=pushOK?"Allow":"OK";let bs=pushOk.parentNode;bs.style.gridTemplateColumns=pushOK?"":"1fr";bs.firstElementChild.style.display=pushOK?"":"none";
  pushOk.onclick=()=>{pushAsk.hidden=true;if(pushOK){pushSet(true);if(window.pushSw)pushSw.checked=true}};pushAsk.hidden=false}
 if(pushOK&&window.pushSw)pushSub().then(([r,s])=>pushSw.checked=!!s&&Notification.permission=="granted").catch(()=>{});
-let pushOnChanges=()=>{if(location.hash=="#changes")setTimeout(pushMaybe,600)};addEventListener("hashchange",pushOnChanges);pushOnChanges();
 /* change a GET button's label and colour with its width animating, like the App Store (a label swap alone jumps the width) */
 function morph(b,f){let w0=b.offsetWidth;f();let w1=b.offsetWidth;if(w0==w1)return;b.style.width=w0+"px";b.offsetWidth;b.style.width=w1+"px";clearTimeout(b.mt);b.mt=setTimeout(()=>b.style.width="",300)}
 function disarm(keep){document.querySelectorAll(".get.go[data-arm]").forEach(b=>{if(b!=keep)morph(b,()=>{b.classList.remove("go");b.textContent=b.dataset.arm})})}
@@ -1345,7 +1301,7 @@ function firstRunGo(ok){let b=frNext;frNext=null;firstRun.hidden=true;if(!ok)ret
  if(b){if(b.dataset.arm)b.classList.add("go");b.click()}}  // an armed GET installs on click
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();themeMarks()});
-</script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=admin_enabled(), updates=updates, recent=recent, just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
+</script>""", error=error, enrolled=enrolled, mine=mine, stamp=signed_stamp(), vapid=vapid_public() if enrolled else "", admin_on=admin_enabled(), updates=updates, just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
         ifz_m=signed_url(f"/m/{ifz['name']}.plist") if ifz else "",
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
@@ -1381,7 +1337,7 @@ def login():
 
 @app.get("/sw.js")
 def service_worker():
-    """Shows pushes; tapping one opens Changes. Served from / so its scope is the whole site."""
+    """Shows pushes; tapping one opens the Apps tab, where the update waits. Served from / so its scope is the whole site."""
     return """self.addEventListener("push",e=>{let d=e.data.json();e.waitUntil(self.registration.showNotification(d.title,{body:d.body,icon:"/apple-touch-icon.png",data:d.url}))});
 self.addEventListener("notificationclick",e=>{e.notification.close();e.waitUntil(clients.openWindow(e.notification.data||"/"))});""", 200, {
         "Content-Type": "text/javascript", "Cache-Control": "no-cache"}
@@ -1413,7 +1369,7 @@ def push_subscribe():
 
 @app.post("/installed")
 def mark_installed():
-    """INSTALL tapped: remember this phone has the current version, so the Changes tab can offer later ones."""
+    """INSTALL tapped: remember this phone has the current version, so its Apps row can offer later ones as updates."""
     udid, p = token_udid(request.cookies.get("device", "")), SIGNED / f"{request.form.get('name', '')}.ipa"
     if not logged_in() or not udid or p.parent != SIGNED or not p.is_file():
         abort(403)
@@ -3015,44 +2971,21 @@ def udid_guest(name, tok, sid):
     return redirect(f"{PUBLIC_URL}/?enrolled={device_token(attrs['UDID'])}", 301)
 
 
-@app.post("/sign")
-def sign_custom():
-    """Sign one IPA from an upload or URL and hand back an install link."""
-    if not logged_in():
-        abort(403)
-    if not PROFILE.exists():
-        return page("<p class='c err'>No iPhones are registered yet.</p>", back=MORE, title="Sign")
-    CUSTOM.mkdir(parents=True, exist_ok=True)
-    for old in CUSTOM.glob("*.ipa"):  # ponytail: cleanup piggybacks on new signs; links die with LINK_TTL anyway
-        if old.stat().st_mtime < time.time() - LINK_TTL:
-            old.unlink(missing_ok=True)
-    name = uuid.uuid4().hex[:16]
-    src, out = CUSTOM / f".{name}.part", CUSTOM / f"{name}.ipa"
-    up, url = request.files.get("ipa"), request.form.get("url", "").strip()
-    try:
-        if up and up.filename:
-            up.save(src)
-        elif url.startswith(("https://", "http://")):
-            # ponytail: no SSRF guard; only logged-in friends reach this
-            with requests.get(url, stream=True, timeout=60) as r:
-                r.raise_for_status()
-                with src.open("wb") as f:
-                    for chunk in r.iter_content(1 << 20):
-                        f.write(chunk)
-        else:
-            return page("<p class='c err'>Pick an .ipa or paste an http(s) link.</p>", back=MORE, title="Sign")
-        with lock:
-            sign_ipa(src, out)
-        info = ipa_info(out)
-    except Exception as e:
-        out.unlink(missing_ok=True)
-        return page("<p class='c err'>Couldn't sign that: {{ e }}</p>", e=e, back=MORE, title="Sign")
-    finally:
-        src.unlink(missing_ok=True)
-    return page("""<div class=c><h3>{{ i.title }} <small>v{{ i.short }}</small></h3>
-<p><a class=b href="itms-services://?action=download-manifest&url={{ m }}">Install {{ i.title }}</a></p>
-<small>Link works for 7 days. Developer Mode must be on.</small></div>""",
-                i=info, m=quote(signed_url(f"/m/custom/{name}.plist"), safe=""), back=MORE, title="Sign")
+def drop_old_custom_signs():
+    """At start: signed/custom/ held IPAs friends signed themselves, which SideDrop no longer does (iFizBox does). Their links
+    are dead, so the files go."""
+    old = SIGNED / "custom"
+    if old.is_dir():
+        for f in old.iterdir():
+            if f.is_file():
+                f.unlink(missing_ok=True)
+        try:
+            old.rmdir()
+        except OSError:  # something else in it: leave it
+            pass
+
+
+drop_old_custom_signs()
 
 
 @app.post("/sync")
