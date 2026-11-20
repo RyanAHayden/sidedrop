@@ -62,7 +62,9 @@ The grey version line at the bottom of Apps and Settings shows the commit the im
   never pick a certificate or add a source.
 - **App files**: files in `data/appfiles/<ipa name>/` show under that app's Install button, with signed links that
   last 7 days, work without a login and can be resumed.
-- **Sign IPA**: a signed-in friend's own IPA, kept in `signed/custom/` for 7 days.
+
+SideDrop serves only these apps. Friends install their own IPAs, and apps from any other source, with iFizBox, which
+signs them on the phone.
 
 Manage → App Sources and Manage → iFizBox edit the source lists and iFizBox's settings; those edits are kept in
 `data/config/` and win over the repo's files until **Use Default**.

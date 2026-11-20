@@ -93,18 +93,23 @@ assert calls == [("00008130-AAAA", "Sam script iPhone16,1")]
 # landing back in Safari sets a device cookie (checked against the profile, survives sign-out); forged tokens do nothing
 html = c.get("/").data
 assert b"Set up this iPhone" in html and b"/static/sdp1.jpg" in html and b'href="itms-services' not in html and b"id=ifzb " not in html  # apps locked until registered
-# Apps header: welcome, GitHub | iFizBox, then Help + Sign IPA and the setup tile, which folds the SDP + Register steps behind it
+# Apps header: welcome, GitHub | iFizBox, then Help + About and the setup tile, which folds the SDP + Register steps behind it
 assert b"Welcome to SideDrop" in html and b"<title>SideDrop</title>" in html and b"<h1 id=navT>SideDrop</h1>" in html and b"About SideDrop" in html and b"Ryan Hayden (Fizlo)</a>" in html and b"go('ifizbox')" in html and b"id=setupT" in html and b"<div id=setup hidden>" in html
 # F17: the SideDrop name and what it's for, in the head, the header, About, the register step and Help; no lowercase name a person sees
 assert html.count(b"Share an Apple developer account with friends and sideload apps.") == 2 and b"og:site_name content=SideDrop" in html
 assert b"with a friend's Apple developer account.</p>" in html and b"shares one Apple developer account with friends" in html
 assert b"adds your iPhone to the shared developer account" in html and b"id=helpNote>" in html
 assert b"sidedrop" not in re.sub(rb"sidedrop\.udid|/static/[\w.]+", b"", html), re.findall(rb".{40}sidedrop.{40}", html)
-assert b">Help</a>" in html and b"getElementById('sign')" in html and b'class="tile reg"' not in html and b"go('changes')" not in html
+assert b">Help</a>" in html and b"</span>About</button></div>" in html and b'class="tile reg"' not in html
+# F22: no Changes tab and no signing your own IPA: nothing links to them, and Settings, Help and About point to iFizBox instead
+for gone in (b"#changes", b"'changes'", b"t-changes", b">Changes<", b"/sign", b"getElementById('sign')", b"Sign IPA", b"Sign your own IPA", b"Choose .ipa File", b"name=ipa"):
+    assert gone not in html, gone
+assert b"for your own IPAs and other sources, use iFizBox." in html and b"use <a href=#ifizbox" in html
 assert b'href="itms-services' not in c.get("/?enrolled=1").data and b'href="itms-services' not in c.get("/?enrolled=00008130-AAAA.x").data
 html = c.get(r.location.replace("https://x.test", ""), base_url="https://localhost").data
 assert b"This iPhone is registered" in html and b"href=/admin" not in html and b"/static/sdp1.jpg" in html  # Manage is the admin's only
-assert b'class="tile reg"' in html and b"go('changes')" in html and b"id=setupT" not in html and b"id=setup " not in html  # registered: Changes and the green tile
+assert b'class="tile reg"' in html and b"id=setupT" not in html and b"id=setup " not in html  # registered: the green tile
+assert b"#changes" not in html and b"'changes'" not in html and b"t-changes" not in html and b"/sign" not in html and b"Sign IPA" not in html
 c.get("/logout", base_url="https://localhost"); c.post("/login", data={"password": "hunter2-but-longer"}, base_url="https://localhost")
 assert b"This iPhone is registered" in c.get("/", base_url="https://localhost").data
 assert A.profile_udids() == {"00008130-AAAA"} and (tmp / "signed" / "Demo.ipa").exists()
@@ -272,8 +277,8 @@ assert html.index("<h3 class=hdr>iFizBox</h3>") < html.index("<h3 class=hdr>Apps
 # its GET opens the iFizBox tab (the install is that page's button); the tab has the install button with the manifest and the benefits
 assert 'href=#ifizbox onclick="go(\'ifizbox\');return false"' in html and 'id=t-ifizbox' in html and 'id=ifzb data-app="com.ryha.ifizbox" data-m="https://x.test/m/com.ryha.ifizbox.plist?e=' in html
 assert "Your certificate, already in it" in html and "10 sources" in html
-# tabs: Apps, Changes, iFizBox, Settings (no Feather, no More, and no Files tab while there are no files: F14)
-assert re.findall(r"<a href=#(\w+)><svg", html) == ["apps", "changes", "ifizbox", "settings"] and "t-feather" not in html and "id=t-files" not in html
+# tabs: Apps, iFizBox, Settings (no Feather, no More, no Changes, and no Files tab while there are no files: F14)
+assert re.findall(r"<a href=#(\w+)><svg", html) == ["apps", "ifizbox", "settings"] and "t-feather" not in html and "id=t-files" not in html and "t-changes" not in html
 (tmp / "signed" / "com.ryha.ifizbox.ipa").unlink()
 # per-app files sit under that app's Install button, not in Files
 (tmp / "appfiles" / "Demo").mkdir(parents=True); (tmp / "appfiles" / "Demo" / "game.iso").write_bytes(b"iso")
@@ -289,9 +294,9 @@ assert "steps(this)" in html and "Download game.iso" in html  # files turn INSTA
 html = c.get("/").data.decode()
 assert "Download the game disc" in html and "labels.txt" not in html
 
-# Manage and Sign open as pages pushed in place; pressed looks come from JS (.is-pressed), never :active, which iOS leaves stuck
+# Manage opens as a page pushed in place; pressed looks come from JS (.is-pressed), never :active, which iOS leaves stuck
 html = c.get("/").data.decode()
-assert "action=/sign enctype=multipart/form-data data-push" in html and ":active{" not in html and ":active," not in html
+assert 'closest("a[data-push]")' in html and ":active{" not in html and ":active," not in html
 # the inline scripts parse (a syntax error kills every button on the page)
 import shutil, subprocess
 if shutil.which("node"):
@@ -336,32 +341,47 @@ console.log(JSON.stringify(JSON.parse(process.argv[3]).map(([store,dark])=>{let 
     for (s, d, tone, pal, color), got in zip(cases, json.loads(out)):
         assert got == [tone, pal, tone == "dark", color], (s, d, got)
 
-# custom signing: upload and URL both give a cookie-less install link
-html = c.get("/").data.decode()
-assert "Sign your own IPA" in html
-assert A.app.test_client().post("/sign").status_code == 403
-demo = (tmp / "apps" / "Demo.ipa").read_bytes()
+# F22: signing your own IPA is gone: no route, and its old storage (signed/custom/) is cleared at start
 import io
-for data in ({"ipa": (io.BytesIO(demo), "x.ipa")}, {"url": "https://gh/t.ipa"}):
-    html = c.post("/sign", data=data, content_type="multipart/form-data").data.decode()
-    m = unquote(re.search(r"download-manifest&url=([^\"]+)", html).group(1))
-    mf = plistlib.loads(anon.get(path_qs(m)).data)["items"][0]
-    assert "/i/custom/" in mf["assets"][0]["url"] and anon.get(path_qs(mf["assets"][0]["url"])).status_code == 200
-assert "Pick an .ipa" in c.post("/sign", data={"url": "file:///etc/passwd"}).data.decode()
-assert not list((tmp / "signed" / "custom").glob(".*"))  # temp files cleaned up
-# Changes tab: installs are recorded per phone, and a newer version then shows as an upgrade with a badge
-html = c.get("/").data
-assert b"id=t-changes" in html and b"Available Updates" not in html and b"from SideDrop" in html
+assert c.post("/sign", data={"url": "https://gh/t.ipa"}).status_code in (404, 405)
+(tmp / "signed" / "custom").mkdir(); (tmp / "signed" / "custom" / "0123abcd.ipa").write_bytes(b"x")
+A.drop_old_custom_signs(); assert not (tmp / "signed" / "custom").exists()
+# F22: Home's update rows. Installs are recorded per phone; a newer signed version then turns that app's row into an update
+# (UPDATE in place of GET, "Update available" beside the version) and the Apps tab's badge counts them
+def apps_tab(h): return re.search(r"<section class=page id=t-apps .*?</section>", h, re.S).group(0)
+def badge(h): return re.search(r"<span class=badge id=badge( hidden)?>(\d+)</span>", h).groups()
+html = c.get("/").data.decode()
+assert "Update available" not in html and 'class="row up"' not in html and badge(html) == (" hidden", "0")
+assert re.search(r'href=#apps><svg[^>]*>.*?</svg>Apps<span class=badge id=badge hidden>0</span></a>', html), "the badge sits on the Apps tab"
 assert A.app.test_client().post("/installed", data={"name": "Demo"}).status_code == 403
 assert c.post("/installed", data={"name": "../x"}).status_code == 403
-assert c.post("/installed", data={"name": "Demo"}).status_code == 204 and b"Available Updates" not in c.get("/").data
-assert b'class="get done" data-app="Demo" aria-expanded=false onclick="steps(this)">INSTALLED<' in c.get("/").data
+assert c.post("/installed", data={"name": "Demo"}).status_code == 204 and "Update available" not in c.get("/").data.decode()
+html = c.get("/").data.decode()
+assert 'class="get done" data-app="Demo" aria-expanded=false onclick="steps(this)">INSTALLED<' in html and badge(html) == (" hidden", "0")
 with zipfile.ZipFile(tmp / "apps" / "Demo.ipa", "w") as z:
     z.writestr("Payload/Demo.app/Info.plist", plistlib.dumps({"CFBundleIdentifier": "com.me.demo", "CFBundleVersion": "8", "CFBundleShortVersionString": "1.3", "CFBundleName": "Demo"}))
 os.utime(tmp / "apps" / "Demo.ipa", (time.time() + 5, time.time() + 5))
 html = c.get("/").data.decode()
-assert "Available Updates" in html and ">UPDATE</a>" in html and re.search(r"id=badge>1<", html), "upgrade offered"
-assert 'data-app="Demo" aria-expanded=false onclick="steps(this)">UPDATE<' in html, "Apps list says UPDATE for an older install"
+t_apps = apps_tab(html)
+assert re.search(r'<div class="row up">.*?Demo<small>Version 1\.3<span class=upn> · Update available</span>', t_apps, re.S), "the row says so, with the new version"
+assert 'data-app="Demo" aria-expanded=false onclick="steps(this)">UPDATE<' in t_apps, "UPDATE in place of GET"
+assert t_apps.count('class="row up"') == 1 and badge(html) == (None, "1"), "the Apps tab's badge counts it"
+assert "Update available" not in A.app.test_client().get("/?password=hunter2-but-longer", follow_redirects=True).data.decode(), "another phone, which never installed Demo, has no update"
+assert c.post("/installed", data={"name": "Demo"}).status_code == 204
+html = c.get("/").data.decode()
+assert "Update available" not in html and badge(html) == (" hidden", "0") and ">INSTALLED<" in apps_tab(html), "installed: the update is gone"
+# an update to an app that doesn't bring files: its row's link says UPDATE, and arming it still installs (data-arm keeps UPDATE)
+def signed_plain(short, build):  # written as signed (the stubbed zsign always outputs Demo)
+    with zipfile.ZipFile(tmp / "signed" / "Plain.ipa", "w") as z:
+        z.writestr("Payload/Plain.app/Info.plist", plistlib.dumps({"CFBundleIdentifier": "com.me.plain", "CFBundleVersion": build, "CFBundleShortVersionString": short, "CFBundleName": "Plain"}))
+signed_plain("1.0", "1"); assert c.post("/installed", data={"name": "Plain"}).status_code == 204
+signed_plain("1.1", "2")
+html = c.get("/").data.decode()
+assert re.search(r'<a class="get" data-arm=UPDATE data-app="Plain" aria-label="Install Plain" href="itms-services://[^"]+" onclick="return arm\(this\)">UPDATE</a>', html)
+assert "Plain<small>Version 1.1<span class=upn> · Update available</span>" in html and badge(html) == (None, "1")
+(tmp / "signed" / "Plain.ipa").unlink()
+# the page's script: the badge counts Home's update rows, and an install tap takes its row off the count
+assert "querySelectorAll(\"#t-apps .row.up\").length" in html and 'r.classList.remove("up")' in html
 # admin: separate password, CSRF, lockout; lists devices and disables one
 plain = A.app.test_client()
 assert plain.get("/admin").status_code == 302 and plain.post("/admin/device").status_code == 403
@@ -501,7 +521,7 @@ friend = A.app.test_client(); friend.get("/?password=hunter2-but-longer")
 html = friend.get("/").data.decode()
 assert "notes v2.txt" in html and "href=/admin" not in html, "a friend sees the file and not Manage"
 # F14: a file brings the Files tab back (before Settings), with the file's row there and not on the Apps tab
-assert re.findall(r"<a href=#(\w+)><svg", html) == ["apps", "changes", "ifizbox", "files", "settings"]
+assert re.findall(r"<a href=#(\w+)><svg", html) == ["apps", "ifizbox", "files", "settings"]
 t_apps, t_files = (re.search(rf"<section class=page id=t-{t} .*?</section>", html, re.S).group(0) for t in ("apps", "files"))
 assert "notes v2.txt" in t_files and "notes v2.txt" not in t_apps and "Files</h3>" not in t_apps
 dl = re.search(r'href="(https://x\.test/f/notes%20v2\.txt\?[^"]+)"', html).group(1).replace("&amp;", "&")
@@ -638,7 +658,7 @@ def release(short, build):
     os.utime(tmp / "apps" / "Demo.ipa", (time.time() + 10, time.time() + 10))
     A.resign(force=True)
 release("1.4", "9"); A.notify_upgrades(); A.notify_upgrades()
-assert sent == [("https://push.example/1", {"title": "Update Available", "body": "Demo 1.4 is available.", "url": "/#changes"})], sent
+assert sent == [("https://push.example/1", {"title": "Update Available", "body": "Demo 1.4 is available.", "url": "/#apps"})], sent  # an Update Alert opens Home's Apps tab
 def gone(*a, **k): raise WebPushException("gone", response=type("R", (), {"status_code": 410})())
 A.webpush = gone
 release("1.5", "10"); A.notify_upgrades()

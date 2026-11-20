@@ -88,8 +88,8 @@ run (nginx, Nginx Proxy Manager, Traefik) works the same way: send the domain to
 and long requests: IPAs can be hundreds of MB, and the first signing can take minutes.
 
 **Cloudflare Tunnel (no open ports).** In Cloudflare Zero Trust, make a tunnel, run its `cloudflared` on the server,
-and route a hostname to `http://localhost:8080`. Cloudflare's free plan caps uploads at 100 MB, so big IPAs have to
-go into `data/apps/` or come from a source rather than through **Sign your own IPA**.
+and route a hostname to `http://localhost:8080`. Cloudflare's free plan caps uploads at 100 MB, so a big file for
+Manage → Files for Friends has to go straight into `data/files/` instead.
 
 **Tailscale Funnel (no domain).** `tailscale funnel 8080` gives you an `https://<machine>.<tailnet>.ts.net`
 address that anyone can open.
