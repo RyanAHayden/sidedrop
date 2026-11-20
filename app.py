@@ -1270,6 +1270,8 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class="g grp sg" id=sHome><a class="row mrow" href=/home-screen data-push>{{ row_icon('homeScreen') }}<div>Add to Home Screen</div></a></div>
 <p class=ftr>Open SideDrop from your Home Screen like an app.</p>
 <div class="g grp sg" id=sHelp><a class="row mrow" href=/help data-push id=helpRow>{{ row_icon('help') }}<div>Help</div></a></div>
+{# B19: a non-admin's way in: /admin asks for the admin password (admin_fails rate-limits it); not for an invite guest, whom /admin refuses #}
+{% if admin_on and not is_admin and not guest %}<div class="g grp sg" id=sAdmin><a class="row mrow" href=/admin data-push id=adminRow>{{ row_icon('lock') }}<div>Admin Login</div></a></div>{% endif %}
 {% if not guest %}<a class="b grey out" href=/logout>Sign Out</a>{% endif %}{# F31: an invite guest has no password to sign back in with #}
 <script>/* F26: the Theme row's detail, the theme showing now (THEME_BOOT's themeState); again after Settings > Theme pops, or the iPhone flips */
 const THEME_NAMES={{ theme_names|tojson }};

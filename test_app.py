@@ -120,7 +120,7 @@ assert b"for your own IPAs and other sources, use <a href=/#ifizbox" in hp and b
 assert b"sidedrop" not in re.sub(rb"sidedrop\.udid|/static/[\w.]+", b"", hp), re.findall(rb".{40}sidedrop.{40}", hp)
 assert b'href="itms-services' not in c.get("/?enrolled=1").data and b'href="itms-services' not in c.get("/?enrolled=00008130-AAAA.x").data
 html = c.get(r.location.replace("https://x.test", ""), base_url="https://localhost").data
-assert b"Every app on the Apps tab can install on this iPhone." in html and b"href=/admin" not in html and b"/static/sdp1.jpg" not in html  # Manage is the admin's only; F26: SDP only in Help
+assert b"Every app on the Apps tab can install on this iPhone." in html and b"href=/admin data-push>" not in html and b"/static/sdp1.jpg" not in html  # Manage is the admin's only; F26: SDP only in Help
 assert b"id=sManage" not in html and b"<div>Manage</div>" not in html  # F26: the Manage row is the admin's only
 assert b'class="tile reg"' in html and b"id=setupT" not in html and b"id=setup " not in html  # registered: the green tile
 # B6: the Registered tile pushes This iPhone over Apps (no jump to Settings); Help's tile pushes /help over the tab showing
@@ -375,7 +375,10 @@ assert '<a class="row mrow" href=/theme data-push>' + ico("theme") + "<div>Theme
 assert ico("notifications") + "<div>Update Alerts</div>" in settings_tab
 # F26, the user's concept: the groups in order (This iPhone; Theme + Update Alerts; Add to Home Screen; Help), each footer under its group,
 # then Sign Out and the version line; no iFizBox row (the tab bar has it), no About, no 'iPhones used' (Manage > iPhones has it)
-assert re.findall(r'<div class="g[^"]*" id=(s\w+)>', settings_tab) == ["sThis", "sTheme", "sHome", "sHelp"]
+assert re.findall(r'<div class="g[^"]*" id=(s\w+)>', settings_tab) == ["sThis", "sTheme", "sHome", "sHelp", "sAdmin"]
+# B19: a signed-in non-admin's way in to Admin Settings: an Admin Login row (after Help) that pushes /admin's password prompt
+assert '<a class="row mrow" href=/admin data-push id=adminRow>' + ico("lock") + "<div>Admin Login</div></a>" in settings_tab
+assert settings_tab.index("id=sHelp") < settings_tab.index("id=sAdmin") < settings_tab.index("Sign Out")
 assert ico("status") + "<div>Status</div><span class=val>Registered</span>" in settings_tab
 for gone in (">iFizBox<", "#ifizbox", "About", "iPhones used", ico("slots"), "Stolen Device", "<details", "class=tile", "class=pair", "g split"):
     assert gone not in settings_tab, gone
@@ -646,6 +649,7 @@ assert re.findall(r"<h3 class=hdr>([^<]+)</h3>", st) == ["Admin Settings", "Pref
 assert re.findall(r"<div>(\w[\w ]*)</div>", st[st.index("id=sManage"):st.index("id=sTheme")]) == ["Manage", "Share"]
 assert '<a class="row mrow" href=/admin/invites data-push id=shareRow>' + str(A.row_icon("share")) + "<div>Share</div></a>" in st
 assert st.index("Admin Settings") < st.index("id=sManage") < st.index("Preferences") < st.index("id=sTheme")
+assert "Admin Login" not in st and "id=adminRow" not in st  # B19: an admin keeps Admin Settings, no login row
 assert A.tile_svg("general").startswith('<svg xmlns="http://www.w3.org/2000/svg" width="29" height="29"') and 'fill="#8c9097"' in A.tile_svg("general")
 t0 = time.monotonic(); html = c.get("/admin/iphones").data.decode()  # nothing saved yet: the loading row, and the refresh's script
 assert time.monotonic() - t0 < 1 and "Loading from Apple…" in html and "/admin/devices.json" in html and "No iPhones" not in html
@@ -763,7 +767,7 @@ assert "upAdd(this)" in html and "window.upQ" in html and "upload.onprogress" in
 (tmp / "files" / "disc.iso").unlink()
 friend = A.app.test_client(); friend.get("/?password=hunter2-but-longer")
 html = friend.get("/").data.decode()
-assert "notes v2.txt" in html and "href=/admin" not in html, "a friend sees the file and not Manage"
+assert "notes v2.txt" in html and "href=/admin data-push>" not in html, "a friend sees the file and not Manage"
 # F14: a file brings the Files tab back (before Settings), with the file's row there and not on the Apps tab
 assert re.findall(r"<a href=#(\w+)><svg", html) == ["apps", "ifizbox", "files", "settings"]
 t_apps, t_files = (re.search(rf"<section class=page id=t-{t} .*?</section>", html, re.S).group(0) for t in ("apps", "files"))
@@ -1236,6 +1240,7 @@ assert b'placeholder="Your name"' not in guest.get("/").data  # a named invite s
 # F31: the link is a guest's access: no password field anywhere on their pages, and no Sign Out (nothing to sign back in with)
 gh = guest.get("/").data
 assert b"type=password" not in gh and b"action=/login" not in gh and b"href=/logout>Sign Out" not in gh
+assert b"Admin Login" not in gh  # B19: /admin is 403 to a guest, so no login row
 fr = I.app.test_client(); fr.get(join_link()); assert b"href=/logout>Sign Out" in fr.get("/").data  # friends keep Sign Out
 assert b"href=/logout>Sign Out" in boss.get("/").data
 gp = enroll(guest, name="Someone Else")
