@@ -93,40 +93,46 @@ assert calls == [("00008130-AAAA", "Sam script iPhone16,1")]
 # landing back in Safari sets a device cookie (checked against the profile, survives sign-out); forged tokens do nothing
 html = c.get("/").data
 assert b"Set up this iPhone" in html and b"/static/sdp1.jpg" in html and b'href="itms-services' not in html and b"id=ifzb " not in html  # apps locked until registered
-# Apps header: welcome, GitHub | iFizBox, then Help + About and the setup tile, which folds the SDP + Register steps behind it
-assert b"Welcome to SideDrop" in html and b"<title>SideDrop</title>" in html and b"<h1 id=navT>SideDrop</h1>" in html and b"About SideDrop" in html and b"Ryan Hayden (Fizlo)</a>" in html and b"go('ifizbox')" in html and b"id=setupT" in html and b"<div id=setup hidden>" in html
-# F17: the SideDrop name and what it's for, in the head, the header, About, the register step and Help; no lowercase name a person sees
+# Apps header: welcome, GitHub | iFizBox, then Help (F26: no About) and the setup tile, which folds the SDP + Register steps behind it
+assert b"Welcome to SideDrop" in html and b"<title>SideDrop</title>" in html and b"<h1 id=navT>SideDrop</h1>" in html and b"Ryan Hayden (Fizlo)</a>" in html and b"go('ifizbox')" in html and b"id=setupT" in html and b"<div id=setup hidden>" in html
+# F26: the About alert, its nav button and its tiles are gone; Help is a pushed page
+assert b"About" not in html and b"id=about" not in html and b"aboutT" not in html and b'<a class=tile href=/help onclick="return helpOpen()">' in html
+# F17: the SideDrop name and what it's for, in the head, the header, the register step and Help; no lowercase name a person sees
 assert html.count(b"Share an Apple developer account with friends and sideload apps.") == 2 and b"og:site_name content=SideDrop" in html
-assert b"with a friend's Apple developer account.</p>" in html and b"shares one Apple developer account with friends" in html
-assert b"adds your iPhone to the shared developer account" in html and b"id=helpNote>" in html
+assert b"with a friend's Apple developer account.</p>" in html
+assert b"adds your iPhone to the shared developer account" in html
 assert b"sidedrop" not in re.sub(rb"sidedrop\.udid|/static/[\w.]+", b"", html), re.findall(rb".{40}sidedrop.{40}", html)
-assert b">Help</a>" in html and b"</span>About</button></div>" in html and b'class="tile reg"' not in html
-# F22: no Changes tab and no signing your own IPA: nothing links to them, and Settings, Help and About point to iFizBox instead
+assert b">Help</a>" in html and b'class="tile reg"' not in html
+# F22: no Changes tab and no signing your own IPA: nothing links to them, and Help points to iFizBox instead
 for gone in (b"#changes", b"'changes'", b"t-changes", b">Changes<", b"/sign", b"getElementById('sign')", b"Sign IPA", b"Sign your own IPA", b"Choose .ipa File", b"name=ipa"):
     assert gone not in html, gone
-assert b"for your own IPAs and other sources, use iFizBox." in html and b"use <a href=#ifizbox" in html
+hp = c.get("/help").data
+assert b"for your own IPAs and other sources, use <a href=/#ifizbox" in hp and b"signed with a friend's developer certificate" in hp
+assert b"sidedrop" not in re.sub(rb"sidedrop\.udid|/static/[\w.]+", b"", hp), re.findall(rb".{40}sidedrop.{40}", hp)
 assert b'href="itms-services' not in c.get("/?enrolled=1").data and b'href="itms-services' not in c.get("/?enrolled=00008130-AAAA.x").data
 html = c.get(r.location.replace("https://x.test", ""), base_url="https://localhost").data
-assert b"This iPhone is registered" in html and b"href=/admin" not in html and b"/static/sdp1.jpg" in html  # Manage is the admin's only
+assert b"Every app on the Apps tab can install on this iPhone." in html and b"href=/admin" not in html and b"/static/sdp1.jpg" not in html  # Manage is the admin's only; F26: SDP only in Help
+assert b"id=sManage" not in html and b"<div>Manage</div>" not in html  # F26: the Manage row is the admin's only
 assert b'class="tile reg"' in html and b"id=setupT" not in html and b"id=setup " not in html  # registered: the green tile
 assert b"#changes" not in html and b"'changes'" not in html and b"t-changes" not in html and b"/sign" not in html and b"Sign IPA" not in html
 c.get("/logout", base_url="https://localhost"); c.post("/login", data={"password": "hunter2-but-longer"}, base_url="https://localhost")
-assert b"This iPhone is registered" in c.get("/", base_url="https://localhost").data
+assert b"Every app on the Apps tab can install on this iPhone." in c.get("/", base_url="https://localhost").data
 assert A.profile_udids() == {"00008130-AAAA"} and (tmp / "signed" / "Demo.ipa").exists()
-# F15 version lines: the registered iPhone's PRODUCT and the commit on Apps, Settings and in About; unregistered: plain iPhone
+# F15 version lines: the registered iPhone's PRODUCT and the commit at the bottom of Apps and Settings (F26: About is gone); unregistered: plain iPhone
 os.environ["SIDEDROP_COMMIT"] = "9dc9923"; assert A.read_commit() == "9dc9923"; del os.environ["SIDEDROP_COMMIT"]
 A.COMMIT = "9dc9923"
 html = c.get("/", base_url="https://localhost").data.decode()
-assert html.count('<p class=ver data-m="iPhone16,1">iPhone16,1, SideDrop</p><p class="ver vc">9dc9923</p>') == 3, html.count("class=ver")
+assert html.count('<p class=ver data-m="iPhone16,1">iPhone16,1, SideDrop</p><p class="ver vc">9dc9923</p>') == 2, html.count("class=ver")
 apps_tab = html[html.index("id=t-apps"):]; apps_tab = apps_tab[:apps_tab.index("</section>")]
 settings_tab = html[html.index("id=t-settings"):]; settings_tab = settings_tab[:settings_tab.index("</section>")]
-assert "9dc9923" in apps_tab and "9dc9923" in settings_tab and "9dc9923" in html[html.index("id=aboutT"):]
+assert "9dc9923" in apps_tab and "9dc9923" in settings_tab
+assert settings_tab.index(">Sign Out</a>") < settings_tab.index("class=ver")  # Sign Out, then the version line
 assert "navigator.language" in html and "like Mac OS X" in html
-html = A.app.test_client().get("/?enrolled=" + A.device_token("00008130-AAAA")).data.decode()  # signed out: About still has it
+html = A.app.test_client().get("/?enrolled=" + A.device_token("00008130-AAAA")).data.decode()  # signed out: the sign-in page has it
 assert 'data-m="iPhone16,1"' in html and "9dc9923" in html
 anon = A.app.test_client(); anon.post("/login", data={"password": "hunter2-but-longer"})
 html = anon.get("/").data.decode()
-assert html.count('<p class=ver data-m="iPhone">iPhone, SideDrop</p>') == 3 and "iPhone16,1" not in html
+assert html.count('<p class=ver data-m="iPhone">iPhone, SideDrop</p>') == 2 and "iPhone16,1" not in html
 (tmp / "products.json").unlink()  # registered before F15: the PRODUCT in Apple's device name, else its model
 A.save_json(A.DEVICES, {"at": 1, "data": [{"attributes": {"udid": "00008130-AAAA", "name": "Sam iPhone15,2", "model": "iPhone 14 Pro"}}]})
 assert A.device_model("00008130-AAAA") == "iPhone15,2"
@@ -152,14 +158,14 @@ mf = plistlib.loads(anon.get(path_qs(m)).data)["items"][0]
 assert mf["metadata"] == {"bundle-identifier": "com.me.demo", "bundle-version": "7", "kind": "software", "title": "Demo"}
 assert anon.get(path_qs(mf["assets"][0]["url"])).status_code == 200
 
-# first install tap: a one-time splash (SDP, then Developer Mode, Help's screenshots) holds the tap, then carries it on; remembered per phone
+# first install tap: a one-time splash (Developer Mode, Help's screenshots; F26: no Stolen Device Protection) holds the tap, then carries it on; remembered per phone
 fr = html.split("id=firstRun")
-assert len(fr) == 2 and "hidden data-due=1" in fr[1][:40] and "/static/sdp1.jpg" in fr[1] and "/static/dev3.jpg" in fr[1] and "firstRunGo(1)" in fr[1]
-assert "e.target.closest('a[href^=\"itms-services:\"],#ifzb')" in html and html.count("/static/dev1.jpg") == 2  # catches every install link
+assert len(fr) == 2 and "hidden data-due=1" in fr[1][:40] and "/static/sdp1.jpg" not in fr[1] and "Stolen Device" not in fr[1] and "/static/dev3.jpg" in fr[1] and "firstRunGo(1)" in fr[1]
+assert "e.target.closest('a[href^=\"itms-services:\"],#ifzb')" in html and html.count("/static/dev1.jpg") == 1  # catches every install link; Developer Mode's steps also in Help (its own page)
 assert A.app.test_client().post("/first-run").status_code == 403
 assert c.post("/first-run").status_code == 204 and list(A.load_json(A.FIRST_RUN)) == ["00008130-AAAA"]
 html = c.get("/").data.decode()
-assert "id=firstRun" not in html and html.count("/static/dev1.jpg") == 1 and 'href="itms-services' in html  # second tap: straight to iOS
+assert "id=firstRun" not in html and html.count("/static/dev1.jpg") == 0 and 'href="itms-services' in html  # second tap: straight to iOS (F26: Help's copy is on /help)
 
 # install tracking for the install page: the manifest and app carry the page's token (outside the signature), the page polls it
 tk = "ab" * 12
@@ -331,12 +337,37 @@ assert "darkSw" not in html and "data-tk=" not in html and "Display" not in html
 # push their checklists (the tone's default ticked until themeMarks reads the stored choice) with a preview under them
 settings_tab = html[html.index("id=t-settings"):]; settings_tab = settings_tab[:settings_tab.index("</section>")]
 ico = lambda name: str(A.row_icon(name))  # str: Markup + str would escape the str
-assert '<a class="row mrow" href=/theme data-push>' + ico("theme") + "<div>Theme</div></a>" in settings_tab
-assert ico("notifications") + "<div>Update Alerts</div>" in settings_tab and ico("help") + "Help" in settings_tab
-for name in ("status", "slots", "devMode", "homeScreen"):  # (calendar: Apps work until, only with the profile's expiry, not in this fake one)
-    assert ico(name) in settings_tab, name
-order = [settings_tab.index(s) for s in ("<b>Status</b>", ">iFizBox<", ">Theme<", ">Update Alerts<", ">About<", "id=help", ">Sign out<")]
-assert order == sorted(order), order  # this iPhone first, then Theme and Notifications, then Help and About, Sign out last
+assert '<a class="row mrow" href=/theme data-push>' + ico("theme") + "<div>Theme</div><span class=val id=themeV>Classic</span></a>" in settings_tab
+assert ico("notifications") + "<div>Update Alerts</div>" in settings_tab
+# F26, the user's concept: the groups in order (This iPhone; Theme + Update Alerts; Add to Home Screen; Help), each footer under its group,
+# then Sign Out and the version line; no iFizBox row (the tab bar has it), no About, no 'iPhones used' (Manage > iPhones has it)
+assert re.findall(r'<div class="g[^"]*" id=(s\w+)>', settings_tab) == ["sThis", "sTheme", "sHome", "sHelp"]
+assert ico("status") + "<div>Status</div><span class=val>Registered</span>" in settings_tab
+for gone in (">iFizBox<", "#ifizbox", "About", "iPhones used", ico("slots"), "Stolen Device", "<details", "class=tile", "class=pair", "g split"):
+    assert gone not in settings_tab, gone
+order = [settings_tab.index(s) for s in ("<h3 class=hdr>This iPhone</h3>", "<div>Status</div>", "Every app on the Apps tab can install on this iPhone.</p>",
+                                         "<div>Theme</div>", "<div>Update Alerts</div>", "Tells you when an app you installed has a new version.</p>",
+                                         '<a class="row mrow" href=/home-screen data-push>' + ico("homeScreen") + "<div>Add to Home Screen</div></a>",
+                                         "Open SideDrop from your Home Screen like an app.</p>",
+                                         '<a class="row mrow" href=/help data-push id=helpRow>' + ico("help") + "<div>Help</div></a>",
+                                         '<a class="b grey out" href=/logout>Sign Out</a>', "class=ver")]
+assert order == sorted(order), order
+assert '"classic": "Classic"' in settings_tab and "function themeVal()" in settings_tab  # the Theme row's detail follows the theme showing
+# Help (pushed, back Settings): Problems (Register iPhone Didn't Work with the SDP steps, An App Won't Install, Developer Mode as today), then
+# Getting Started (Add to Home Screen, Notifications in Apps, More Apps with iFizBox); Stolen Device Protection is only under the first
+r = c.get("/help", base_url="https://localhost"); hp = r.data.decode()
+assert r.status_code == 200 and "<h1>Help</h1>" in hp and '<a class="bar back" href="/#settings"' in hp and ">Settings</a>" in hp
+assert re.findall(r"<h3 class=hdr>([^<]+)</h3>", hp) == ["Problems", "Getting Started"]
+assert re.findall(r"<details id=(\w+)><summary>.*?<span>([^<]+)</span>", hp) == [
+    ("register", "Register iPhone Didn't Work"), ("install", "An App Won't Install"), ("dev", "Turn on Developer Mode"),
+    ("a2hs", "Add to Home Screen"), ("notify", "Notifications in Apps"), ("more", "More Apps with iFizBox")], re.findall(r"<details id=(\w+)><summary>.*?<span>([^<]+)</span>", hp)
+reg = hp[hp.index("<details id=register>"):hp.index("<details id=install>")]
+assert "Tap <b>Register iPhone</b> again, then <b>Allow</b>" in reg and "<b>Profile Downloaded</b>" in reg and "<b>Install</b>" in reg
+assert "wait timer" in reg and "/static/sdp1.jpg" in reg and "at home" in reg and hp.count("/static/sdp1.jpg") == 1
+assert "/static/dev3.jpg" in hp[hp.index("<details id=dev>"):] and "class=shot" in hp and ".shot{" in hp  # its own copy of the steps' look
+assert c.get("/home-screen", base_url="https://localhost").status_code == 200 and "<h1>Add to Home Screen</h1>" in c.get("/home-screen", base_url="https://localhost").data.decode()
+assert A.app.test_client().get("/help").status_code == 302 and A.app.test_client().get("/home-screen").status_code == 302  # signed out: the sign-in page
+assert "function helpOpen(id)" in html and 'function devDone(show){devAsk.hidden=true;if(show)helpOpen("dev")' in html  # Show Me opens Help at Developer Mode
 assert A.ROW_ICONS["theme"][0] == "#4650b4"  # rowicons.js ROW_ICONS.theme: indigo "contrast"
 r = c.get("/theme", base_url="https://localhost"); tp = r.data.decode()
 assert r.status_code == 200 and "<h1>Theme</h1>" in tp and '<a class="bar back" href="/#settings"' in tp and ">Settings</a>" in tp
@@ -483,7 +514,22 @@ t0 = time.monotonic(); html = c.get("/admin").data.decode()
 assert time.monotonic() - t0 < 1, "Manage waited on Apple"
 for p in ("iphones", "signing", "passwords", "invites", "files", "sources", "ifizbox"):
     assert f"href=/admin/{p} data-push" in html, p
-assert html.count("<img class=rico src=\"data:image/svg+xml,%3Csvg") == 7 and "Files for Friends" in html and "App Sources" in html
+assert html.count("<img class=rico src=\"data:image/svg+xml,%3Csvg") == 8 and "Files for Friends" in html and "App Sources" in html
+# F26 Manage: Friends (iPhones N of 100, Invite Friends, Passwords), Signing (Certificate, Profile), Apps (App Sources, Files for Friends,
+# iFizBox), each with its footer; the rows push the same pages as before
+assert re.findall(r"<h3 class=hdr>(\w+)</h3>", html) == ["Friends", "Signing", "Apps"] and re.findall(r'class="g mg2" id=(m\w+)>', html) == ["mFriends", "mSigning", "mApps"]
+grp = lambda g: html[html.index(f"id={g}>"):].split("<p class=ftr>")[0]
+assert re.findall(r"<div>(\w[\w ]*)", grp("mFriends")) == ["iPhones", "Invite Friends", "Passwords"] and "<div>iPhones</div><span class=val>1 of 100</span>" in grp("mFriends")
+assert re.findall(r"<div>(\w[\w ]*)", grp("mSigning")) == ["Certificate", "Profile"] and "<small>Ad Hoc" in grp("mSigning") and "capabilit" in grp("mSigning")
+assert "<span class=val>1 iPhone</span>" in grp("mSigning") and grp("mSigning").count("href=/admin/signing data-push") == 2
+assert re.findall(r"<div>(\w[\w ]*)", grp("mApps")) == ["App Sources", "Files for Friends", "iFizBox"] and "<span class=val>0</span>" in grp("mApps")
+for ftr in ("Who can sign in, and the links that let a friend register one iPhone.", "Made again by itself when an iPhone registers. Apps keep their own bundle IDs and notifications.",
+            "The apps on the Apps tab come from these sources, signed for every registered iPhone."):
+    assert f"<p class=ftr>{ftr}</p>" in html, ftr
+st = (h := c.get("/").data.decode())[h.index("id=t-settings"):]; st = st[:st.index("</section>")]  # the admin's Settings: the Manage row, second
+assert re.findall(r'<div class="g[^"]*" id=(s\w+)>', st) == ["sThis", "sManage", "sTheme", "sHome", "sHelp"]
+assert '<a class="row mrow" href=/admin data-push>' + str(A.row_icon("manage")) + "<div>Manage</div><span class=val>1 iPhone</span></a>" in st
+assert "<p class=ftr>Only you see this: you run this SideDrop.</p>" in st and A.ROW_ICONS["manage"][0] == "#f08b1d"
 assert A.tile_svg("general").startswith('<svg xmlns="http://www.w3.org/2000/svg" width="29" height="29"') and 'fill="#8c9097"' in A.tile_svg("general")
 t0 = time.monotonic(); html = c.get("/admin/iphones").data.decode()  # nothing saved yet: the loading row, and the refresh's script
 assert time.monotonic() - t0 < 1 and "Loading from Apple…" in html and "/admin/devices.json" in html and "No iPhones" not in html
@@ -500,7 +546,7 @@ assert "Loading from Apple" not in j["html"] and "Delete" not in j["html"] and A
 A.asc = down  # the saved list shows at once, Apple down or not, under a loading row that the refresh replaces
 html = c.get("/admin/iphones").data.decode()
 assert "Sam &lt;b&gt;" in html and "Loading from Apple…" in html and 'data-id="D1"' in html and " checked " in html
-assert "<span class=val>1</span>" in c.get("/admin").data.decode()  # the menu's count is the saved list's
+assert "<div>iPhones</div><span class=val>1 of 100</span>" in c.get("/admin").data.decode()  # the menu's count is the saved list's
 html = c.get("/admin/iphone/D1").data.decode()
 assert "iPhone 15" in html and "Nov 3, 2026" in html and "Last Used</div><span class=val>Today · this iPhone" in html and "00008130-AAAA" in html and "this iPhone" in html
 assert "Rename" in html and b"isn't in the saved list" in c.get("/admin/iphone/NOPE").data
@@ -667,6 +713,16 @@ A.PROFILE.write_bytes(plistlib.dumps({"DeveloperCertificates": [crt.public_bytes
 assert "another certificate" in A.cert_account_problems()[0][1]
 A.PROFILE.write_bytes(plistlib.dumps({"DeveloperCertificates": [mine.public_bytes(S.Encoding.DER)]}))
 assert A.cert_account_problems() == []
+# F26: no problems, so Manage's banner is the green one: the certificate's kind, the App ID, and Push when the profile has it
+csc = A.cert_status_cached; A.cert_status_cached = lambda: []
+A.PROFILE.write_bytes(plistlib.dumps({"DeveloperCertificates": [mine.public_bytes(S.Encoding.DER)], "ProvisionedDevices": ["a", "b"],
+                                      "Entitlements": {"application-identifier": "TEAM.com.me.app", "aps-environment": "production", "com.apple.security.application-groups": []}}))
+html = boss.get("/admin").data.decode()
+assert '<a class="cw ok" href=/admin/signing data-push><div><p>Signing works: Apple Distribution, App ID com.me.app with Push</p>' in html, html[:3000]
+assert "<small>Ad Hoc · Push · 2 capabilities</small>" in html and "<span class=val>2 iPhones</span>" in html and "<small>Apple Distribution: Sam Test (TEAM123456)</small>" in html
+A.PROFILE.write_bytes(plistlib.dumps({"DeveloperCertificates": [mine.public_bytes(S.Encoding.DER)]}))
+assert "Signing works: Apple Distribution, App ID com.me.app</p>" in boss.get("/admin").data.decode()  # no Push in the profile, none claimed
+A.cert_status_cached = csc
 A.PROFILE.write_bytes(prof_before) if prof_before is not None else A.PROFILE.unlink()
 # revoked: Apple's OCSP responder (stubbed) says so, from the issuer fetched off the certificate's AIA
 from cryptography.x509 import ocsp as O

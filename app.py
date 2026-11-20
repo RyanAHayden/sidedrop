@@ -830,13 +830,8 @@ html.reloading #scr{padding-bottom:calc(116px + env(safe-area-inset-bottom))}
 <script>/* a pushed page: tapping back pops; iOS's own edge swipe (Safari and the home-screen app) does the same. history.back() keeps the previous page's scroll, like a native pop; first visits (no "/" behind us) follow the link */
 function goBack(h){try{if(new URL(document.referrer).pathname=="/"&&history.length>1){history.back();return false}}catch(e){}location.href=h;return false}
 </script>
-{% else %}<header class=nav><button type=button class=bar onclick="about.hidden=false;about.querySelector('.ok').focus()">About</button><h1 id=navT>SideDrop</h1>
+{% else %}<header class=nav><span></span><h1 id=navT>SideDrop</h1>{# F26: no About button or alert; the version line stays at the bottom of Apps and Settings #}
 <button type=button class="bar r" onclick="reloadData()">Reload</button></header>{% endif %}
-<div class=scrim id=about hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=aboutT>
-<h3 id=aboutT>About SideDrop</h3><p>SideDrop shares one Apple developer account with friends, so everyone can sideload apps. Register your iPhone once in Safari, then tap GET. It serves the apps listed here; for your own IPAs and other sources, use iFizBox.</p>
-{% if stats %}<p>{{ stats[0] }} of 100 iPhones registered.{% if stats[1] %} Apps keep working until {{ stats[1].strftime('%B %-d, %Y') }}.{% endif %}</p>{% endif %}
-{{ vfoot }}
-<div class=abtns><button type=button onclick="about.hidden=true;let d=document.getElementById('dev');if(d){go('settings');d.open=true;setTimeout(()=>goTo(d),50)}">Help</button><button type=button class=ok onclick="about.hidden=true">OK</button></div></div></div>
 <script>/* alerts are modal like UIAlertView: only their buttons close them */
 /* #scr is the scroller; scrollIntoView would also scroll the locked <html> and drag the fixed nav down */
 /* clamp to the real bottom: iOS lets a smooth scroll on a non-root scroller overshoot past the end, then snaps back on the next touch */
@@ -907,7 +902,8 @@ def home():
 <label>Password<input type=password name=password autofocus required></label>
 {% if err %}<p class=err>Wrong password.</p>{% endif %}<button>Sign in</button></form>
 {% if first %}<p class=ftr>New server: sign in with the default password, <b>{{ first }}</b>, to set it up.</p>
-{% else %}<p class=ftr>SideDrop shares an Apple developer account with friends so they can sideload apps. The friend who sent you the link has the password.</p>{% endif %}""",
+{% else %}<p class=ftr>SideDrop shares an Apple developer account with friends so they can sideload apps. The friend who sent you the link has the password.</p>{% endif %}
+{{ vfoot }}""",
                     err=request.args.get("err"), first=needs_setup() and DEFAULT_PASSWORD)
     tok = request.args.get("enrolled") or request.cookies.get("device", "")  # ?enrolled= is the 301 after the profile install
     enrolled = token_udid(tok) in profile_udids()
@@ -943,7 +939,7 @@ def home():
 .hd>div{flex:1;display:flex;justify-content:center;min-width:0} .hd h2{font-size:21px;font-weight:400;line-height:26px;text-shadow:var(--emboss)}
 .hd p{margin:0;font-size:17px;line-height:22px;text-shadow:var(--emboss)} .hd p a{font-weight:700;color:#586c90;text-shadow:0 1px 0 #fff}
 .hx{display:flex;flex-direction:column;gap:10px;margin:14px 0 0} .hx .tile{min-height:43px;padding:0 10px;gap:9px;font-size:17px;line-height:1.2;border:1px solid #999;border-radius:8px}
-.hx .hp,.hx .hw{display:grid;grid-template-columns:1fr 1fr} .hx .hw{gap:9px}
+.hx .hp,.hx .hw{display:grid;grid-template-columns:1fr 1fr} .hx .hw{gap:9px} .hx .hw:has(>:only-child){grid-template-columns:1fr}  /* F26: a lone tile (Help) spans the row */
 .hx .hp{border:1px solid #999;border-radius:8px;overflow:hidden} .hx .hp .tile{background:none;border:0;border-radius:0} .hx .hp .tile+.tile{border-left:1px solid #999}
 .hx .hw .tile{background:#fff} .hx .tile.reg{background:#eefff0} .hx .tile.todo{background:#fff8e1;border-color:#c9a74a}
 .hx .tile small{display:block;font-size:13px;font-weight:400} .hx .hdt{margin-left:auto;font-weight:400;color:#7f7f7f} .hx .tile:has(.hdt):after{margin-left:8px}
@@ -1000,6 +996,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .nudge{animation:nudge .45s} @keyframes nudge{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
 /* Settings tab: Cydia-style rows */
 .green{background:#e9f8e4} .kv{display:flex;justify-content:space-between;gap:10px;padding:11px 12px;border-top:1px solid #d6e6cf} .kv span{color:var(--acc);text-align:right}
+.sg .row>.val{flex:none;max-width:60%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:400;color:var(--acc)}  /* F26: a row's detail, UITableViewCellStyleValue1 */
 .split{display:grid;grid-template-columns:1fr 1fr;margin-top:12px} .pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
 .tile{display:flex;align-items:center;gap:9px;min-height:50px;padding:8px 10px;box-sizing:border-box;font-weight:700;color:var(--text);background:var(--table);cursor:pointer;text-align:left;border:0;border-radius:0;box-shadow:none;text-shadow:none;line-height:1.35}
 .split .tile+.tile{border-left:1px solid var(--sep)} .pair .tile{border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 0 rgba(255,255,255,.8)}
@@ -1068,7 +1065,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 .lscroll{position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;scrollbar-width:none;
  padding:calc(56px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right),(100% - 30rem)/2) 20px max(10px,env(safe-area-inset-left),(100% - 30rem)/2)}
 .lscroll>.page{min-height:calc(100% + 1px)} html.reloading .lscroll{padding-bottom:64px}  /* the reload bar over a pushed page: its last row still scrolls clear */
-/* first install tap: a one-time sheet (SDP, then Developer Mode) over everything, sliding up like the install page; its screenshots are Help's */
+/* first install tap: a one-time sheet (Developer Mode; F26 took SDP out) over everything, sliding up like the install page; its screenshots are Help's */
 .fl{position:fixed;inset:0;z-index:25;background:var(--pin);background-color:var(--ground);animation:conup .35s cubic-bezier(.36,.66,.04,1)} .fl[hidden]{display:none}
 .fl .nav{position:absolute;z-index:1} .fl .c>.shot{margin:0} .fl .c>.shot+.shot{margin-top:12px} .fl .lead{margin:0 4px 12px;font-size:15px}
 .shade{position:fixed;inset:0;z-index:6;background:#000;opacity:0;pointer-events:none}
@@ -1084,21 +1081,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <ol id=next hidden><li>Tap <b>Allow</b>, then <b>Close</b>.</li><li>Open the <b>Settings</b> app.</li>
 <li>Tap <b>Profile Downloaded</b> near the top.</li><li>Tap <b>Install</b>, enter your passcode, tap <b>Install</b> again.</li>
 <li>You'll land back here automatically, registered.</li></ol>{% endset %}
-{% set sdp_steps %}<figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Face ID &amp; Passcode</b></span></figcaption>
-<img src=/static/sdp1.jpg alt="Settings with Face ID and Passcode circled" width=640 height=277></figure>
-<figure class=shot><figcaption><span class=num>b</span><span>Tap <b>Stolen Device Protection</b></span></figcaption>
-<img src=/static/sdp2.jpg alt="The Stolen Device Protection row circled" width=640 height=167></figure>
-<figure class=shot><figcaption><span class=num>c</span><span>Turn it <b>off</b></span></figcaption>
-<img src=/static/sdp3.jpg alt="The Stolen Device Protection switch turned off, circled" width=640 height=291></figure>
-<div class=warn><span aria-hidden=true>⏳</span><div>Asked to wait an hour? Do this at home, where there's no wait.</div></div>
-{% endset %}
-{% set dev_steps %}<figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Privacy &amp; Security</b></span></figcaption>
-<img src=/static/dev1.jpg alt="Settings with Privacy and Security circled" width=640 height=243></figure>
-<figure class=shot><figcaption><span class=num>b</span><span>Scroll down, tap <b>Developer Mode</b></span></figcaption>
-<img src=/static/dev2.jpg alt="The Developer Mode row circled" width=640 height=215></figure>
-<figure class=shot><figcaption><span class=num>c</span><span>Turn it <b>on</b>, tap <b>Restart</b>, then <b>Turn On</b> after the restart</span></figcaption>
-<img src=/static/dev3.jpg alt="The Developer Mode switch turned on, circled" width=640 height=305></figure>
-<div class=warn><span aria-hidden=true>💡</span><div>Don't see it? Install an app first, then look again.</div></div>{% endset %}
+{# sdp_steps, dev_steps and a2hs_steps: Jinja globals (F26, SDP_STEPS etc. in app.py), shared with the Help page #}
 {% macro install(a) %}{% if not enrolled %}<a class=get aria-label="Register first" href=#apps onclick="return nudge()">🔒</a>
 {% else %}{% set lbl = 'GET' if a.name not in mine else 'INSTALLED' if mine[a.name] == a.vkey else 'UPDATE' %}
 {% set cls = ' done' if lbl == 'INSTALLED' else ' upd' if lbl == 'UPDATE' else '' %}
@@ -1131,8 +1114,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <div class=hx><div class=hp>
 <a class=tile href="https://github.com/RyanAHayden"><span class=tic style="background:#333"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/></svg></span>GitHub</a>
 <a class=tile href=#ifizbox onclick="go('ifizbox');return false"><span class=tic style="background:#1a82fb"><svg viewBox="0 0 30 30" fill="#fff"><path d="M15 3l11 5.5-11 5.5L4 8.5zM4 10.7l10 5v11.1l-10-5zM16 15.7l10-5v11.1l-10 5z"/></svg></span>iFizBox</a></div>
-<div class=hw><a class=tile href=#settings onclick="go('settings');goTo(document.getElementById('help'));return false"><span class=tic style="background:#8a929c"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M8.8 9a3.3 3.3 0 1 1 4.6 3c-.9.4-1.4 1.1-1.4 2.2"/><path d="M12 18.3v.2"/></svg></span>Help</a>
-<button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:#3f80e0"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
+<div class=hw><a class=tile href=/help onclick="return helpOpen()"><span class=tic style="background:#8a929c"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M8.8 9a3.3 3.3 0 1 1 4.6 3c-.9.4-1.4 1.1-1.4 2.2"/><path d="M12 18.3v.2"/></svg></span>Help</a></div>
 {% if enrolled %}<a class="tile reg" href=#settings onclick="go('settings');return false"><span class=tic style="background:#34a84a"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.5 4.5 8.5-10"/></svg></span>Registered{% if stats and stats[1] %}<span class=hdt>until {{ stats[1].strftime('%b %-d, %Y') }}</span>{% endif %}</a>
 {% else %}<button type=button class="tile todo" id=setupT aria-expanded=false aria-controls=setup onclick="setupOpen(setup.hidden)"><span class=tic style="background:#f08a12"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#f08a12"/></svg></span><div>Set up this iPhone<small>2 steps, then every app unlocks</small></div></button>{% endif %}</div>
 <p class=ftr id=tagline>Sideload apps on your iPhone with a friend's Apple developer account.</p>
@@ -1172,31 +1154,28 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 </section>
 
 <section class=page id=t-settings data-title=Settings>
-<h3 class=hdr>This iPhone</h3><div class="g green">
-<div class=kv>{{ row_icon('status' if enrolled else 'device') }}<b>Status</b><span>{{ 'Registered' if enrolled else 'Not registered' }}</span></div>
-{% if stats %}<div class=kv>{{ row_icon('slots') }}<b>iPhones used</b><span>{{ stats[0] }} of 100</span></div>
-{% if stats[1] %}<div class=kv>{{ row_icon('calendar') }}<b>Apps work until</b><span>{{ stats[1].strftime('%b %-d, %Y') }}</span></div>{% endif %}{% endif %}</div>
-{% if enrolled %}<p class=ftr>This iPhone is registered and can install every app.</p>{% endif %}
-<div class="g split">
-{% if is_admin %}<a class=tile href=/admin data-push><span class=tic style="background:#f08b1d"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="#fff"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z" fill="#fff"/></svg></span>Manage</a>
-{% else %}<a class=tile href=#apps><span class=tic style="background:#40ae4c"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#3c9a1d"/></svg></span>Register</a>{% endif %}
-<a class=tile href=#ifizbox onclick="go('ifizbox');return false"><span class=tic style="background:#1a82fb"><svg viewBox="0 0 30 30" fill="#fff"><path d="M15 3l11 5.5-11 5.5L4 8.5zM4 10.7l10 5v11.1l-10-5zM16 15.7l10-5v11.1l-10 5z"/></svg></span>iFizBox</a></div>
-{# F20: as iFizBox's Settings: this iPhone first, then Theme and Notifications, then Help and About, Sign out last #}
-<div class="g grp"><a class="row mrow" href=/theme data-push>{{ row_icon('theme') }}<div>Theme</div></a>
+{# F26, the user's concept (2026-11-19): iOS 6 Settings' grouped rows, each with its 29pt icon, a chevron where it pushes a page, a footer
+   under its group. This iPhone; Manage (the admin's); Theme and Update Alerts; Add to Home Screen; Help; Sign Out and the version line.
+   No iFizBox row (the tab bar has it) and no About. #}
+<h3 class=hdr>This iPhone</h3><div class="g sg" id=sThis>
+{% if enrolled %}<div class="row irow">{{ row_icon('status') }}<div>Status</div><span class=val>Registered</span></div>
+{% else %}<a class="row mrow" href=#apps onclick="return nudge()">{{ row_icon('device') }}<div>Status</div><span class=val>Not registered</span></a>{% endif %}
+{% if stats and stats[1] %}<div class="row irow">{{ row_icon('calendar') }}<div>Apps Work Until</div><span class=val>{{ stats[1].strftime('%b %-d, %Y') }}</span></div>{% endif %}</div>
+<p class=ftr>{% if enrolled %}Every app on the Apps tab can install on this iPhone.{% else %}Register this iPhone on the Apps tab, then every app there can install on it.{% endif %}</p>
+{% if is_admin %}<div class="g grp sg" id=sManage><a class="row mrow" href=/admin data-push>{{ row_icon('manage') }}<div>Manage</div><span class=val>{{ n_iphones }} iPhone{{ '' if n_iphones == 1 else 's' }}</span></a></div>
+<p class=ftr>Only you see this: you run this SideDrop.</p>{% endif %}
+<div class="g grp sg" id=sTheme><a class="row mrow" href=/theme data-push>{{ row_icon('theme') }}<div>Theme</div><span class=val id=themeV>{{ theme_name }}</span></a>
 {% if enrolled %}<div class="row irow">{{ row_icon('notifications') }}<div>Update Alerts</div><label class=sw><input type=checkbox id=pushSw aria-label="Update Alerts"
  onchange="pushSet(this.checked)"><i></i><span class=k></span></label></div>{% endif %}</div>
 {% if enrolled %}<p class=ftr id=pushNote>Tells you when an app you installed has a new version.</p>{% endif %}
-<div class=pair>
-<button type=button class=tile onclick="let d=document.getElementById('dev');d.open=true;goTo(d)">{{ row_icon('help') }}Help</button>
-<button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:#3f80e0"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
-<h3 class=hdr id=help>Help</h3><div class=g>
-{% if enrolled %}<details><summary>{{ row_icon('lock') }}<span>Turn off Stolen Device Protection</span></summary>{{ sdp_steps }}</details>{% endif %}
-<details id=dev><summary>{{ row_icon('devMode') }}<span>Turn on Developer Mode</span></summary>
-{{ dev_steps }}</details>
-<details id=a2hs><summary>{{ row_icon('homeScreen') }}<span>Add to Home Screen</span></summary><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open SideDrop from there</span></p></details></div>
-<p class=ftr id=helpNote>Apps here are signed with a friend's developer certificate for each registered iPhone. iOS asks for Developer Mode once, then they open like any other app.
-SideDrop serves the apps listed on its Apps tab; for your own IPAs and other sources, use <a href=#ifizbox onclick="go('ifizbox');return false">iFizBox</a>.</p>
-<a class="b grey out" href=/logout>Sign out</a>
+<div class="g grp sg" id=sHome><a class="row mrow" href=/home-screen data-push>{{ row_icon('homeScreen') }}<div>Add to Home Screen</div></a></div>
+<p class=ftr>Open SideDrop from your Home Screen like an app.</p>
+<div class="g grp sg" id=sHelp><a class="row mrow" href=/help data-push id=helpRow>{{ row_icon('help') }}<div>Help</div></a></div>
+<a class="b grey out" href=/logout>Sign Out</a>
+<script>/* F26: the Theme row's detail, the theme showing now (THEME_BOOT's themeState); again after Settings > Theme pops, or the iPhone flips */
+const THEME_NAMES={{ theme_names|tojson }};
+function themeVal(){let s=themeState(),dk=s.mode=="dark"||s.mode=="auto"&&matchMedia("(prefers-color-scheme: dark)").matches,e=document.getElementById("themeV");if(e)e.textContent=THEME_NAMES[dk?s.dark:s.light]}
+themeVal();addEventListener("popstate",themeVal);addEventListener("pageshow",themeVal);matchMedia("(prefers-color-scheme: dark)").addEventListener("change",themeVal)</script>
 {{ vfoot }}
 </section>
 </div>
@@ -1211,9 +1190,8 @@ SideDrop serves the apps listed on its Apps tab; for your own IPAs and other sou
 <div class=abtns><button type=button onclick="devDone(1)">Show Me</button><button type=button class=ok onclick="devDone()">OK</button></div></div></div>{% endif %}
 {% if first_run %}<div class=fl id=firstRun hidden data-due=1 role=dialog aria-modal=true aria-labelledby=frT><header class=nav><button type=button class=bar onclick="firstRunGo()">Cancel</button><h1 id=frT>Before You Install</h1>
 <button type=button class="bar r" onclick="firstRunGo(1)">Install</button></header><div class=lscroll>
-<p class=lead>Two settings, once per iPhone. Apps from here open only with Developer Mode on, and Stolen Device Protection can make you wait an hour to turn it on.</p>
-<div class=c><div class=sh><span class=num>1</span><div>Turn off Stolen Device Protection<small>Skip this if it's already off</small></div></div>{{ sdp_steps }}</div>
-<div class=c><div class=sh><span class=num>2</span><div>Turn on Developer Mode<small>After the app installs</small></div></div>{{ dev_steps }}</div>
+<p class=lead>One setting, once per iPhone: apps from here open only with Developer Mode on.</p>{# F26: Stolen Device Protection left this sheet; it's in Help, under Register iPhone Didn't Work #}
+<div class=c><div class=sh><div>Turn on Developer Mode<small>After the app installs</small></div></div>{{ dev_steps }}</div>
 <button type=button class=gbtn onclick="firstRunGo(1)">Got It, Install</button></div></div>{% endif %}
 {% if enrolled %}<div class=scrim id=pushAsk hidden><div class=alert role=alertdialog aria-modal=true aria-labelledby=pushT>
 <h3 id=pushT>Get Notified of Updates?</h3><p>SideDrop can tell you when an app you installed has a new version.</p>
@@ -1334,7 +1312,13 @@ function pushSet(on){if(!pushOK){pushSw.checked=false;pushShow();return}  // Saf
 /* asked once per phone: after the first INSTALL tap */
 /* first INSTALL on this phone: warn that opening the app will ask for Developer Mode; then the notifications ask */
 function devMaybe(){let a=null;try{a=localStorage.devTold}catch(e){}if(a||!window.devAsk)return pushMaybe();try{localStorage.devTold=1}catch(e){}devAsk.hidden=false}
-function devDone(show){devAsk.hidden=true;if(show){go("settings");let d=document.getElementById("dev");d.open=true;setTimeout(()=>goTo(d),50)}else setTimeout(pushMaybe,400)}
+function devDone(show){devAsk.hidden=true;if(show)helpOpen("dev");else setTimeout(pushMaybe,400)}
+/* F26: Help is a page pushed on Settings (/help); helpOpen(id) goes there from anywhere and opens that item (Developer Mode from the alert) */
+function helpOpen(id){go("settings");let a=document.getElementById("helpRow");
+ if(L&&L.url&&new URL(L.url).pathname=="/help")return helpItem(id),false;
+ push("/help",{},a,!!L).then(ok=>{if(!ok)location.href="/help"+(id?"#"+id:"");else helpItem(id)});return false}
+function helpItem(id){let d=id&&L&&L.querySelector("details#"+id);if(!d)return;d.open=true;
+ setTimeout(()=>{let s=L.querySelector(".lscroll");s.scrollTo({top:s.scrollTop+d.getBoundingClientRect().top-56,behavior:"smooth"})},400)}
 function pushMaybe(){let a=null;try{a=localStorage.pushAsked}catch(e){}if(a||!window.pushAsk||(pushOK&&Notification.permission!="default"))return;
  try{localStorage.pushAsked=1}catch(e){}pushShow()}
 function pushShow(){pushWeb.hidden=pushOK;pushOk.textContent=pushOK?"Allow":"OK";let bs=pushOk.parentNode;bs.style.gridTemplateColumns=pushOK?"":"1fr";bs.firstElementChild.style.display=pushOK?"":"none";
@@ -1351,7 +1335,7 @@ function sdpDone(save){let d=document.getElementById("sdp");if(!d)return;d.class
 try{if(localStorage.sdp)sdpDone()}catch(e){}
 function setupOpen(on){let s=document.getElementById("setup");if(!s)return;s.hidden=!on;setupT.setAttribute("aria-expanded",on)}  // the Apps header's 'Set up this iPhone' tile unfolds the steps
 function nudge(){go("apps");setupOpen(true);let r=document.querySelector("#sdp:not(.ok)")||document.getElementById("reg");if(r.open===false)r.open=true;r.classList.remove("nudge");void r.offsetWidth;r.classList.add("nudge");if(r.id=="reg")r.querySelector("input").focus();return false}
-/* the first install tap on this iPhone opens the splash (SDP, then Developer Mode) instead; Install there carries the held tap on, and the
+/* the first install tap on this iPhone opens the splash (Developer Mode) instead; Install there carries the held tap on, and the
    server remembers the phone (/first-run), so Safari and the Home Screen app show it once between them. Cancel keeps it for the next tap. */
 let frNext=null;
 document.addEventListener("click",e=>{let f=window.firstRun,b=f&&f.dataset.due&&e.target.closest('a[href^="itms-services:"],#ifzb');if(!b)return;
@@ -1365,7 +1349,8 @@ addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").f
         ifz_m=signed_url(f"/m/{ifz['name']}.plist") if ifz else "",
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
-        file_labels=file_labels, is_admin=is_admin(), files=shared_files(), inv_name=invite_name(), fdl=lambda f: signed_url(f"/f/{f.name}"),
+        file_labels=file_labels, is_admin=is_admin(), n_iphones=manage_iphone_count() if is_admin() else 0, theme_names={n: p[1] for n, p in PALETTES.items()},
+        theme_name=PALETTES[THEMES["light"][0]][1], files=shared_files(), inv_name=invite_name(), fdl=lambda f: signed_url(f"/f/{f.name}"),
         first_run=enrolled and first_run_due(token_udid(tok))))
     if enrolled and request.args.get("enrolled"):  # survives sign-out; re-checked against the profile on every load
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
@@ -2241,6 +2226,114 @@ def theme_list(tone):
     return theme_page(tone) if logged_in() else redirect("/")
 
 
+# ---- F26: Settings as the user's concept (2026-11-19). The Help page and Add to Home Screen, pushed from Settings (back: Settings), and
+# the steps they share with the Apps tab's setup and the first-install sheet (Jinja globals, so every template can draw them) ----
+from markupsafe import Markup as _Markup
+
+SDP_STEPS = _Markup("""<figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Face ID &amp; Passcode</b></span></figcaption>
+<img src=/static/sdp1.jpg alt="Settings with Face ID and Passcode circled" width=640 height=277></figure>
+<figure class=shot><figcaption><span class=num>b</span><span>Tap <b>Stolen Device Protection</b></span></figcaption>
+<img src=/static/sdp2.jpg alt="The Stolen Device Protection row circled" width=640 height=167></figure>
+<figure class=shot><figcaption><span class=num>c</span><span>Turn it <b>off</b></span></figcaption>
+<img src=/static/sdp3.jpg alt="The Stolen Device Protection switch turned off, circled" width=640 height=291></figure>
+<div class=warn><span aria-hidden=true>⏳</span><div>Asked to wait an hour? Do this at home, where there's no wait.</div></div>
+""")
+DEV_STEPS = _Markup("""<figure class=shot><figcaption><span class=num>a</span><span>Settings → <b>Privacy &amp; Security</b></span></figcaption>
+<img src=/static/dev1.jpg alt="Settings with Privacy and Security circled" width=640 height=243></figure>
+<figure class=shot><figcaption><span class=num>b</span><span>Scroll down, tap <b>Developer Mode</b></span></figcaption>
+<img src=/static/dev2.jpg alt="The Developer Mode row circled" width=640 height=215></figure>
+<figure class=shot><figcaption><span class=num>c</span><span>Turn it <b>on</b>, tap <b>Restart</b>, then <b>Turn On</b> after the restart</span></figcaption>
+<img src=/static/dev3.jpg alt="The Developer Mode switch turned on, circled" width=640 height=305></figure>
+<div class=warn><span aria-hidden=true>💡</span><div>Don't see it? Install an app first, then look again.</div></div>""")
+A2HS_STEPS = _Markup("""<p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open SideDrop from there</span></p>""")
+app.jinja_env.globals.update(sdp_steps=SDP_STEPS, dev_steps=DEV_STEPS, a2hs_steps=A2HS_STEPS)
+
+# row icons for Settings > Manage, Help and Manage > Signing (in the rowicons.js style: one colour, a white glyph on a 24-unit square)
+ROW_ICONS.update({
+    "manage": ("#f08b1d", [("f", "M12 4a4 4 0 1 0 0 8a4 4 0 0 0 0-8zM4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z")]),  # the old Manage tile's person
+    "alert": ("#e2382f", [("e", "M12 2.6l10.2 18.2H1.8zM10.8 8.6v6.2h2.4V8.6zM12 16.2a1.3 1.3 0 1 0 0 2.6a1.3 1.3 0 0 0 0-2.6z")]),
+    "profile": ("#7a5cc4", [("e", "M5 2.5h14v19H5zM8 6.2v2.2h8V6.2zM8 10.6v2.2h8v-2.2zM8 15v2.2h5V15z")]),
+})
+
+# the step screenshots' look, for these pages opened on their own (pushed, they sit in the main page, which has the same rules)
+HELP_CSS = """<style>.num{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.35);
+ background:var(--gloss),linear-gradient(#7f8a99,#5b6573);border:1px solid #4a525d}
+.shot{display:flex;flex-direction:column;gap:6px} .shot figcaption{display:flex;gap:8px;align-items:center;font-size:15px} .shot .num{width:20px;height:20px;font-size:11px}
+.shot img{display:block;width:100%;height:auto;border-radius:8px;border:1px solid var(--line);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.warn{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;background:#fff8e1;border:1px solid #e6cf7a;font-size:14px} .dark .warn{background:var(--warnbg);border-color:var(--warnedge)}
+.hlp details>.shot+.shot{margin-top:18px} .hlp details>ol{padding-left:1.5rem} .hlp details>p{line-height:1.4}</style>"""
+HELP = """<h3 class=hdr>Problems</h3><div class="g hlp">
+<details id=register><summary>{{ icon('device') }}<span>Register iPhone Didn't Work</span></summary>
+<ol><li>Tap <b>Register iPhone</b> again, then <b>Allow</b>.</li>
+<li>Open the <b>Settings</b> app, tap <b>Profile Downloaded</b> near the top, then <b>Install</b>.</li>
+<li>Stuck on a wait timer? That's <b>Stolen Device Protection</b>: turn it off as below, or do it at home, where there's no wait.</li></ol>
+{{ sdp_steps }}</details>
+<details id=install><summary>{{ icon('alert') }}<span>An App Won't Install</span></summary>
+<ol><li>Settings should say this iPhone is <b>Registered</b>. If it doesn't, register it on the Apps tab.</li>
+<li>Registered before but the apps are locked? Register again, it's instant.</li>
+<li>An app stuck half-installed (a grey icon): delete it from the Home Screen, then tap GET again.</li>
+<li>Installed but it won't open? Turn on Developer Mode, below.</li></ol></details>
+<details id=dev><summary>{{ icon('devMode') }}<span>Turn on Developer Mode</span></summary>{{ dev_steps }}</details></div>
+<p class=ftr>Apps here are signed with a friend's developer certificate for each registered iPhone. iOS asks for Developer Mode once, then they open like any other app.</p>
+<h3 class=hdr>Getting Started</h3><div class="g hlp">
+<details id=a2hs><summary>{{ icon('homeScreen') }}<span>Add to Home Screen</span></summary>{{ a2hs_steps }}</details>
+<details id=notify><summary>{{ icon('notifications') }}<span>Notifications in Apps</span></summary>
+<p>Apps from here keep their notifications: allow them when an app asks, as you would for one from the App Store.</p>
+<p>SideDrop's own Update Alerts (in Settings) tell you when an app you installed has a new version. iOS offers them only to SideDrop on your Home Screen.</p></details>
+<details id=more><summary>{{ icon('sources') }}<span>More Apps with iFizBox</span></summary>
+<p>SideDrop serves the apps listed on its Apps tab; for your own IPAs and other sources, use <a href=/#ifizbox onclick="if(window.go){go('ifizbox');return false}">iFizBox</a>.
+It signs apps right on your iPhone, with this site's certificate already inside it.</p></details></div>
+<script>/* opened on its own as /help#dev (no JS push): that item starts open */
+(function(){if(location.pathname!="/help")return;let d=document.getElementById(location.hash.slice(1));if(d&&d.tagName=="DETAILS")d.open=true})()</script>"""
+HOME_SCREEN = """<div class=c>{{ a2hs_steps }}</div>
+<p class=ftr>SideDrop gets its own icon and opens full screen, like an app. On the Home Screen it can also send Update Alerts.</p>"""
+
+
+@app.get("/help")
+def help_page():
+    return page(HELP_CSS + HELP, back=MORE, title="Help", icon=row_icon) if logged_in() else redirect("/")
+
+
+@app.get("/home-screen")
+def home_screen_page():
+    return page(HELP_CSS + HOME_SCREEN, back=MORE, title="Add to Home Screen") if logged_in() else redirect("/")
+
+
+def manage_iphone_count():
+    """iPhones registered, as Manage counts them without asking Apple: the saved list's, else the profile's."""
+    listed, _ = cached_devices()
+    try:
+        return len(listed) if listed is not None else len(profile_udids())
+    except Exception:
+        return 0
+
+
+PROFILE_BASE_ENTS = {"application-identifier", "com.apple.developer.team-identifier", "keychain-access-groups", "get-task-allow", "beta-reports-active"}
+
+
+def profile_info():
+    """Manage > Signing's Profile row, read from the ad hoc profile: {n iPhones, push, caps (capabilities beyond the base entitlements),
+    app_id (without the team)} or None."""
+    if not PROFILE.exists():
+        return None
+    try:
+        p = embedded_plist(PROFILE.read_bytes())
+    except Exception:
+        return None
+    ents = p.get("Entitlements", {})
+    return dict(n=len(p.get("ProvisionedDevices", [])), push="aps-environment" in ents, caps=len([k for k in ents if k not in PROFILE_BASE_ENTS]),
+                app_id=str(ents.get("application-identifier", "")).partition(".")[2])
+
+
+def ifizbox_served():
+    """The iFizBox version SideDrop serves (Manage > Apps), or None."""
+    p = SIGNED / f"{IFIZBOX_ID}.ipa"
+    try:
+        return ipa_info(p)["short"] if p.exists() else None
+    except Exception:
+        return None
+
+
 def fmt_day(t):
     return f"{t:%b} {t.day}, {t.year}" if t else ""
 
@@ -2367,30 +2460,38 @@ def admin_page(body, title, back=ADMIN_BACK, **ctx):
                 icon=row_icon, fmt_day=fmt_day, **ctx)
 
 
-MANAGE_MENU = """{% if cert %}<a class="cw{{ ' bad' if cert[0][0] == 'error' }}" href=/admin/signing data-push><div><p>{{ cert[0][1] }}</p>
-{% if cert|length > 1 %}<small>And {{ cert|length - 1 }} more on Signing.</small>{% endif %}</div></a>{% endif %}
-<div class=g>
-<a class="row mrow" href=/admin/iphones data-push>{{ icon('device') }}<div>iPhones</div><span class=val>{{ n_dev }}</span></a>
-<a class="row mrow" href=/admin/signing data-push>{{ icon('syncCert') }}<div>Signing</div><span class=val>{{ expiry }}</span></a>
-<a class="row mrow" href=/admin/passwords data-push>{{ icon('signInKey') }}<div>Passwords</div></a>
-<a class="row mrow" href=/admin/invites data-push>{{ icon('share') }}<div>Invite Friends</div></a></div>
-<div class="g gap">
-<a class="row mrow" href=/admin/files data-push>{{ icon('fromFile') }}<div>Files for Friends</div><span class=val>{{ n_files }}</span></a>
+# F26 (the user's concept): a status banner (green when signing works, else the first problem), then Friends, Signing and Apps, each with
+# its footer. Every row pushes the same page as before (routes unchanged); Certificate and Profile both open Signing.
+MANAGE_MENU = """<style>.cw.ok{background:#e9f8e4;border-color:#9fd18f;color:#2f6b1f} .dark .cw.ok{background:var(--greenbg);border-color:var(--greenline);color:var(--text)}
+.mg2 .mrow>div small{font-weight:400;font-size:13px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis} .mg2 .mrow .val{max-width:45%}</style>
+{% if cert %}<a class="cw{{ ' bad' if cert[0][0] == 'error' }}" href=/admin/signing data-push><div><p>{{ cert[0][1] }}</p>
+{% if cert|length > 1 %}<small>And {{ cert|length - 1 }} more on Signing.</small>{% endif %}</div></a>
+{% elif info %}<a class="cw ok" href=/admin/signing data-push><div><p>Signing works: {{ info.kind }}, App ID {{ app_id }}{{ ' with Push' if prof and prof.push }}</p></div></a>{% endif %}
+<h3 class=hdr>Friends</h3><div class="g mg2" id=mFriends>
+<a class="row mrow" href=/admin/iphones data-push>{{ icon('device') }}<div>iPhones</div><span class=val>{{ n_dev }} of {{ slots }}</span></a>
+<a class="row mrow" href=/admin/invites data-push>{{ icon('share') }}<div>Invite Friends</div></a>
+<a class="row mrow" href=/admin/passwords data-push>{{ icon('signInKey') }}<div>Passwords</div></a></div>
+<p class=ftr>Who can sign in, and the links that let a friend register one iPhone.</p>
+<h3 class=hdr>Signing</h3><div class="g mg2" id=mSigning>
+<a class="row mrow" href=/admin/signing data-push>{{ icon('syncCert') }}<div>Certificate{% if info %}<small>{{ info.kind }}{% if info.team %}: {{ info.team }}{% endif %}</small>{% endif %}</div><span class=val>{{ expiry }}</span></a>
+<a class="row mrow" href=/admin/signing data-push>{{ icon('profile') }}<div>Profile<small>{% if prof %}Ad Hoc{{ ' · Push' if prof.push }} · {{ prof.caps }} capabilit{{ 'y' if prof.caps == 1 else 'ies' }}{% else %}Not made yet{% endif %}</small></div>{% if prof %}<span class=val>{{ prof.n }} iPhone{{ '' if prof.n == 1 else 's' }}</span>{% endif %}</a></div>
+<p class=ftr>Made again by itself when an iPhone registers. Apps keep their own bundle IDs and notifications.</p>
+<h3 class=hdr>Apps</h3><div class="g mg2" id=mApps>
 <a class="row mrow" href=/admin/sources data-push>{{ icon('sources') }}<div>App Sources</div><span class=val>{{ n_sources }}</span></a>
-<a class="row mrow" href=/admin/ifizbox data-push>{{ icon('general') }}<div>iFizBox</div></a></div>"""
+<a class="row mrow" href=/admin/files data-push>{{ icon('fromFile') }}<div>Files for Friends</div><span class=val>{{ n_files }}</span></a>
+<a class="row mrow" href=/admin/ifizbox data-push>{{ icon('general') }}<div>iFizBox</div><span class=val>{{ ifz_v or 'Not yet' }}</span></a></div>
+<p class=ftr>The apps on the Apps tab come from these sources, signed for every registered iPhone.</p>"""
 
 
 def manage_menu():
     """Manage's first page. Nothing here waits on Apple: the iPhone count is the saved list's (or the profile's), the
     certificate's date is read from cert.p12, and the banner is cert_status's last answer."""
-    listed, _ = cached_devices()
-    try:
-        n_dev = len(listed) if listed is not None else len(profile_udids())
-    except Exception:
-        n_dev = 0
+    n_dev = manage_iphone_count()
     info = cert_info()
     expiry = ("Expired" if info["expires"] < datetime.datetime.now(datetime.timezone.utc) else fmt_day(info["expires"])) if info else "Not set up"
+    prof = profile_info()
     return page(MANAGE_CSS + MANAGE_MENU, back=MORE, title="Manage", cert=cert_status_cached(), n_dev=n_dev, expiry=expiry,
+                info=info, prof=prof, app_id=BUNDLE_ID or (prof and prof["app_id"]) or "not set", slots=SLOTS, ifz_v=ifizbox_served(),
                 n_files=len(shared_files()), n_sources=len(read_sources("mirror-sources.txt")) + len(read_sources("third-party-sources.txt")),
                 icon=row_icon, done=DONE.get(request.args.get("done", "")), err=None, certs=[])
 
