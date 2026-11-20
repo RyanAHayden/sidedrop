@@ -546,6 +546,12 @@ import json as _json
 me = A.token_udid(c.get_cookie("device").value)
 mk = re.search(r'<div class=mks id=mkSheet hidden data-csrf="(\w{32})"', html).group(1)
 assert mk == A.mark_csrf(me) and '<p id=mkH></p><div id=mkB></div><button type=button class=mkc onclick="mkClose()">Cancel</button>' in html
+# B18: iFizBox's action sheet (its packages.css .action-sheet): a dim layer of its own, the UIAlertSheet panel, 44pt buttons, and an .out that slides it down
+assert 'data-csrf="' + mk + '"><div class=mkd onclick="mkClose()"></div><div class=mkp role=dialog' in html
+assert "linear-gradient(rgba(172,177,185,.84) 1.5px,rgba(142,148,158,.84) 12px,rgba(107,113,123,.84) 26px,rgba(92,98,109,.84) 33px)" in html
+assert "background:linear-gradient(#fff,#fafafa 7%,#ebebec 23%,#d9d9db 38%,#c9cacc 54%,#c2c3c5 69%" in html and ".mkp button{display:block;width:100%;height:44px;" in html
+assert ".mks.out .mkp{animation:mkdown .25s" in html and "@keyframes mkdown{to{transform:translateY(100%)}}" in html and ".mks.out .mkd{animation:mkfade .25s" in html
+assert ".dark .mkp{background:linear-gradient(rgba(35,35,35,.89)" in html, "the Black style in dark themes"
 mark = lambda cl, name, do, csrf=mk: cl.post("/installed/mark", data={"name": name, "do": do, "csrf": csrf}).status_code
 mine_now = lambda: _json.loads(A.INSTALLED.read_text()).get(me, {})
 signed_plain("1.1", "2"); assert badge(c.get("/").data.decode()) == (None, "1")
@@ -609,6 +615,17 @@ console.log(JSON.stringify(out))""")
     assert got["INSTALLED"] == [False, "REINSTALL", True, 0, True, 1], "an installed app arms as a green REINSTALL"
     assert got["UPDATE"] == [True, "UPDATE", False, 1, None, 1], "UPDATE installs on its first tap, no confirm"
     assert got["items"] == [[["Mark as Updated", "installed"], ["Mark as Not Installed", "forget"]], [["Mark as Not Installed", "forget"]], [["Mark as Installed", "installed"]]]
+    # B18: closing slides the sheet down first: .out at once, hidden only after the 250ms slide, the row let go at once, a second close a no-op
+    js = re.search(r"^let mkOut=0;\nfunction mkClose\(\)[^\n]*\n[^\n]*$", html, re.M).group(0)
+    (tmp / "b18.js").write_text("""let timers=[];function setTimeout(f,ms){timers.push([f,ms]);return timers.length}function clearTimeout(){}
+const cls=new Set(),held=new Set(["held"]);const mkSheet={hidden:false,classList:{contains:x=>cls.has(x),add:x=>cls.add(x),remove:x=>cls.delete(x)}};
+let mkRow={classList:{remove:x=>held.delete(x)}};""" + js + """
+mkClose();const mid=[mkSheet.hidden,cls.has("out"),held.size,timers.length,timers[0]&&timers[0][1]];mkClose();const again=timers.length;
+timers[0][0]();console.log(JSON.stringify({mid,again,end:[mkSheet.hidden,cls.has("out")]}))""")
+    p = subprocess.Popen(["node", str(tmp / "b18.js")], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    out, err = p.communicate()
+    assert p.returncode == 0, err
+    assert _json.loads(out) == {"mid": [False, True, 0, 1, 250], "again": 1, "end": [True, False]}, out
 # admin: separate password, CSRF, lockout; lists devices and disables one
 plain = A.app.test_client()
 assert plain.get("/admin").status_code == 302 and plain.post("/admin/device").status_code == 403

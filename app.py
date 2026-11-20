@@ -1153,15 +1153,34 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
    (default style): a smoky blue-grey panel sliding up from the bottom, white glossy 44pt buttons with bold black titles, a dark Cancel */
 #t-apps .g:not(.locked) .row{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 #t-apps .g .row.held,.dark #t-apps .g .row.held{background:var(--select);color:#fff;text-shadow:none} #t-apps .row.held>div,#t-apps .row.held small,#t-apps .row.held .ifv{color:#fff;text-shadow:none}
-.mks{position:fixed;inset:0;z-index:22;background:rgba(0,0,0,.4);animation:fadein .25s ease-out} .mks[hidden]{display:none}
-.mkp{position:absolute;left:0;right:0;bottom:0;box-sizing:border-box;padding:14px max(20px,env(safe-area-inset-right),(100% - 30rem)/2) calc(20px + env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left),(100% - 30rem)/2);
- background:linear-gradient(rgba(148,156,173,.97),rgba(64,74,96,.97) 22px,rgba(38,46,66,.97));border-top:1px solid rgba(255,255,255,.55);box-shadow:0 -1px 0 rgba(0,0,0,.6);animation:mkup .3s cubic-bezier(.36,.66,.04,1)}
-@keyframes mkup{from{transform:translateY(100%)}}
-.mkp p{margin:0 0 12px;text-align:center;font-size:14px;line-height:18px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.7);overflow-wrap:anywhere}
-.mkp button{display:block;width:100%;height:46px;margin:0 0 9px;padding:0 10px;border:1px solid rgba(0,0,0,.75);border-radius:10px;font:bold 20px/44px -apple-system,"Helvetica Neue",Helvetica,sans-serif;
- color:#000;text-shadow:0 1px 0 rgba(255,255,255,.75);background:linear-gradient(#fff,#f0f0f0 49%,#dfdfdf 51%,#e8e8e8);background-origin:border-box;box-shadow:0 1px 0 rgba(255,255,255,.3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mkp button.mkc{margin:9px 0 0;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.7);background:linear-gradient(#7d8495,#4b5263 49%,#353c4e 51%,#3c4355);background-origin:border-box}
-.mkp button.is-pressed{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.4);background:linear-gradient(#5d89f2,#2d63e3 49%,#1352dd 51%,#1a57de);background-origin:border-box}
+/* B18: the sheet is iFizBox's (its packages.css .action-sheet and nav/actionsheet.js; values copied, no file shared), from the 4S's
+   UIAlertSheet* art: the panel (UIAlertSheetDefaultBackground, 84%) a 1pt #3f4347 top edge, half a point of white, #acb1b9 -> #5c626d
+   over 33pt; 44pt buttons with 10pt corners and an inward-fading dark edge (UIAlertSheetDefaultButton), pressed blue; Cancel after a
+   wider gap; the Black style in dark themes. It rises in .35s over a dim that fades in on its own layer (.mkd), and leaves (.out) by
+   sliding back down in .25s while the dim fades, then hides. */
+.mks{position:fixed;inset:0;z-index:22} .mks[hidden]{display:none} .mks.out{pointer-events:none}
+.mkd{position:absolute;inset:0;background:rgba(0,0,0,.4);animation:fadein .3s ease-out} .mks.out .mkd{animation:mkfade .25s ease-in forwards}
+.mkp{position:absolute;left:0;right:0;bottom:0;box-sizing:border-box;display:flex;flex-direction:column;gap:11px;
+ padding:21px max(21px,env(safe-area-inset-right),(100% - 30rem)/2) calc(22px + env(safe-area-inset-bottom)) max(21px,env(safe-area-inset-left),(100% - 30rem)/2);
+ background:linear-gradient(#3f4347,#3f4347) top/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.84),rgba(255,255,255,.84)) 0 1px/100% .5px no-repeat,
+ linear-gradient(rgba(172,177,185,.84) 1.5px,rgba(142,148,158,.84) 12px,rgba(107,113,123,.84) 26px,rgba(92,98,109,.84) 33px);
+ will-change:transform;animation:mkup .35s cubic-bezier(.25,.1,.25,1)}
+.mks.out .mkp{animation:mkdown .25s cubic-bezier(.25,.1,.25,1) forwards}
+@keyframes mkup{from{transform:translateY(100%)}} @keyframes mkdown{to{transform:translateY(100%)}} @keyframes mkfade{to{opacity:0}}
+.mkp p{margin:-6px 0 2px;text-align:center;font-size:13px;line-height:17px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);overflow-wrap:anywhere}
+#mkB{display:flex;flex-direction:column;gap:11px}
+.mkp button{display:block;width:100%;height:44px;margin:0;padding:0 12px;border:1px solid rgba(0,0,0,.8);border-radius:10px;font:bold 20px/40px -apple-system,"Helvetica Neue",Helvetica,sans-serif;
+ color:#000;text-shadow:0 1px 0 rgba(255,255,255,.6);box-shadow:inset 0 0 1.5px 1px rgba(0,0,0,.35),0 1px 0 rgba(211,211,211,.23);touch-action:manipulation;
+ background:linear-gradient(#fff,#fafafa 7%,#ebebec 23%,#d9d9db 38%,#c9cacc 54%,#c2c3c5 69%,#c5c6c7 77%,#cdcdcf 85%,#dcdcdd 92%,#e3e3e3);background-origin:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mkp button.mkc{margin-top:3px;color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.5);
+ background:linear-gradient(#7e8288,#65676d 7%,#565a60 23%,#484b52 38%,#3b3f47 54%,#2e333b 69%,#2b3038 77%,#2c3139 85%,#333941 92%,#383f46);background-origin:border-box}
+.mkp button.is-pressed:not(.mkc){color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.4);
+ background:linear-gradient(#91a2f0,#7a90ec 7%,#6a82ea 23%,#4c69e6 38%,#2d4fe1 54%,#1036de 69%,#022bdc 77%,#0c33dd 85%,#2649df 92%,#3252e3);background-origin:border-box}
+.mkp button.mkc.is-pressed{background:linear-gradient(#5f6268,#3a3d43 50%,#1c2027);background-origin:border-box}
+.dark .mkp{background:linear-gradient(rgba(35,35,35,.89),rgba(35,35,35,.89)) top/100% 1px no-repeat,linear-gradient(rgba(167,167,167,.82),rgba(167,167,167,.82)) 0 1px/100% .5px no-repeat,
+ linear-gradient(rgba(106,106,106,.73) 1.5px,rgba(81,81,81,.7) 12px,rgba(44,44,44,.65) 24px,rgba(9,9,9,.62) 36px,rgba(1,1,1,.6))}
+.dark .mkp button:not(.mkc):not(.is-pressed){background:linear-gradient(#fbfbfb,#f5f5f5 15%,#f0f0f0 38%,#eee 46%,#e4e4e4 54%,#e4e4e4);background-origin:border-box}
+.dark .mkp button.mkc:not(.is-pressed){background:linear-gradient(#878787,#686868 7%,#545454 23%,#383838 38%,#1a1a1a 54%,#020202 69%,#000 77%,#131313);background-origin:border-box}
 </style>
 {% if error %}<p class="c err">{{ error }}</p>{% endif %}
 {% set enroll_form %}<form method=post action=/enroll style="display:flex;flex-direction:column;gap:10px"
@@ -1298,7 +1317,7 @@ themeVal();addEventListener("popstate",themeVal);addEventListener("pageshow",the
 <h3 id=pushT>Get Notified of Updates?</h3><p>SideDrop can tell you when an app you installed has a new version.</p>
 <div id=pushWeb hidden><div><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open SideDrop from there</span></p></div></div>
 <div class=abtns><button type=button onclick="pushAsk.hidden=true">Not Now</button><button type=button class=ok id=pushOk>Allow</button></div></div></div>{% endif %}
-{% if enrolled %}<div class=mks id=mkSheet hidden data-csrf="{{ mk }}" onclick="if(event.target==this)mkClose()"><div class=mkp role=dialog aria-modal=true aria-labelledby=mkH>
+{% if enrolled %}<div class=mks id=mkSheet hidden data-csrf="{{ mk }}"><div class=mkd onclick="mkClose()"></div><div class=mkp role=dialog aria-modal=true aria-labelledby=mkH>
 <p id=mkH></p><div id=mkB></div><button type=button class=mkc onclick="mkClose()">Cancel</button></div></div>{% endif %}
 <div class=con id=con hidden role=dialog aria-modal=true aria-labelledby=conT><header class=nav><span></span><h1 id=conT>Running</h1>
 <button type=button class="bar r" id=conX onclick="conClose()">Cancel</button></header><div class=conlog id=conL aria-live=polite><span class=concur id=conCur></span></div>
@@ -1462,8 +1481,12 @@ addEventListener("click",e=>{if(mkEat){mkEat=0;e.preventDefault();e.stopImmediat
 addEventListener("contextmenu",e=>{if(mkRow)e.preventDefault()});
 function mkOpen(r){let b=r.querySelector(".get[data-app]"),t=r.querySelector(":scope>div:not(.ico)");mkH.textContent=t?t.childNodes[0].textContent.trim():b.dataset.app;mkB.textContent="";
  mkItems(mkState(r)).forEach(([l,d])=>{let x=document.createElement("button");x.type="button";x.textContent=l;x.onclick=()=>mkDo(b.dataset.app,d);mkB.append(x)});
- setTimeout(()=>mkEat=0,700);mkSheet.hidden=false}
-function mkClose(){mkSheet.hidden=true;if(mkRow)mkRow.classList.remove("held");mkRow=null}
+ setTimeout(()=>mkEat=0,700);clearTimeout(mkOut);mkSheet.classList.remove("out");mkSheet.hidden=false}
+/* B18: as iFizBox's sheet, a choice, Cancel or a tap on the dim slides the sheet back down (.out, .25s) and only then hides it; the row
+   lets go at once. A timer, not animationend: with reduced motion there is no animation to end. */
+let mkOut=0;
+function mkClose(){if(mkRow)mkRow.classList.remove("held");mkRow=null;if(mkSheet.hidden||mkSheet.classList.contains("out"))return;
+ mkSheet.classList.add("out");mkOut=setTimeout(()=>{mkSheet.hidden=true;mkSheet.classList.remove("out")},250)}
 function mkDo(n,d){mkClose();fetch("/installed/mark",{method:"POST",body:new URLSearchParams({name:n,do:d,csrf:mkSheet.dataset.csrf})}).then(r=>{if(!r.ok)throw 0;return refreshIn()}).catch(()=>location.reload())}
 addEventListener("click",e=>{if(!e.target.closest("[data-arm]"))disarm()});
 function steps(b){let open=b.getAttribute("aria-expanded")!="true";b.setAttribute("aria-expanded",open);b.closest(".row").nextElementSibling.classList.toggle("open",open)}
