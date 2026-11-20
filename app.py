@@ -621,41 +621,80 @@ THEME_BOOT = ("<script>/* F18 themes: THEME_BOOT in app.py */\nconst THEMES=" + 
 function themeState(){let s={};try{s={mode:localStorage.mode,light:localStorage.lightTheme,dark:localStorage.darkTheme,old:localStorage.dark}}catch(e){}
  return{mode:["light","dark","auto"].includes(s.mode)?s.mode:s.old=="1"?"dark":s.old=="0"?"light":"auto",
   light:THEMES.light.includes(s.light)?s.light:THEMES.light[0],dark:THEMES.dark.includes(s.dark)?s.dark:THEMES.dark[0]}}
-function theme(){let s=themeState(),h=document.documentElement,dk=s.mode=="dark"||s.mode=="auto"&&matchMedia("(prefers-color-scheme: dark)").matches,p=dk?s.dark:s.light;
+var themeTone=null;  /* F20: "light" or "dark" while Settings > Theme > Light or Dark is open, its live preview, whatever Mode says */
+function theme(){let s=themeState(),h=document.documentElement,dk=themeTone?themeTone=="dark":s.mode=="dark"||s.mode=="auto"&&matchMedia("(prefers-color-scheme: dark)").matches,p=dk?s.dark:s.light;
  h.classList.toggle("dark",dk);h.setAttribute("data-theme",dk?"dark":"light");h.setAttribute("data-palette",p);
  document.querySelector("meta[name=theme-color]").content=THEME_COLORS[p];s.tone=dk?"dark":"light";return s}  /* Safari's top bar matches the status bar */
 theme();matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{theme();if(window.themeMarks)themeMarks()})</script>""")
-# Settings > Display, as iFizBox's Theme page: Mode, then each tone's themes, a checkmark on the one in use (iOS 6's
-# UITableViewCellAccessoryCheckmark, the row's label turning blue with it). Each theme row has a little swatch: its bar over its table.
+# Settings > Theme's checklists (theme_page below): a checkmark on the one in use (iOS 6's UITableViewCellAccessoryCheckmark, the row's
+# label turning blue with it). Each theme row has a little swatch: its bar over its ground.
 THEMES_CSS += """
 .ck{cursor:pointer;color:var(--text)} .ck[aria-checked=true]{color:var(--acc)} .ck .sws{flex:none;width:26px;height:26px;border-radius:5px;box-sizing:border-box;border:1px solid rgba(0,0,0,.45);box-shadow:0 1px 0 var(--divhi)}
 .ck[aria-checked=true]:after{content:"";flex:none;width:15px;height:14px;background:currentColor;-webkit-mask:var(--tick) center/contain no-repeat;mask:var(--tick) center/contain no-repeat}
 :root{--tick:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 15 14'%3E%3Cpath d='M1 7.6 3.2 5.5 6 8.2 12.4 0.8 14.5 2.6 6.1 12.6Z'/%3E%3C/svg%3E")}"""
 
-
-from markupsafe import Markup  # noqa: E402 (the theme menu below is a template global)
-
-
-def theme_rows(key, options):
-    swatch = lambda n: (lambda css: f'<span class=sws style="background:linear-gradient({PALETTES[n][2]} 0 45%,{css["table"]} 45%)"></span>')(
-        dict(re.findall(r"--([a-z]+):([^;]+)", PALETTES[n][3])))
-    rows = "".join(f'<a class="row ck" role=radio data-v={v} onclick="themePick(this)">{swatch(v) if key != "mode" else ""}<div>{label}</div></a>' for v, label in options)
-    return f'<div class="g thm" role=radiogroup data-k={key}>{rows}</div>'
-
-
-app.jinja_env.globals["theme_menu"] = Markup(
-    "<h3 class=hdr>Display</h3>" + theme_rows("mode", [("light", "Light"), ("dark", "Dark"), ("auto", "Automatic")])
-    + "<p class=ftr>Automatic follows your iPhone's Light or Dark appearance.</p>"
-    + "".join(f"<h3 class=hdr>{t.title()} Theme</h3>" + theme_rows(f"{t}Theme", [(n, PALETTES[n][1]) for n in THEMES[t]]) for t in ("light", "dark"))
-    + """<script>/* F18: the checkmarks follow themeState() (THEME_BOOT); a pick stores it and repaints. A theme in the tone not showing also
-   switches Mode to that tone, as iFizBox's does, so the pick shows at once (even from Automatic). */
-function themeMarks(){let s=themeState();document.querySelectorAll(".thm").forEach(g=>{let v={mode:s.mode,lightTheme:s.light,darkTheme:s.dark}[g.dataset.k];
- g.querySelectorAll(".ck").forEach(r=>r.setAttribute("aria-checked",r.dataset.v==v))})}
-function themePick(a){let k=a.parentNode.dataset.k,s=themeState(),tone=k=="lightTheme"?"light":"dark",
-  shown=s.mode=="dark"||s.mode=="auto"&&matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";
- try{localStorage[k]=a.dataset.v;if(k!="mode"&&shown!=tone)k="mode",localStorage.mode=tone;if(k=="mode")localStorage.removeItem("dark")}catch(e){}
- theme();themeMarks()}
-themeMarks()</script>""")
+# ---- F20: Settings > Theme as iFizBox's (its screens/settings.js modeControl, listPage and themePreview; settings.css; ios6.css) ----
+# The segmented control: iFizBox's ios6.css .store-segmented (UISegmentedControl's plain style, sampled from the 4S's UISegmentButton,
+# UISegmentButtonHighlighted and UISegmentDivider art) at settings.css .settings-segmented's group size (44px, 9.5px corners, 15px labels).
+# Its colours are tokens per palette: Classic the kit's (ios6.css); the dark ones ios6.css/palettes.css --dk-seg, --dk-seg-pressed,
+# --dk-btn-edge and --dk-ctl-hi; Sepia and Solarized palettes.css --lt-seg, --lt-seg-pressed and --lt-seg-edge. The blue selected segment
+# is the kit's in every palette, as in iFizBox. (segment, held segment, edge, divider, white line under it, label, label emboss)
+SEG = {
+    "classic": ("linear-gradient(#fbfbfb,#fbfbfb 5%,#cccccc 90%,#bdbdbd)", "linear-gradient(#e6e6e6,#c2c2c2 90%,#b3b3b3)", "#9e9e9e", "#aeaeae",
+                "rgba(255,255,255,.28)", "#4c566c", "0 1px 0 #fff"),
+    "sepia": ("linear-gradient(#fdf9ef,#fdf9ef 5%,#e0d2b4 90%,#d2c19e)", "linear-gradient(#ece2cb,#d2c19e 90%,#c5b28c)", "#b8a37c", "#b8a37c",
+              "rgba(255,255,255,.28)", "#6b5434", "0 1px 0 #fff"),
+    "solarized": ("linear-gradient(#fffcf2,#fffcf2 5%,#e4ddc8 90%,#d6cfb8)", "linear-gradient(#eee8d5,#d6cfb8 90%,#cac2aa)", "#b9b29c", "#b9b29c",
+                  "rgba(255,255,255,.28)", "#4d6168", "0 1px 0 #fff"),
+    "oled": ("linear-gradient(#3a3a3e,#1c1c1f 90%,#121214)", "linear-gradient(#1c1c1f,#0a0a0b)", "#000", "#000", "transparent", "#d6d6db", "none"),
+    "gunmetal": ("linear-gradient(#5a5f68,#3c4047 90%,#33363c)", "linear-gradient(#45494f,#2b2e33)", "#111", "#111", "rgba(255,255,255,.08)",
+                 "#e4e8ef", "0 -1px 0 rgba(0,0,0,.8)"),
+    "midnight": ("linear-gradient(#34476b,#1c2a44 90%,#142038)", "linear-gradient(#1c2a44,#0a1222)", "#050a14", "#050a14", "rgba(255,255,255,.05)",
+                 "#c3cde0", "0 -1px 0 rgba(0,0,0,.8)"),
+    "linen": ("linear-gradient(#55585f,#3a3c41 90%,#303236)", "linear-gradient(#3a3c41,#232528)", "#111", "#111", "rgba(255,255,255,.06)",
+              "#e1e3e8", "0 -1px 0 rgba(0,0,0,.8)"),
+    "nord": ("linear-gradient(#4c566a,#3b4252 90%,#343a48)", "linear-gradient(#353c4a,#2b303b)", "#1f232c", "#1f232c", "rgba(255,255,255,.05)",
+             "#d8dee9", "none"),
+    "dracula": ("linear-gradient(#5a5e78,#44475a 90%,#383b4c)", "linear-gradient(#383b4c,#282a36)", "#15161c", "#15161c", "rgba(255,255,255,.04)",
+                "#bd93f9", "none"),
+}
+# A theme's swatch in its checklist: iFizBox's core/settings.js `swatch` (its bar colour over its ground), as settings.css .theme-swatch draws it.
+SWATCH = {"classic": ("#6f88a8", "#c5ccd4"), "sepia": ("#a5865a", "#ebdfc5"), "solarized": ("#4b93c8", "#eee8d5"), "oled": ("#000", "#0e0e0f"),
+          "gunmetal": ("#5f656f", "#3b3f46"), "midnight": ("#18253e", "#121d31"), "linen": ("#262626", "#36383d"), "nord": ("#3b4252", "#2e3440"),
+          "dracula": ("#383b4c", "#282a36")}
+THEMES_CSS += "\n/* F20 segmented control tokens (SEG in app.py) */\n" + "\n".join(
+    (":root," if n == "classic" else "") + f"html[data-palette={n}]{{--seg:{s};--segp:{p};--segedge:{e};--segdiv:{d};--seghi:{h};--segtext:{t};--segemb:{m}}}"
+    for n, (s, p, e, d, h, t, m) in SEG.items()) + """
+.seg{display:flex;height:44px;border-radius:9.5px;overflow:hidden;box-sizing:border-box;border:1px solid var(--segedge);box-shadow:0 1px 0 var(--seghi)}
+.seg button{flex:1;width:auto;min-width:0;height:100%;margin:0;padding:0 6px;border:0;border-radius:0;box-shadow:none;cursor:pointer;
+ font:bold 15px/42px "Helvetica Neue",Helvetica,Arial,sans-serif;color:var(--segtext);text-shadow:var(--segemb);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+ background:var(--seg);background-origin:border-box}
+.seg button+button{border-left:1px solid var(--segdiv)}
+.seg button.is-pressed:not([aria-checked=true]){background:var(--segp);background-origin:border-box}
+.seg button[aria-checked=true]{color:#fff;text-shadow:0 -1px 0 rgba(0,0,0,.4);background:linear-gradient(#22488c,#2e5fb5 5%,#3d7adf 14%,#407ee6 23%,#407ee6 41%,#6ea4f9 88%,#487bcc 96%,#4a85d6);background-origin:border-box}
+.seg button[aria-checked=true]+button,.seg button+button[aria-checked=true]{border-left-color:#093786}
+.seg:has(>[aria-checked=true]:first-child){border-left-color:#093786} .seg:has(>[aria-checked=true]:last-child){border-right-color:#093786}
+.seg.sm{height:30px;border-radius:5px} .seg.sm button{font-size:13px;line-height:28px}
+/* iFizBox's F205 row icons in a Settings row (ios6.css .cell-icon.row-icon): the 29pt tile 7pt in from the row's edge, the label 11pt after
+   it, labels bold as ios6.css .cell-label; .mrow pushes a page (the chevron, "arrows copy", 10.5px in from the edge) */
+.rico{flex:none;display:block;width:29px;height:29px} .row:has(>.rico){padding-left:7px;gap:11px} .irow>div{font-weight:700}
+.g.grp{margin-top:23px}  /* ios6.css .group + .group: the next group of rows, no header */
+.g a.mrow,.g a.irow{color:var(--text)} .mrow>div{font-weight:700}
+.mrow:after{content:"";flex:none;width:9px;height:13px;margin-right:.5px;background:var(--chev) center/contain no-repeat}
+.mrow.is-pressed:after,.mrow.sel:after{filter:brightness(0) invert(1)}
+.g a.row.sel,.dark .g a.row.sel{background:var(--select);color:#fff;text-shadow:none} .g a.row.sel *{color:#fff}
+.mrow .val{flex:none;max-width:60%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:400;color:var(--acc)}
+.kv:has(>.rico){align-items:center;justify-content:flex-start;padding:7px 12px 7px 7px;gap:11px} .kv>.rico+b{flex:1}
+details>summary:has(>.rico){justify-content:flex-start;padding-left:7px;gap:11px} details>summary>.rico+span{flex:1}
+/* the checklist's swatch, as iFizBox's settings.css .theme-swatch: 24px, 5px corners, a hairline edge so OLED Black shows on a black row */
+.ck .sws{width:24px;height:24px;border:0;box-shadow:inset 0 0 0 1px rgba(127,127,127,.45)}
+/* Theme > Light / Dark's preview (iFizBox's themePreview): a sample of the controls in the theme showing, inert */
+.tpv{pointer-events:none;border:1px solid var(--line);border-radius:9.5px;overflow:hidden;background:var(--pin);background-color:var(--ground)}
+.tpv .nav.nav{position:relative;z-index:0;  /* .nav.nav: over .layer .nav's absolute, which comes later in the page */padding:0 7px;height:44px;box-sizing:border-box;
+ background:linear-gradient(var(--navedge),var(--navedge)) bottom/100% 1px no-repeat,linear-gradient(var(--navhi),var(--navhi)) top/100% 1px no-repeat,var(--navbg)}
+.tpv .nav h1{max-width:none} .tpv .nav .bar{display:block}
+.tpv .seg{margin:10px} .tpv .tpb{display:flex;align-items:center;gap:10px;padding:0 10px} .tpv .tpb .badge{position:relative;top:0;left:0}
+.tpv>.g{margin:0 10px} .tpv>.hdr{margin-top:14px} .tpv>.ftr{margin-bottom:12px}"""
 
 PAGE = """<!doctype html><meta charset=utf-8><meta name=build content=%BUILD%><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>SideDrop</title><meta name=description content="Share an Apple developer account with friends and sideload apps.">
@@ -764,7 +803,7 @@ details[open]>summary:after{transform:rotate(90deg)} details>:not(summary){margi
  
  background:linear-gradient(#707a91,#283659 49%,#0b1b43 50%,#182747)}  /* Cancel-style (left), as UIAlertView draws it on the 4S */
 .alert .abtns .ok{background:linear-gradient(#b4b9c8,#5f6882 49%,#596484 51%,#4d597a)}  /* sampled from Cydia's alert on the 4S: opaque greys, no white line */
-/* Dark (Settings > Display's Mode, or the phone's while it's Automatic): the dark palette's variables (THEMES_CSS), inverted emboss */
+/* Dark (Settings > Theme's Mode, or the phone's while it's Automatic): the dark palette's variables (THEMES_CSS), inverted emboss */
 html.dark{color-scheme:dark}
 .dark .c,.dark .g{background:var(--table);border-color:var(--line);box-shadow:0 1px 0 var(--inset)}
 .dark .row,.dark details>summary{background:var(--rowbg);box-shadow:inset 0 1px 0 var(--divhi)}
@@ -1119,26 +1158,27 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 
 <section class=page id=t-settings data-title=Settings>
 <h3 class=hdr>This iPhone</h3><div class="g green">
-<div class=kv><b>Status</b><span>{{ 'Registered' if enrolled else 'Not registered' }}</span></div>
-{% if stats %}<div class=kv><b>iPhones used</b><span>{{ stats[0] }} of 100</span></div>
-{% if stats[1] %}<div class=kv><b>Apps work until</b><span>{{ stats[1].strftime('%b %-d, %Y') }}</span></div>{% endif %}{% endif %}</div>
+<div class=kv>{{ row_icon('status' if enrolled else 'device') }}<b>Status</b><span>{{ 'Registered' if enrolled else 'Not registered' }}</span></div>
+{% if stats %}<div class=kv>{{ row_icon('slots') }}<b>iPhones used</b><span>{{ stats[0] }} of 100</span></div>
+{% if stats[1] %}<div class=kv>{{ row_icon('calendar') }}<b>Apps work until</b><span>{{ stats[1].strftime('%b %-d, %Y') }}</span></div>{% endif %}{% endif %}</div>
 {% if enrolled %}<p class=ftr>This iPhone is registered and can install every app.</p>{% endif %}
 <div class="g split">
 {% if is_admin %}<a class=tile href=/admin data-push><span class=tic style="background:#f08b1d"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="#fff"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z" fill="#fff"/></svg></span>Manage</a>
 {% else %}<a class=tile href=#apps><span class=tic style="background:#40ae4c"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#3c9a1d"/></svg></span>Register</a>{% endif %}
 <a class=tile href=#ifizbox onclick="go('ifizbox');return false"><span class=tic style="background:#1a82fb"><svg viewBox="0 0 30 30" fill="#fff"><path d="M15 3l11 5.5-11 5.5L4 8.5zM4 10.7l10 5v11.1l-10-5zM16 15.7l10-5v11.1l-10 5z"/></svg></span>iFizBox</a></div>
+{# F20: as iFizBox's Settings: this iPhone first, then Theme and Notifications, then Help and About, Sign out last #}
+<div class="g grp"><a class="row mrow" href=/theme data-push>{{ row_icon('theme') }}<div>Theme</div></a>
+{% if enrolled %}<div class="row irow">{{ row_icon('notifications') }}<div>Update Alerts</div><label class=sw><input type=checkbox id=pushSw aria-label="Update Alerts"
+ onchange="pushSet(this.checked)"><i></i><span class=k></span></label></div>{% endif %}</div>
+{% if enrolled %}<p class=ftr id=pushNote>Tells you when an app you installed has a new version.</p>{% endif %}
 <div class=pair>
-<button type=button class=tile onclick="let d=document.getElementById('dev');d.open=true;goTo(d)"><span class=tic style="background:#8a929c"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-dasharray="2.4 2"><circle cx="12" cy="12" r="7"/></svg></span>Help</button>
+<button type=button class=tile onclick="let d=document.getElementById('dev');d.open=true;goTo(d)">{{ row_icon('help') }}Help</button>
 <button type=button class=tile onclick="about.hidden=false;about.querySelector('.ok').focus()"><span class=tic style="background:#3f80e0"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 10v7M12 6.5v1" stroke="#2a72d6" stroke-width="2.6" stroke-linecap="round"/></svg></span>About</button></div>
-{{ theme_menu }}
-{% if enrolled %}<h3 class=hdr>Notifications</h3><div class=g><div class=row><div>Update Alerts</div><label class=sw><input type=checkbox id=pushSw aria-label="Update Alerts"
- onchange="pushSet(this.checked)"><i></i><span class=k></span></label></div></div>
-<p class=ftr id=pushNote>Tells you when an app you installed has a new version.</p>{% endif %}
 <h3 class=hdr id=help>Help</h3><div class=g>
-{% if enrolled %}<details><summary>Turn off Stolen Device Protection</summary>{{ sdp_steps }}</details>{% endif %}
-<details id=dev><summary>Turn on Developer Mode</summary>
+{% if enrolled %}<details><summary>{{ row_icon('lock') }}<span>Turn off Stolen Device Protection</span></summary>{{ sdp_steps }}</details>{% endif %}
+<details id=dev><summary>{{ row_icon('devMode') }}<span>Turn on Developer Mode</span></summary>
 {{ dev_steps }}</details>
-<details id=a2hs><summary>Add to Home Screen</summary><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open SideDrop from there</span></p></details></div>
+<details id=a2hs><summary>{{ row_icon('homeScreen') }}<span>Add to Home Screen</span></summary><p class=a2l><span>1. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16M12 3v12M8 7l4-4 4 4"/></svg><b>Share</b></span></span><span>2. Tap <span class=nw><svg class=ic viewBox="0 0 24 24" aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=4 y=4 width=16 height=16 rx=4 /><path d="M12 8v8M8 12h8"/></svg><b>Add to Home Screen</b></span></span><span>3. Open SideDrop from there</span></p></details></div>
 <p class=ftr id=helpNote>Apps here are signed with a friend's developer certificate for each registered iPhone. iOS asks for Developer Mode once, then they open like any other app.
 SideDrop serves the apps listed on its Apps tab; for your own IPAs and other sources, use <a href=#ifizbox onclick="go('ifizbox');return false">iFizBox</a>.</p>
 <a class="b grey out" href=/logout>Sign out</a>
@@ -2085,6 +2125,100 @@ def tile_svg(name):
 def row_icon(name):
     from markupsafe import Markup
     return Markup('<img class=rico src="data:image/svg+xml,%s" alt="" width=29 height=29>' % quote(tile_svg(name), safe=""))
+
+
+# F20: the Settings tab's rows each get their tile, from iFizBox's icons/rowicons.js ROW_ICONS and GLYPHS (theme: PAGE_ICONS.theme, indigo
+# "contrast"; notifications: red "bell"; help: blue "question"; device, calendar, checkCircle, lock, home and info as named there), and
+# devMode, our own pick of its glyphs (dark "terminal"). Copied here; nothing is loaded from iFizBox.
+_DISC = "M12 2.5a9.5 9.5 0 1 1 0 19a9.5 9.5 0 0 1 0-19z"
+ROW_ICONS.update({
+    "theme": ("#4650b4", [("e", _DISC + "M12 4.8a7.2 7.2 0 0 0 0 14.4z")]),
+    "notifications": ("#e2382f", [("f", "M12 2.4c.9 0 1.6.7 1.6 1.6v.6c2.9.7 4.8 3.3 4.8 6.4v4.4l2.1 2.6v1.1H3.5V18l2.1-2.6V11c0-3.1 1.9-5.7 4.8-6.4V4"
+                                         "c0-.9.7-1.6 1.6-1.6zM9.5 20h5a2.5 2.5 0 0 1-5 0z")]),
+    "help": ("#3f80e0", [("s", "M8.4 8.8a3.6 3.6 0 1 1 5.2 3.3c-1.1.6-1.6 1.4-1.6 2.6v.8", 3), ("f", "M12 17.4a1.9 1.9 0 1 0 0 3.8a1.9 1.9 0 0 0 0-3.8z")]),
+    "status": ("#40ae4c", [("s", "M4 12.6l5.2 5.2L20 6.6", 3.4)]),
+    "slots": ("#22a6b5", [("s", "M12 3a9 9 0 1 1 0 18a9 9 0 0 1 0-18z", 2), ("s", "M7.2 12.4l3.3 3.3 6.3-6.6", 2.6)]),
+    "calendar": ("#e2382f", [("e", "M3 4.6h18V21H3zM5.2 9.2v9.6h13.6V9.2z"), ("f", "M6.8 2.4h2.4v4.4H6.8zM14.8 2.4h2.4v4.4h-2.4zM7.2 11.2h3.4v3.2H7.2z")]),
+    "lock": ("#55595f", [("e", "M6.8 10.4V8a5.2 5.2 0 0 1 10.4 0v2.4h1.6v11.2H5.2V10.4zM9.5 10.4h5V8a2.5 2.5 0 0 0-5 0z")]),
+    "devMode": ("#55595f", [("s", "M4.5 7l5.5 5-5.5 5", 3), ("s", "M12 18h7.5", 3)]),
+    "homeScreen": ("#3f80e0", [("f", "M12 2.6l10.2 9.2H19v9.4h-5.2v-6.4h-3.6v6.4H5v-9.4H1.8z")]),
+})
+app.jinja_env.globals["row_icon"] = row_icon
+
+# Settings > Theme (iFizBox's Settings > Theme, screens/settings.js groupPage and modeControl, core/settings.js 'appearance'): Mode, an iOS 6
+# segmented control (Automatic / Light / Dark), then Themes: Light and Dark, each pushing its checklist (listPage) with the theme showing
+# sampled under it (themePreview). The choices stay in this browser (localStorage mode / lightTheme / darkTheme, read by THEME_BOOT), so
+# the server draws the defaults and themeMarks() puts the checks where the stored choice is, at once.
+MODES = [("auto", "Automatic"), ("light", "Light"), ("dark", "Dark")]  # iFizBox's order
+THEME_FOOTERS = {"mode": "Automatic switches between your Light and Dark themes with the iPhone's own setting.",
+                 "light": "The theme in Light mode, and in Automatic while the iPhone is light.",
+                 "dark": "The theme in Dark mode, and in Automatic while the iPhone is dark."}
+THEME_JS = """<script>/* F20 Settings > Theme. Pushed pages run their scripts again on every push: functions and var only */
+var THEME_LABELS=%s;
+function themeShown(){let s=themeState();return s.mode=="dark"||s.mode=="auto"&&matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}
+/* the checks, the selected segment and the Light / Dark rows' details follow themeState() (THEME_BOOT) on every page open */
+function themeMarks(){let s=themeState(),v={mode:s.mode,lightTheme:s.light,darkTheme:s.dark};
+ document.querySelectorAll("[data-tk]").forEach(g=>{if(g.dataset.tk in v)g.querySelectorAll("[data-v]").forEach(r=>r.setAttribute("aria-checked",r.dataset.v==v[g.dataset.tk]))});
+ document.querySelectorAll("[data-tv]").forEach(e=>e.textContent=THEME_LABELS[v[e.dataset.tv]])}
+/* a pick stores it and repaints. A theme of the tone not showing also switches Mode to that tone (iFizBox's pick()), so it shows once back */
+function themeSet(k,val){let tone=k=="lightTheme"?"light":k=="darkTheme"?"dark":null;
+ try{if(tone&&themeShown()!=tone)localStorage.mode=tone;localStorage[k]=val;if(tone||k=="mode")localStorage.removeItem("dark")}catch(e){}
+ theme();themeMarks()}
+/* Light / Dark's live preview: the page shows that tone while its list is open, and Mode's again once it's popped (iFizBox's F199) */
+function themePreview(tone){themeTone=tone;theme();let l=typeof L!="undefined"&&L&&L.contains(document.currentScript)?L:null;if(!l)return;
+ addEventListener("popstate",function f(){if(LS.includes(l))return;removeEventListener("popstate",f);themeTone=null;theme();themeMarks()})}
+%s
+themeMarks()</script>""" % (json.dumps({n: p[1] for n, p in PALETTES.items()} | dict(MODES)), "%s")
+
+
+def theme_segmented(key, options, current, small=False, label="Mode"):
+    """The segmented control as role=radiogroup (iFizBox's modeControl): one button a value, the current one aria-checked."""
+    btns = "".join(f'<button type=button role=radio data-v={v} aria-checked={"true" if v == current else "false"} '
+                   f'onclick="themeSet(\'{key}\',this.dataset.v)">{label}</button>' for v, label in options)
+    return f'<div class="seg{" sm" if small else ""}" role=radiogroup aria-label="{label}" data-tk={key}>{btns}</div>'
+
+
+def theme_preview():
+    """iFizBox's themePreview, with SideDrop's own controls: a nav bar with Back and a bar button, a segmented control, the App Store
+    buttons and the badge, a group of rows (an icon and a value, a switch, a check, a subtitle) and its footer. Inert."""
+    return ('<h3 class=hdr>Preview</h3><div class=tpv aria-hidden=true inert><header class=nav><span class="bar back">Back</span><h1>Preview</h1>'
+            '<span class="bar r">Edit</span></header>' + theme_segmented("sample", [("a", "Details"), ("b", "Reviews"), ("c", "Related")], "a", small=True, label="Sample")
+            + '<div class=tpb><span class=get>GET</span><span class="get go">INSTALL</span><span class="get blue">UPDATE</span><span class=badge>3</span></div>'
+            '<h3 class=hdr>Sample</h3><div class=g>'
+            f'<div class="row mrow">{row_icon("sources")}<div>Sources</div><span class=val>12</span></div>'
+            f'<div class="row irow">{row_icon("notifications")}<div>Switch</div><label class=sw><input type=checkbox checked tabindex=-1><i></i><span class=k></span></label></div>'
+            '<div class="row ck" aria-checked=true><div>Checked</div></div>'
+            '<div class=row><div>Package<small>A row with a subtitle</small></div><span class=val>1.0</span></div></div>'
+            '<p class=ftr>A group footer reads like this.</p></div>')
+
+
+def theme_page(tone=None):
+    if tone is None:  # Settings > Theme
+        themes = "".join(f'<a class="row mrow" href=/theme/{t} data-push><div>{t.title()}</div><span class=val data-tv={t}Theme>{PALETTES[THEMES[t][0]][1]}</span></a>'
+                         for t in ("light", "dark"))
+        body = (f"<h3 class=hdr>Mode</h3>{theme_segmented('mode', MODES, 'auto')}<p class=ftr>{THEME_FOOTERS['mode']}</p>"
+                f"<h3 class=hdr>Themes</h3><div class=g>{themes}</div>" + THEME_JS % "")
+        return page(body, back=MORE, title="Theme")
+    key = f"{tone}Theme"
+    rows = "".join(f'<a class="row ck" role=radio data-v={n} aria-checked={"true" if n == THEMES[tone][0] else "false"} onclick="themeSet(\'{key}\',this.dataset.v)">'
+                   f'<span class=sws style="background:linear-gradient({SWATCH[n][0]} 0 45%,{SWATCH[n][1]} 45%)"></span><div>{PALETTES[n][1]}</div></a>'
+                   for n in THEMES[tone])
+    body = (f'<div class="g thm" role=radiogroup aria-label="{tone.title()} Theme" data-tk={key}>{rows}</div><p class=ftr>{THEME_FOOTERS[tone]}</p>'
+            + theme_preview() + THEME_JS % f'themePreview("{tone}");')
+    return page(body, back=("Theme", "/theme"), title=tone.title())
+
+
+@app.get("/theme")
+@app.get("/display")  # Settings > Display, its name before F20
+def theme_root():
+    return theme_page() if logged_in() else redirect("/")
+
+
+@app.get("/theme/<tone>")
+def theme_list(tone):
+    if tone not in THEMES:
+        abort(404)
+    return theme_page(tone) if logged_in() else redirect("/")
 
 
 def fmt_day(t):
