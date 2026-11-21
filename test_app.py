@@ -1528,4 +1528,36 @@ assert "Signing…" not in bg.get("/").data.decode()
 B.resign = lambda force=False: (_ for _ in ()).throw(RuntimeError("zsign broke"))
 B.resign_later(); b17_idle()
 B.resign = real_resign
+
+# B26: a change to signing itself (SIGNER_VERSION bumped, another group fix dylib) signs every copy again on the next
+# resign, as does a copy made before signer stamps (every live copy when B26 deploys); otherwise a copy is left alone
+b26 = tmp / "b26"; (b26 / "apps").mkdir(parents=True)
+S26 = boot(b26, PASSWORD="friends-pass-b26", ADMIN_PASSWORD="admin-pass-b26", SECRET_KEY="s" * 32)
+shutil.copy(tmp / "apps" / "Demo.ipa", b26 / "apps" / "Demo.ipa")
+S26.PROFILE.write_bytes(plistlib.dumps({"ProvisionedDevices": ["B26"], "Entitlements": {
+    "application-identifier": "TEAM.com.me.*", "com.apple.developer.team-identifier": "TEAM", "get-task-allow": False}}))
+signs26 = []
+def run26(cmd, **kw):
+    signs26.append(cmd[-1]); Path(cmd[cmd.index("-o") + 1]).write_bytes((b26 / "apps" / "Demo.ipa").read_bytes())
+S26.subprocess.run = run26
+stamp26 = b26 / "signed" / ".Demo.signer"
+S26.resign(); assert len(signs26) == 1 and stamp26.read_text() == S26.signer_stamp()
+assert [p.name for p in (b26 / "signed").glob("*.ipa")] == ["Demo.ipa"]  # the stamp is not a signed app
+S26.resign(); assert len(signs26) == 1, "nothing changed: no sign"
+stamp26.unlink(); S26.resign(); assert len(signs26) == 2 and stamp26.exists(), "a copy from before stamps is signed again"
+S26.SIGNER_VERSION += 1; S26.resign(); assert len(signs26) == 3, "a SIGNER_VERSION bump signs again"
+S26.resign(); assert len(signs26) == 3, "once"
+gf26 = b26 / "other-groupfix.dylib"; gf26.write_bytes(S26.GROUPFIX_DYLIB.read_bytes() + b"\x00")
+S26.GROUPFIX_DYLIB = gf26; S26.resign(); assert len(signs26) == 4, "another group fix dylib signs again"
+S26.resign(); assert len(signs26) == 4
+assert S26.signer_stamp().split()[1] == hashlib.sha256(gf26.read_bytes()).hexdigest()
+# a sign that fails leaves no stamp (the old copy stays served) and is tried again on the next resign
+S26.SIGNER_VERSION += 1
+S26.subprocess.run = lambda cmd, **kw: (_ for _ in ()).throw(S26.subprocess.CalledProcessError(1, cmd))
+try:
+    S26.resign(); assert False, "the failure was swallowed"
+except S26.SignFailed:
+    pass
+assert not stamp26.exists() and (b26 / "signed" / "Demo.ipa").exists()
+S26.subprocess.run = run26; S26.resign(); assert len(signs26) == 5 and stamp26.read_text() == S26.signer_stamp()
 print("ok")

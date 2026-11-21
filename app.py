@@ -501,17 +501,39 @@ def sign_ipa(src, out):
             tmp.unlink(missing_ok=True)
 
 
+# B26: bump by hand whenever what sign_ipa puts in a signed copy changes (sign_ipa, app_entitlements, group_fix_plan,
+# retarget, zsign's flags): every signed copy made before is then signed again on the next resign, not only at the next
+# registration. The group fix dylib needs no bump: its hash is in the signer stamp too.
+SIGNER_VERSION = 1
+
+
+def signer_stamp():
+    """What signing depends on beside the IPA and profile: SIGNER_VERSION and the group fix dylib's hash."""
+    gf = hashlib.sha256(GROUPFIX_DYLIB.read_bytes()).hexdigest() if GROUPFIX_DYLIB.exists() else "none"
+    return f"{SIGNER_VERSION} {gf}"
+
+
+def signer_stamp_file(out):
+    return out.with_name(f".{out.stem}.signer")  # beside the signed copy, hidden from SIGNED.glob("*.ipa")
+
+
 def resign(force=False):
-    """Sign every apps/*.ipa whose signed copy is missing or older than the IPA or profile."""
+    """Sign every apps/*.ipa whose signed copy is missing, older than the IPA or profile, or signed by another signer
+    stamp (B26: an older sign_ipa or group fix)."""
     if not PROFILE.exists():
         return
     SIGNED.mkdir(exist_ok=True)
     t0, n = time.monotonic(), 0
+    stamp = signer_stamp()
     for src in sorted(APPS.glob("*.ipa")):
         out = SIGNED / src.name
+        sf = signer_stamp_file(out)
         deps = [src, PROFILE] + [p for p in [conf(IFIZBOX_SOURCES), conf(IFIZBOX_SETTINGS)] if src.stem == IFIZBOX_ID and p.exists()]  # inside it
-        if force or not out.exists() or out.stat().st_mtime < max(d.stat().st_mtime for d in deps):
+        if force or not out.exists() or out.stat().st_mtime < max(d.stat().st_mtime for d in deps) \
+                or not sf.exists() or sf.read_text() != stamp:
+            sf.unlink(missing_ok=True)  # a sign that fails leaves no stamp, so the copy is tried again
             sign_ipa(src, out)
+            sf.write_text(stamp)
             n += 1
     if n:  # B17: how long a resign takes, one line
         print(f"resign: signed {n} app{'s' if n > 1 else ''} in {time.monotonic() - t0:.1f}s{' (forced)' if force else ''}", flush=True)
