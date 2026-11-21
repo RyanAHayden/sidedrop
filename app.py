@@ -1443,7 +1443,7 @@ function ifzRun(){let b=document.getElementById("ifzb");if(!b)return nudge();
    reloads the page. A hung request can't leave "reloading" set for ever, which made later taps do nothing. */
 function reloadData(){let h=document.documentElement;if(h.classList.contains("reloading"))return;h.classList.add("reloading");
  let ac=window.AbortController&&new AbortController(),tm=setTimeout(()=>ac&&ac.abort(),120000);
- fetch("/refresh",{method:"POST",credentials:"same-origin",signal:ac&&ac.signal}).then(r=>r.status==403?location.reload():refreshIn(1),()=>refreshIn(1))
+ fetch("/refresh",{method:"POST",credentials:"same-origin",signal:ac&&ac.signal}).then(r=>r.status==403?bust():refreshIn(1),()=>refreshIn(1))
   .finally(()=>{clearTimeout(tm);h.classList.remove("reloading")})}
 function reloadFail(){rbar.classList.add("fail");rbarT.textContent="Couldn't Reach SideDrop";
  return new Promise(ok=>setTimeout(ok,2000)).then(()=>setTimeout(()=>{rbar.classList.remove("fail");rbarT.textContent="Reloading Data"},300))}  // after the bar slid away
@@ -1456,7 +1456,7 @@ function refreshIn(loud){return fetch("/",{credentials:"same-origin",cache:"no-s
  ["t-apps","t-ifizbox"].forEach(i=>document.getElementById(i).innerHTML=d.getElementById(i).innerHTML);STAMP=+d.getElementById("stamp").dataset.v;if(so)setupOpen(true);
  try{if(localStorage.sdp)sdpDone()}catch(e){}document.querySelectorAll("input[name=name]").forEach(i=>i.oninput&&i.oninput());
  document.querySelectorAll("[data-invites]").forEach(b=>b.live&&b.live())})  // B12: a pushed Invite Friends follows Reload too
- .catch(e=>{if(!loud)return;if(e=="net")return reloadFail();location.reload()})}  // B8: a tapped Reload never fails silently; the background check (checkNow) stays quiet
+ .catch(e=>{if(!loud)return;if(e=="net")return reloadFail().then(bust);bust()})}  // B8: a tapped Reload never fails silently; the background check (checkNow) stays quiet
 let held=0,pulled=0;addEventListener("touchstart",()=>{held=1;pulled=0},{passive:true});
 scr.addEventListener("scroll",()=>{if(held&&!pulled&&scr.scrollTop<-70){pulled=1;hap()}},{passive:true});  // the tick as it arms, like UIRefreshControl
 addEventListener("touchend",()=>{held=0;if(pulled){pulled=0;reloadData()}},{passive:true});
@@ -1472,7 +1472,11 @@ function ifzGo(c){ifzAuto=1;go("ifizbox");ifzAuto=0;return false}
 /* and when the Home Screen app comes back: iOS keeps it running for days, so a new deploy (another build) reloads the whole page, not just the lists */
 const BUILD=document.querySelector("meta[name=build]").content;
 /* once per new build: a server still answering with another one (mid-deploy) mustn't loop the page */
-function newBuild(b){if(!b||b==BUILD)return false;let seen=null;try{seen=sessionStorage.reloadedFor}catch(e){}if(seen==b)return false;try{sessionStorage.reloadedFor=b}catch(e){}location.reload();return true}
+function newBuild(b){if(!b||b==BUILD)return false;let seen=null;try{seen=sessionStorage.reloadedFor}catch(e){}if(seen==b)return false;try{sessionStorage.reloadedFor=b}catch(e){}bust();return true}
+/* B27: a stale page (old JS, or a copy Safari kept) loads the server's current one by force: one reload with a cache-busting ?_= query, never two within a minute (no loop) */
+function bust(){let n=Date.now(),t=0;try{t=+sessionStorage.bustAt||0}catch(e){}if(n-t<60000)return location.reload();try{sessionStorage.bustAt=n}catch(e){}
+ let u=new URL(location.href);u.searchParams.set("_",n);location.replace(u)}
+try{if(/[?&]_=/.test(location.search)){let u=new URL(location.href);u.searchParams.delete("_");history.replaceState(null,"",u)}}catch(e){}
 function checkNow(){return fetch("/check",{method:"POST"}).then(r=>r.json()).then(d=>{if(newBuild(d.build))return;if(d.stamp!=STAMP)return refreshIn()}).catch(()=>{})}
 addEventListener("visibilitychange",()=>{if(document.visibilityState=="visible"&&con.hidden)checkNow()});  // not mid-install: the install page would vanish
 {% if enrolled %}checkNow();{% endif %}
@@ -1518,6 +1522,16 @@ addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").f
         first_run=enrolled and first_run_due(token_udid(tok))))
     if (enrolled or is_guest()) and request.args.get("enrolled") and token_udid(tok):  # survives sign-out; re-checked against the profile on every load (B7: and against the invite for a guest)
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
+    return resp
+
+
+@app.after_request
+def no_store_pages(resp):
+    """B27: the home page, the enroll redirects and the invite pages are never kept by Safari, so a stale copy can't outlive a deploy
+    or a registration (the guest who registered kept seeing the Register form)."""
+    p = request.path
+    if p == "/" or p == "/refresh" or p.startswith(("/udid/", "/enroll", "/invite/", "/join/")):
+        resp.headers["Cache-Control"] = "no-store"
     return resp
 
 
@@ -2882,7 +2896,7 @@ INVITES, invites_lock = DATA / "invites.json", threading.Lock()  # {token: {name
 INVITE_TTL = 7 * 86400  # an unused one-iPhone invite expires after this
 INVITE_USED = "This invite already registered an iPhone. Ask for a new one."
 ROW_ICONS["share"] = ("#3f80e0", [("s", "M8.2 9.6H5.8v11h12.4v-11h-2.4", 2.4), ("s", "M12 15V5", 2.6), ("f", "M12 1.8l4.6 4.8H7.4z")])  # rowicons.js share
-DONE.update(newlink="Made a new link. The old one no longer works.", revoked="Revoked.")
+DONE.update(newlink="Made a new link. The old one no longer works.", revoked="Revoked.", newlinkc="Made a new link and copied it. The old one no longer works.")
 
 
 class InviteRefused(Exception):
@@ -3116,12 +3130,12 @@ its basis, the form has none, so at 0 REVOKE came out 22px narrower */
 <div class="c mg" data-link="{{ join }}"><input class=lnk readonly value="{{ join }}" aria-label=Link onfocus="this.select()">
 """ + LINK_BTNS.replace("{{ cls }}", "").replace("{{ copy }}", "Copy Link").replace("{{ share }}", "Share") + """
 <small>Signs in like the friends' password, without typing it. <b>Sign Out Everyone</b> on Passwords stops it, and so does Make New Link.</small></div>
-<form class="c mg" method=post action=/admin/invites onsubmit="if(!confirm('Make a new link? The old one stops working.'))return false">
+<form class="c mg" data-copy method=post action=/admin/invites onsubmit="if(!confirm('Make a new link? The old one stops working.'))return false">
 <input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=do value=rotate><button class=grey>Make New Link</button></form>
 <h3 class=hdr>One iPhone</h3>
-{% if new %}<div class="c mg" data-link="{{ new.url }}"><p class=done>New link{{ ' for ' + new.name if new.name }}:</p><input class=lnk readonly value="{{ new.url }}" aria-label=Link onfocus="this.select()">
+{% if new %}<div class="c mg" data-link="{{ new.url }}"><p class=done>New link{{ ' for ' + new.name if new.name }}{{ ' (copied)' if copied }}:</p><input class=lnk readonly value="{{ new.url }}" aria-label=Link onfocus="this.select()">
 """ + LINK_BTNS.replace("{{ cls }}", "").replace("{{ copy }}", "Copy Link").replace("{{ share }}", "Share") + """</div>{% endif %}
-<form class="c mg" method=post action=/admin/invites><input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=do value=new>
+<form class="c mg" data-copy method=post action=/admin/invites><input type=hidden name=csrf value="{{ csrf }}"><input type=hidden name=do value=new>
 <input name=name maxlength=30 placeholder="Name (optional), like Sam" aria-label=Name autocomplete=off>
 <button>New One-iPhone Link</button><small>Each link registers one iPhone, then signs in again only on that iPhone. Unused links expire after 7 days. Guests install apps like friends but never see these links or the friends' password.</small></form>
 <div data-invites data-sig="{{ sig }}">""" + INVITE_ROWS + """</div>
@@ -3149,6 +3163,16 @@ window.lnkCopy=function(b){let w=b.closest("[data-link]"),u=w.dataset.link,act=b
  try{c=document.execCommand("copy")}catch(e){}document.removeEventListener("copy",h,true);a.remove();if(s)s.removeAllRanges();
  if(c&&got)return ok();
  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(u).then(ok,sel);else sel()};
+/* B27: New One-iPhone Link and Make New Link copy the new link in the same tap: the POST goes by fetch in the submit handler and the
+clipboard gets a ClipboardItem built from that promise (iOS accepts it inside the gesture). If that can't be (no ClipboardItem, a failed
+write), the form just posts as before and the page shows the new link with its Copy Link button and selected box. */
+document.querySelectorAll("form[data-copy]").forEach(f=>f.addEventListener("submit",e=>{
+ if(e.defaultPrevented||!window.ClipboardItem||!navigator.clipboard||!navigator.clipboard.write||!window.fetch)return;e.preventDefault();
+ let go=fetch(f.action,{method:"POST",body:new URLSearchParams(new FormData(f)),headers:{"X-Copy":"1"},credentials:"same-origin"}).then(r=>{if(!r.ok)throw 0;return r.json()}),
+  fall=()=>location.reload();  // the POST may have gone through: never post twice
+ 
+ navigator.clipboard.write([new ClipboardItem({"text/plain":go.then(d=>new Blob([d.link],{type:"text/plain"}))})])
+  .then(()=>go.then(d=>location.href=d.next),()=>go.then(d=>location.href=d.next.replace("&copied=1","").replace("newlinkc","newlink"),fall))}));
 window.lnkShare=function(b){navigator.share({url:b.closest("[data-link]").dataset.link}).catch(()=>{})};
 document.querySelectorAll(".shr").forEach(b=>b.hidden=!navigator.share)</script>"""
 
@@ -3178,12 +3202,16 @@ def admin_invites():
             s = load_json(SETUP)
             s["join_gen"] = s.get("join_gen", 0) + 1
             save_json(SETUP, s)
+            if request.headers.get("X-Copy"):  # B27: the page's fetch wants the new link back to copy it in the tap
+                return {"link": f"{PUBLIC_URL}/join/{join_token()}", "next": "/admin/invites?done=newlinkc"}
             return redirect("/admin/invites?done=newlink")
         if do == "new":
             tok, now = secrets.token_urlsafe(16), int(time.time())
             name = re.sub(r"[^\w .'-]", "", request.form.get("name", "")).strip()[:30]
             with invites_lock:
                 save_json(INVITES, {**load_invites(), tok: {"name": name, "made": now, "exp": now + INVITE_TTL}})
+            if request.headers.get("X-Copy"):
+                return {"link": f"{PUBLIC_URL}/invite/{tok}", "next": f"/admin/invites?new={tok}&copied=1"}
             return redirect(f"/admin/invites?new={tok}")
         if do == "revoke":
             with invites_lock:
@@ -3195,7 +3223,7 @@ def admin_invites():
         abort(400)
     rows = invite_rows()
     new = next((i for i in rows if i["tok"] == request.args.get("new") and i["state"] == "unused"), None)
-    return admin_page(ADMIN_CSS + INVITES_PAGE, "Invite Friends", join=f"{PUBLIC_URL}/join/{join_token()}", invites=rows, new=new,
+    return admin_page(ADMIN_CSS + INVITES_PAGE, "Invite Friends", join=f"{PUBLIC_URL}/join/{join_token()}", invites=rows, new=new, copied=bool(request.args.get("copied")),
                       sig=invite_rows_sig(rows))
 
 

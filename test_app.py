@@ -1254,6 +1254,12 @@ assert anyone.get(j).location == "/?go=setup" and b"Register iPhone" in anyone.g
 assert I.app.test_client().get("/join/" + "0" * 32).status_code == 403 and I.app.test_client().get("/join/x").status_code == 403
 # Make New Link: the old link stops, sessions made with it stay; the new one works
 assert inv(do="rotate").location == "/admin/invites?done=newlink"
+# B27: the page's fetch (X-Copy) gets the new link as JSON to copy in the tap; the page carries the handler
+cp = boss.post("/admin/invites", data=dict(do="rotate", csrf=csrf), headers={"X-Copy": "1"}).get_json()
+assert cp["link"] == "https://x.test" + join_link() and cp["next"] == "/admin/invites?done=newlinkc"
+cp = boss.post("/admin/invites", data=dict(do="new", name="Cy", csrf=csrf), headers={"X-Copy": "1"}).get_json()
+assert cp["link"].startswith("https://x.test/invite/") and cp["next"].endswith("&copied=1") and "(copied)" in boss.get(cp["next"]).data.decode()
+assert boss.get("/admin/invites").data.decode().count("<form class=\"c mg\" data-copy") == 2 and "new ClipboardItem" in boss.get("/admin/invites").data.decode()
 assert I.app.test_client().get(j).status_code == 403 and signed_in(anyone)
 j = join_link(); assert I.app.test_client().get(j).location == "/?go=setup"
 # changing the friends' password with Sign Out Everyone kills the link too
@@ -1299,6 +1305,12 @@ assert rj0["states"][tok] == "unused" and "Not used" in rj0["html"] and f'data-l
 assert f'<div data-invites data-sig="{rj0["sig"]}">' in page0 and rj0["html"] in page0  # the page draws the same rows it refreshes with
 assert boss.get("/admin/invites.json").get_json()["sig"] == rj0["sig"]  # nothing changed: same signature, so the open page leaves its rows
 r = ipost("GUEST-1"); assert r.status_code == 301 and r.location.endswith("/?enrolled=" + I.device_token("GUEST-1")) and iudids == ["GUEST-1"]
+gloc = path_qs(r.location)
+for who in (guest, I.app.test_client()):  # B27: Safari after the profile install, with the invite's session or none
+    gr = who.get(gloc); assert gr.status_code == 200, gr.status_code
+    gh = gr.data.decode(); assert "Registered" in gh and "placeholder=\"Your name\"" not in gh and "id=reg" not in gh, gh[:300]
+    assert gr.headers["Cache-Control"] == "no-store" and r.headers["Cache-Control"] == "no-store"  # the 301 too
+    assert who.get("/?_=1").headers["Cache-Control"] == "no-store"
 bg_idle(I)
 rj1 = boss.get("/admin/invites.json").get_json()
 assert rj1["states"][tok] == "used" and rj1["sig"] != rj0["sig"] and "Used by Sam x iPhone14,2 on" in rj1["html"]
@@ -1339,9 +1351,9 @@ assert stale.post("/refresh").status_code == 403 and stale.get("/").status_code 
 # and the page's side: a refused /refresh reloads the page, an unreachable server says so in the bar, a page refreshIn can't swap in
 # reloads the page, a fresh "/" (no cached copy), and a hung request can't leave Reload dead
 h = guest.get("/").data.decode()
-assert '.then(r=>r.status==403?location.reload():refreshIn(1),()=>refreshIn(1))' in h and "setTimeout(()=>ac&&ac.abort(),120000)" in h
+assert '.then(r=>r.status==403?bust():refreshIn(1),()=>refreshIn(1))' in h and "setTimeout(()=>ac&&ac.abort(),120000)" in h
 assert 'fetch("/",{credentials:"same-origin",cache:"no-store"}).then(r=>{if(!r.ok)throw"page";return r.text()},()=>{throw"net"})' in h
-assert '.catch(e=>{if(!loud)return;if(e=="net")return reloadFail();location.reload()})' in h and 'rbarT.textContent="Couldn\'t Reach SideDrop"' in h
+assert '.catch(e=>{if(!loud)return;if(e=="net")return reloadFail().then(bust);bust()})' in h and "function bust()" in h and 'searchParams.set("_",n)' in h in h and 'rbarT.textContent="Couldn\'t Reach SideDrop"' in h
 assert "#rbar.fail .spin{display:none}" in h and "i.oninput&&i.oninput()" in h
 # B7: iOS returns to /?enrolled=<tok> after the profile install, often with no session and no cookie: that signs in the invite's
 # guest on that one request (no password form), sets the device cookie, and the next plain load stays in
