@@ -361,19 +361,26 @@ def zsign_fails(how):
         assert A.P12_PASSWORD in map(str, cmd)  # what subprocess's own error would have printed
         if how == "exit":
             raise SP25.CalledProcessError(2, cmd, output="", stderr=f">>> Signing with {A.P12_PASSWORD}\n>>> Can't Load P12 or PEM File!\n\n")
+        if how == "echo":
+            raise SP25.CalledProcessError(1, cmd, output="", stderr=f">>> Bad password: {A.P12_PASSWORD}\n")
         if how == "timeout":
             raise SP25.TimeoutExpired(cmd, 600, stderr=b">>> Signing...\n")
         raise FileNotFoundError(2, "No such file or directory", "zsign")
     return run
 for how, says in (("exit", "Couldn't sign Demo: zsign exited with 2: >>> Can't Load P12 or PEM File!"),
                   ("timeout", "Couldn't sign Demo: zsign took over 600s: >>> Signing..."),
-                  ("exit-echo", "")):
-    A.subprocess.run = zsign_fails("exit" if how == "exit-echo" else how)
+                  ("echo", "Couldn't sign Demo: zsign exited with 1: >>> Bad password: …")):
+    A.subprocess.run = zsign_fails(how)
+    log25 = io.StringIO()
     try:
-        A.sign_ipa(tmp / "apps" / "Demo.ipa", tmp / "b25-signed.ipa"); raise AssertionError("no error")
+        with contextlib.redirect_stdout(log25):
+            A.sign_ipa(tmp / "apps" / "Demo.ipa", tmp / "b25-signed.ipa")
+        raise AssertionError("no error")
     except A.SignFailed as e:
         tb = "".join(traceback.format_exception(e))
-        assert A.P12_PASSWORD not in tb and "-p" not in str(e) and (not says or str(e) == says), (str(e), tb)
+        assert e.__context__ is None and e.__cause__ is None, "no link to subprocess's error and its argv"
+        assert A.P12_PASSWORD not in tb + log25.getvalue() and str(e) == says, (str(e), tb, log25.getvalue())
+        assert log25.getvalue().strip(), "zsign's output still reaches the log"
 A.subprocess.run = zsign_fails("missing")
 try:
     A.sign_ipa(tmp / "apps" / "Demo.ipa", tmp / "b25-signed.ipa"); raise AssertionError("no error")
@@ -385,8 +392,14 @@ log25 = io.StringIO()
 with contextlib.redirect_stdout(log25):
     page25 = c.get("/").data.decode()
     A.resign_logged()
+    rp25, A.regen_profile = A.regen_profile, lambda: None  # keep the profile the tests above wrote
+    A.resign_all()
+    A.regen_profile = rp25
+    A.resign_bg_loop()  # resign_bg["again"] is False: one pass, then it returns
 assert "Couldn&#39;t sign Demo: zsign exited with 2" in page25 and A.P12_PASSWORD not in page25, page25[:500]
-assert "resign failed: Couldn't sign Demo: zsign exited with 2" in log25.getvalue() and A.P12_PASSWORD not in log25.getvalue(), log25.getvalue()
+for said25 in ("resign failed: ", "re-signing after new signing files failed: ", "re-signing after a registration failed: "):
+    assert said25 + "Couldn't sign Demo: zsign exited with 2" in log25.getvalue(), (said25, log25.getvalue())
+assert A.P12_PASSWORD not in log25.getvalue(), log25.getvalue()
 A.subprocess.run, A.P12_PASSWORD = run0, pw0
 with contextlib.redirect_stdout(io.StringIO()):
     A.resign_logged()  # Demo signed again for what follows

@@ -2,7 +2,6 @@
 
 ### Next
 
-- [ ] **B25** (follow-up, critical) A failed sign shows the P12 password (found by R2): sign_ipa's subprocess.CalledProcessError text holds zsign's whole command line, P12_PASSWORD included; index() puts str(e) on the page as error (every signed-in friend sees it) and resign_logged/resign_all/resign_bg_loop print it to the container log. Breaks the secrecy of the signing certificate's password whenever any zsign run fails (B24 makes that happen on the next resign). Fix: raise an error of our own naming the app and zsign's exit code/last stderr line, never the argv; a test that a failing zsign's error and log hold no password. | files: app.py, test_app.py
 ### Follow-ups
 
 - [~] **F36** (follow-up, normal) Control session 2 asked the person: "Want me to queue the `/sync` fix as a task?" Carry on from their answer (the session, closed while it waited: https://claude.ai/code/session_012iEtdNSwuoDgUtMGEBjyja) BLOCKED: DECIDE: Want me to queue the `/sync` fix as a task? https://claude.ai/code/session_012iEtdNSwuoDgUtMGEBjyja (asked 2026-11-20 20:07)

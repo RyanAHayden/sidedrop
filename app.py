@@ -426,25 +426,36 @@ class SignFailed(RuntimeError):
 
 def run_zsign(name, cmd):
     """Run zsign for the app `name`; on a failure raise SignFailed with the app, the exit code (or the timeout) and zsign's
-    last output line, never the argv (subprocess's own errors print it, P12_PASSWORD included). `from None` keeps the
-    original error, and so the argv, out of any traceback too."""
+    last output line, never the argv (subprocess's own errors print it, P12_PASSWORD included). SignFailed is raised after
+    the except block, so it keeps no link (__context__) to the original error and its argv. zsign's output still goes to
+    the log, as before it was captured, with the password blanked."""
     secrets = [str(a) for a in cmd[cmd.index("-p") + 1:cmd.index("-p") + 2] if str(a)] if "-p" in cmd else []
-    def said(text):
-        lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
-        last = lines[-1] if lines else ""
+    def clean(text):
+        text = text.decode(errors="replace") if isinstance(text, bytes) else (text or "")
         for s in secrets:
-            last = last.replace(s, "…")
-        return f": {last[:300]}" if last else ""
+            text = text.replace(s, "…")
+        return text
+    def said(*texts):
+        lines = [ln.strip() for t in texts for ln in clean(t).splitlines() if ln.strip()]
+        return f": {lines[-1][:300]}" if lines else ""
+    def to_log(*texts):
+        out = "".join(clean(t) for t in texts)
+        if out.strip():
+            print(out.rstrip("\n"), flush=True)
+    failed = None
     try:
-        subprocess.run(cmd, check=True, timeout=600, capture_output=True, text=True, errors="replace")
+        r = subprocess.run(cmd, check=True, timeout=600, capture_output=True, text=True, errors="replace")
+        to_log(getattr(r, "stdout", ""), getattr(r, "stderr", ""))  # test stubs return other things
     except subprocess.CalledProcessError as e:
-        raise SignFailed(f"Couldn't sign {name}: zsign exited with {e.returncode}{said(e.stderr) or said(e.stdout)}") from None
+        to_log(e.stdout, e.stderr)
+        failed = f"zsign exited with {e.returncode}{said(e.stdout, e.stderr)}"
     except subprocess.TimeoutExpired as e:
-        out = e.stderr or e.stdout or ""
-        raise SignFailed(f"Couldn't sign {name}: zsign took over {e.timeout:g}s"
-                         f"{said(out.decode(errors='replace') if isinstance(out, bytes) else out)}") from None
+        to_log(e.stdout, e.stderr)
+        failed = f"zsign took over {e.timeout:g}s{said(e.stdout, e.stderr)}"
     except OSError as e:
-        raise SignFailed(f"Couldn't sign {name}: zsign didn't start ({e.strerror or type(e).__name__})") from None
+        failed = f"zsign didn't start ({e.strerror or type(e).__name__})"
+    if failed:
+        raise SignFailed(f"Couldn't sign {name}: {failed}")
 
 
 def sign_ipa(src, out):
