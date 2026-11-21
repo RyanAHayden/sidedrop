@@ -439,11 +439,25 @@ def sign_ipa(src, out):
         retarget(src, tmp, old_id, new_id or old_id, extra)
     ents = out.with_name(f".{out.name}.entitlements.plist")
     ents.write_bytes(plistlib.dumps(entitlements))
+    # B24: zsign 1.1.2 signs the -l dylib in place, and the image's copy is read-only to the app's user (and must stay as
+    # committed), so it gets a writable copy, under the same name (the name the dylib is loaded by), removed after
+    gf_dir = out.with_name(f".{out.name}.groupfix")
+    gf_copy = gf_dir / GROUPFIX_DYLIB.name
     try:
+        if fix:
+            gf_dir.mkdir(exist_ok=True)
+            gf_copy.unlink(missing_ok=True)
+            gf_copy.write_bytes(GROUPFIX_DYLIB.read_bytes())
         subprocess.run(["zsign", "-q", "-t", out.parent, "-k", P12, "-p", P12_PASSWORD, "-m", PROFILE,
-                        "-e", ents, "--rm_watch", *(["-l", GROUPFIX_DYLIB] if fix else []), "-o", out, tmp],
+                        "-e", ents, "--rm_watch", *(["-l", gf_copy] if fix else []), "-o", out, tmp],
                        check=True, timeout=600)
     finally:
+        if fix:
+            gf_copy.unlink(missing_ok=True)
+            try:
+                gf_dir.rmdir()
+            except OSError:
+                pass
         ents.unlink(missing_ok=True)
         if rewrite:
             tmp.unlink(missing_ok=True)

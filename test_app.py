@@ -332,7 +332,13 @@ A.BUNDLE_ID = "com.me.sideload"
 A.PROFILE.write_bytes(plistlib.dumps({"Entitlements": {"application-identifier": "TEAM.com.me.sideload", "com.apple.developer.team-identifier": "TEAM",
     "keychain-access-groups": ["TEAM.*"], "get-task-allow": False, "com.apple.security.application-groups": ["group.com.me.sideload"]}}))
 gf = []
+gf_bytes = A.GROUPFIX_DYLIB.read_bytes()
 def look_gf(cmd, **kw):
+    if "-l" in cmd:  # B24: zsign signs the -l dylib in place, so it gets a writable copy, never the committed file
+        l = Path(cmd[cmd.index("-l") + 1])
+        assert l != A.GROUPFIX_DYLIB and l.read_bytes() == A.GROUPFIX_DYLIB.read_bytes() and os.access(l, os.W_OK), l
+        with open(l, "r+b") as f:  # what zsign does to it
+            f.seek(0, 2); f.write(b"\0" * 4096)
     with zipfile.ZipFile(cmd[-1]) as z:
         conf_ = [plistlib.loads(z.read(n)) for n in z.namelist() if n.endswith("/sidedrop-groupfix.plist")]
         gf.append((cmd[cmd.index("-l") + 1] if "-l" in cmd else None, conf_, [n for n in z.namelist() if "groupfix" in n],
@@ -347,7 +353,9 @@ with zipfile.ZipFile(ifz_gf, "w") as z:
 A.sign_ipa(ifz_gf, tmp / "gf-signed.ipa")
 A.subprocess.run = run0
 (p_l, p_conf, p_names, p_ents), (d_l, d_conf, d_names, _), (i_l, i_conf, i_names, _) = gf
-assert p_l == A.GROUPFIX_DYLIB and A.GROUPFIX_DYLIB.name == "sidedrop-groupfix.dylib", p_l
+assert Path(p_l).name == A.GROUPFIX_DYLIB.name == "sidedrop-groupfix.dylib", p_l  # the name it is loaded by
+assert A.GROUPFIX_DYLIB.read_bytes() == gf_bytes, "a sign never changes the committed dylib"
+assert not Path(p_l).exists() and not Path(p_l).parent.exists(), "the dylib's copy is removed after"
 assert p_names == ["Payload/Probe.app/sidedrop-groupfix.plist"] and p_conf == [{
     "groups": ["group.com.example.probe", "group.com.example.shared"], "target": "", "keychain": True}], (p_names, p_conf)
 assert p_ents["com.apple.security.application-groups"] == ["group.com.me.sideload"], "the profile's own app groups stay"
