@@ -196,6 +196,10 @@ def register_safely(udid, name, invite=None):
         register(udid, name, invite=invite)
     except InviteRefused:
         raise
+    except Waiting:
+        if REG_ERR.exists() and load_json(REG_ERR).get("udid") == udid:
+            REG_ERR.unlink(missing_ok=True)
+        return None  # the caller sends the iPhone on to home, which says Waiting for Apple
     except Exception as e:
         print(f"registering {udid} failed: {e}", flush=True)
         save_json(REG_ERR, {"at": time.time(), "udid": udid, "error": str(e)[:500]})
@@ -204,6 +208,51 @@ def register_safely(udid, name, invite=None):
                 f"open the link again once they have fixed it.</p>", 500)
     if REG_ERR.exists() and load_json(REG_ERR).get("udid") == udid:
         REG_ERR.unlink(missing_ok=True)
+
+
+class Waiting(Exception):
+    """B29: Apple has the iPhone in the account but is still adding it (status PROCESSING)."""
+
+
+WAITING, waiting_lock = DATA / "waiting.json", threading.Lock()  # {udid: {name, at}}: iPhones Apple is still adding
+waiting_checked = {}  # udid: when retry_waiting last asked Apple (at most once a minute each)
+
+
+def set_waiting(udid, name):
+    with waiting_lock:
+        w = load_json(WAITING)
+        if name is None:
+            if w.pop(udid, None) is None:
+                return
+        else:
+            w[udid] = {"name": name, "at": w.get(udid, {}).get("at", int(time.time()))}
+        save_json(WAITING, w)
+
+
+def is_waiting(udid):
+    return bool(udid) and udid in load_json(WAITING) and udid not in profile_udids()
+
+
+def retry_waiting(only=None):
+    """B29: an iPhone Apple was still adding: once Apple says ENABLED, make the profile with it and sign again, no second install."""
+    for udid in [u for u in load_json(WAITING) if only in (None, u)]:
+        if time.time() - waiting_checked.get(udid, 0) < 60:
+            continue
+        waiting_checked[udid] = time.time()
+        try:
+            found = asc("GET", "/devices", params={"filter[udid]": udid})["data"]
+            if not any((d.get("attributes") or {}).get("status") not in ("DISABLED",) for d in found):
+                set_waiting(udid, None)  # gone or turned off at Apple: back to the Register form
+            elif any((d.get("attributes") or {}).get("status") == "ENABLED" for d in found):
+                with reg_lock:
+                    if udid not in profile_udids():
+                        regen_profile()
+                        if udid in profile_udids():
+                            resign_later()
+                if udid in profile_udids():
+                    set_waiting(udid, None)
+        except Exception as e:
+            print(f"waiting iPhone {udid}: {e}", flush=True)
 
 
 reg_lock = threading.Lock()  # B17: registrations (and the profile they make) take this, not lock, so one never waits on a resign
@@ -219,9 +268,17 @@ def register(udid, name, invite=None):
             if not found:
                 asc("POST", "/devices", json={"data": {"type": "devices", "attributes": {
                     "name": name[:50], "udid": udid, "platform": "IOS"}}})
-            for d in found:  # B28: an iPhone from an earlier try may be disabled or pending: the profile only takes ENABLED ones
-                if (d.get("attributes") or {}).get("status", "ENABLED") != "ENABLED":
+            for d in found:  # B28: an iPhone from an earlier try may be disabled: the profile only takes ENABLED ones
+                if (d.get("attributes") or {}).get("status", "ENABLED") == "DISABLED":
                     asc("PATCH", f"/devices/{d['id']}", json={"data": {"type": "devices", "id": d["id"], "attributes": {"status": "ENABLED"}}})
+            if not found or any((d.get("attributes") or {}).get("status") == "DISABLED" for d in found):
+                found = asc("GET", "/devices", params={"filter[udid]": udid})["data"]  # just added or re-enabled: Apple may say PROCESSING now
+            if any((d.get("attributes") or {}).get("status", "ENABLED") not in ("ENABLED", "DISABLED") for d in found):
+                # B29: Apple is still adding it (PROCESSING, can last a day): not an error. Kept as waiting; the server retries by itself
+                if invite:
+                    invite_use(invite[0], invite[1], udid, name)  # bound to this iPhone: the same one may come back, no other can
+                set_waiting(udid, name)
+                raise Waiting(udid)
             regen_profile()
             if udid not in profile_udids():
                 raise RuntimeError("Apple made the profile without this iPhone (its device is not enabled in the developer account, "
@@ -229,6 +286,7 @@ def register(udid, name, invite=None):
             resign_later()  # B17: the 301 doesn't wait for every app to be signed again
         if invite:
             invite_use(invite[0], invite[1], udid, name)
+        set_waiting(udid, None)
 
 
 # B17: a registration's re-sign runs in a thread (under lock as before); one arriving while it runs asks for one more after it.
@@ -1115,7 +1173,10 @@ If they sent you an invite link, open it again: it signs you in with no password
 {{ vfoot }}""",
                     err=request.args.get("err"), first=needs_setup() and DEFAULT_PASSWORD)
     tok = request.args.get("enrolled") or request.cookies.get("device", "")  # ?enrolled= is the 301 after the profile install
+    if token_udid(tok):
+        retry_waiting(token_udid(tok))  # B29: Apple may have finished adding this iPhone
     enrolled = token_udid(tok) in profile_udids()
+    waiting = not enrolled and is_waiting(token_udid(tok))
     if enrolled:
         touch_seen(token_udid(tok))
     error = None
@@ -1309,14 +1370,15 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 <a class=tile href=#ifizbox onclick="go('ifizbox');return false"><span class=tic style="background:#1a82fb"><svg viewBox="0 0 30 30" fill="#fff"><path d="M15 3l11 5.5-11 5.5L4 8.5zM4 10.7l10 5v11.1l-10-5zM16 15.7l10-5v11.1l-10 5z"/></svg></span>iFizBox</a></div>
 <div class=hw><a class=tile href=/help onclick="return helpOpen(null,this)"><span class=tic style="background:#8a929c"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M8.8 9a3.3 3.3 0 1 1 4.6 3c-.9.4-1.4 1.1-1.4 2.2"/><path d="M12 18.3v.2"/></svg></span>Help</a></div>
 {% if enrolled %}<a class="tile reg" href=/this-iphone data-push><span class=tic style="background:#34a84a"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.5 4.5 8.5-10"/></svg></span>Registered{% if stats and stats[1] %}<span class=hdt>until {{ stats[1].strftime('%b %-d, %Y') }}</span>{% endif %}</a>
-{% else %}<button type=button class="tile todo" id=setupT aria-expanded={{ 'true' if open_setup else 'false' }} aria-controls=setup onclick="setupOpen(setup.hidden)"><span class=tic style="background:#f08a12"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#f08a12"/></svg></span><div>Set up this iPhone<small>2 steps, then every app unlocks</small></div></button>{% endif %}</div>
+{% else %}<button type=button class="tile todo" id=setupT aria-expanded={{ 'true' if open_setup else 'false' }} aria-controls=setup onclick="setupOpen(setup.hidden)"><span class=tic style="background:#f08a12"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" fill="#fff"/><rect x="8.5" y="5" width="7" height="12" fill="#f08a12"/></svg></span><div>{% if waiting %}Waiting for Apple<small>Come back later; nothing to do{% else %}Set up this iPhone<small>2 steps, then every app unlocks{% endif %}</small></div></button>{% endif %}</div>
 <p class=ftr id=tagline>Sideload apps on your iPhone with a friend's Apple developer account.</p>
 {% if not enrolled %}<div id=setup{% if not open_setup %} hidden{% endif %}>
 <details class=c id=sdp open><summary><span class=num>1</span><div>Turn off Stolen Device Protection</div></summary>
 {{ sdp_steps }}
 <button type=button class=gbtn onclick="sdpDone(true)">I turned it off</button></details>
 <div class=c id=reg><div class=sh><span class=num>2</span><div>Register this iPhone<small>In Safari on this iPhone</small></div></div>
-<fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>This adds your iPhone to the shared developer account, so the apps here can be signed for it. Registered before but the apps are locked? Register again, it's instant.</small></div></div>{% endif %}
+{% if waiting %}<p>Apple is still adding this iPhone, which can take a few hours. Come back to this page later; nothing else to do.</p><div class=row><div>Waiting for Apple</div></div>
+{% else %}<fieldset id=regf disabled>{{ enroll_form }}</fieldset><small>This adds your iPhone to the shared developer account, so the apps here can be signed for it. Registered before but the apps are locked? Register again, it's instant.</small>{% endif %}</div></div>{% endif %}
 {% if ifz %}<h3 class=hdr>iFizBox</h3><div class="g{{ '' if enrolled else ' locked' }}"><div class="row ifzr">{{ ifz_icon(ifz) }}
 <div>{{ ifz.title }}<span class=ifv>{{ ifz.short }}</span></div><small class=rec>Recommended: get update alerts and install more apps</small>
 {% if enrolled and ifz.name in signing %}<span class="get sgn" aria-label="Signing {{ ifz.title }}">Signing…</span>
@@ -1476,7 +1538,7 @@ function reloadData(){let h=document.documentElement;if(h.classList.contains("re
 function reloadFail(){rbar.classList.add("fail");rbarT.textContent="Couldn't Reach SideDrop";
  return new Promise(ok=>setTimeout(ok,2000)).then(()=>setTimeout(()=>{rbar.classList.remove("fail");rbarT.textContent="Reloading Data"},300))}  // after the bar slid away
 function refreshIn(loud){return fetch("/",{credentials:"same-origin",cache:"no-store"}).then(r=>{if(!r.ok)throw"page";return r.text()},()=>{throw"net"}).then(t=>{let d=new DOMParser().parseFromString(t,"text/html");
- if(!d.getElementById("t-apps")||!d.getElementById("reg")!=!document.getElementById("reg"))return location.reload();  // signed out, or registered since: the whole page changes
+ if(!d.getElementById("t-apps")||!d.getElementById("reg")!=!document.getElementById("reg"))return bust();  // signed out, or registered since: the whole page changes
  if(!d.getElementById("t-files")!=!document.getElementById("t-files"))return location.reload();  // the Files tab came or went: the tab bar changes
  let so=window.setup&&!setup.hidden;  // F30: unfolded setup steps stay unfolded through the swap below (the fetched "/" draws them folded)
  if(d.getElementById("t-files"))document.getElementById("t-files").innerHTML=d.getElementById("t-files").innerHTML;
@@ -1507,7 +1569,7 @@ function bust(){let n=Date.now(),t=0;try{t=+sessionStorage.bustAt||0}catch(e){}i
 try{if(/[?&]_=/.test(location.search)){let u=new URL(location.href);u.searchParams.delete("_");history.replaceState(null,"",u)}}catch(e){}
 function checkNow(){return fetch("/check",{method:"POST"}).then(r=>r.json()).then(d=>{if(newBuild(d.build))return;if(d.stamp!=STAMP)return refreshIn()}).catch(()=>{})}
 addEventListener("visibilitychange",()=>{if(document.visibilityState=="visible"&&con.hidden)checkNow()});  // not mid-install: the install page would vanish
-{% if enrolled %}checkNow();{% endif %}
+{% if enrolled %}checkNow();{% endif %}{% if waiting %}setInterval(()=>{if(document.visibilityState=="visible")refreshIn()},60000);{% endif %}
 /* first INSTALL on this phone: warn that opening the app will ask for Developer Mode; asked once per phone */
 function devMaybe(){let a=null;try{a=localStorage.devTold}catch(e){}if(a||!window.devAsk)return;try{localStorage.devTold=1}catch(e){}devAsk.hidden=false}
 function devDone(show){devAsk.hidden=true;if(show)helpOpen("dev")}
@@ -1541,14 +1603,14 @@ function firstRunGo(ok){let b=frNext;frNext=null;firstRun.hidden=true;if(!ok)ret
  if(b){if(b.dataset.arm)b.classList.add("go");b.click()}}  // an armed GET installs on click
 show();
 addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").forEach(i=>i.oninput());theme();if(window.themeMarks)themeMarks()});  // themeMarks exists only once Settings > Theme was pushed
-</script>""", error=error, enrolled=enrolled, signing=signing, stamp=signed_stamp(), admin_on=admin_enabled(), open_setup=not enrolled and request.args.get("go") == "setup", just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
+</script>""", error=error, enrolled=enrolled, signing=signing, stamp=signed_stamp(), admin_on=admin_enabled(), waiting=waiting, open_setup=not enrolled and (waiting or request.args.get("go") == "setup"), just_enrolled=enrolled and bool(request.args.get("enrolled")) and request.cookies.get("device") != tok, apps=apps, ifz=ifz, third=third, n_sources=len(read_urls(IFIZBOX_SOURCES)),
         ifz_m=signed_url(f"/m/{ifz['name']}.plist") if ifz else "",
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
         file_labels=file_labels, is_admin=is_admin(), theme_names={n: p[1] for n, p in PALETTES.items()},
         theme_name=PALETTES[THEME_DEFAULT["light"]][1], files=shared_files(), inv_name=invite_name(), guest=is_guest(), fdl=lambda f: signed_url(f"/f/{f.name}"),
         first_run=enrolled and first_run_due(token_udid(tok))))
-    if (enrolled or is_guest()) and request.args.get("enrolled") and token_udid(tok):  # survives sign-out; re-checked against the profile on every load (B7: and against the invite for a guest)
+    if (enrolled or waiting or is_guest()) and request.args.get("enrolled") and token_udid(tok):  # survives sign-out; re-checked against the profile on every load (B7: and against the invite for a guest)
         resp.set_cookie("device", tok, max_age=10 * 365 * 86400, secure=True, httponly=True, samesite="Lax")
     return resp
 
@@ -2570,7 +2632,7 @@ def device_rows(listed):
         a = d.get("attributes") or {}
         added = datetime.datetime.strptime(a["addedDate"][:10], "%Y-%m-%d") if a.get("addedDate") else None
         out.append(dict(id=d["id"], name=a.get("name", ""), model=a.get("model") or a.get("deviceClass", ""), udid=a.get("udid", ""),
-                        on=a.get("status") == "ENABLED", added=added, me=bool(me) and a.get("udid") == me,
+                        on=a.get("status") == "ENABLED", waiting=a.get("status") not in ("ENABLED", "DISABLED"), added=added, me=bool(me) and a.get("udid") == me,
                         last=ago(seen[a["udid"]]).capitalize() if a.get("udid") in seen else "Not seen yet"))
     out.sort(key=lambda d: -(d["added"].timestamp() if d["added"] else 0))  # one list: a turned-off iPhone keeps its place
     return out
@@ -2694,8 +2756,8 @@ def manage_menu():
 
 SPINNER = """<svg class=spin viewBox="0 0 24 24" aria-hidden=true><g stroke="#7f7f7f" stroke-width="2.2" stroke-linecap="round">{% for i in range(12) %}
 <line x1=12 y1=2.5 x2=12 y2=7 transform="rotate({{ i * 30 }} 12 12)" opacity="{{ '%.2f' % (1 - i * 0.07) }}" />{% endfor %}</g></svg>"""
-DEVICE_LIST = """{% macro dev(d) %}<div class="row drow{{ '' if d.on else ' off' }}"><a class=dl href="/admin/iphone/{{ d.id }}" data-push><b>{{ d.name }}</b><small>{{ d.model }}{% if d.me %} · this iPhone{% endif %}</small></a>
-<label class=sw><input type=checkbox{{ ' checked' if d.on }} data-id="{{ d.id }}" data-name="{{ d.name }}" aria-label="{{ d.name }}" onchange="devSw(this)"><i></i><span class=k></span></label></div>{% endmacro %}
+DEVICE_LIST = """{% macro dev(d) %}<div class="row drow{{ '' if d.on else ' off' }}"><a class=dl href="/admin/iphone/{{ d.id }}" data-push><b>{{ d.name }}</b><small>{{ d.model }}{% if d.me %} · this iPhone{% endif %}{% if d.waiting %} · Waiting for Apple{% endif %}</small></a>
+<label class=sw><input type=checkbox{{ ' checked' if d.on }}{{ ' disabled' if d.waiting }} data-id="{{ d.id }}" data-name="{{ d.name }}" aria-label="{{ d.name }}" onchange="devSw(this)"><i></i><span class=k></span></label></div>{% endmacro %}
 {% if devices %}<div class=g>{% for d in devices %}{{ dev(d) }}{% endfor %}</div>{% endif %}
 {% if failed %}<p class="c err">Apple's developer service didn't answer, so this is the list saved {{ saved }}. Try again in a few minutes.<small>{{ failed }}</small></p>{% endif %}
 {% if devices %}<p class=ftr>{{ devices|length }} of {{ slots }} slots used. Disabled iPhones still count until your membership renews.</p>
@@ -3537,6 +3599,7 @@ def check():
         abort(403)
     sync_if_stale(60)
     resign_logged()
+    retry_waiting()
     return {"stamp": signed_stamp(), "build": BUILD}
 
 

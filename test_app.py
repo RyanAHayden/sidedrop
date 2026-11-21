@@ -1605,4 +1605,37 @@ assert K.load_json(K.REG_ERR)["udid"] == "K-1"  # another iPhone's success leave
 k_dev["data"] = [{"id": "D3", "attributes": {"udid": "K-3", "status": "ENABLED"}}]
 K.asc = k_asc
 r = kpost("K-3"); assert r.status_code == 500 and b"without this iPhone" in r.data and "without this iPhone" in K.load_json(K.REG_ERR)["error"]
+# B29: an iPhone Apple is still adding (PROCESSING) is not an error: no profile loop, the invite stays its own, the page says Waiting for
+# Apple (no Register form), and once Apple says ENABLED the server makes the profile and signs by itself, no second install
+b29 = tmp / "b29"; (b29 / "apps").mkdir(parents=True)
+W = boot(b29, PASSWORD="friends-pass-b29", ADMIN_PASSWORD="admin-pass-b29", SECRET_KEY="w" * 32)
+w_in, w_status, w_calls, w_signs = [], ["PROCESSING"], [], []
+def w_asc(m, path, **kw):
+    w_calls.append((m, path))
+    if m == "GET" and path == "/devices": return {"data": [{"id": "DW", "attributes": {"udid": "W-1", "status": w_status[0]}}]}
+    return {}
+W.asc = w_asc
+W.resign_later = lambda: w_signs.append(1)
+W.regen_profile = lambda: W.PROFILE.write_bytes(plistlib.dumps({"ProvisionedDevices": list(w_in) if w_status[0] == "ENABLED" else []}))
+wboss = W.app.test_client(); wboss.get("/?password=admin-pass-b29")
+wcsrf = re.search(r'name=csrf value="([^"]+)"', wboss.get("/admin/invites").data.decode()).group(1)
+wtok = re.search(r"new=([\w-]+)$", wboss.post("/admin/invites", data=dict(do="new", name="Abram", csrf=wcsrf)).location).group(1)
+wg = W.app.test_client(); wg.get(f"/invite/{wtok}")
+wurl = plistlib.loads(enroll(wg, name="x"))["PayloadContent"]["URL"]
+wpost = lambda: W.app.test_client().post(path_qs(wurl), data=b"\x30\x80" + plistlib.dumps({"UDID": "W-1", "PRODUCT": "iPhone17,3"}) + b"\x00")
+r = wpost(); assert r.status_code == 301 and "enrolled=" in r.location and not any(m in ("PATCH", "DELETE") for m, _ in w_calls)
+assert "W-1" in W.load_json(W.WAITING) and not W.PROFILE.exists() and not W.REG_ERR.exists() and w_signs == []
+wg.get(r.location.replace("https://x.test", ""))  # iOS opens the 301 in Safari: the guest's page
+page = wg.get("/").data
+assert b"Waiting for Apple" in page and b"Apple is still adding this iPhone" in page and b"Register iPhone" not in page and b'id=regf' not in page
+W.save_json(W.DEVICES, {"at": 1, "data": [{"id": "DW", "attributes": {"udid": "W-1", "status": "PROCESSING", "name": "Abram"}}]})
+assert "Waiting for Apple" in wboss.get("/admin/iphones").data.decode()
+# Apple still processing: a page load asks again, changes nothing; ENABLED: profile made, signing asked, page flips to registered
+W.waiting_checked.clear(); wg.get("/"); assert w_signs == [] and "W-1" in W.load_json(W.WAITING)
+w_status[0] = "ENABLED"; w_in.append("W-1"); W.waiting_checked.clear(); n_posts = len([c for c in w_calls if c[0] == "POST"])
+page = wg.get("/").data
+assert w_signs == [1] and W.load_json(W.WAITING) == {} and b"Waiting for Apple" not in page and b"Registered" in page and len([c for c in w_calls if c[0] == "POST"]) == n_posts
+# a used invite whose UDID is missing from the profile shows Waiting, not Register
+W.save_json(W.WAITING, {"W-1": {"name": "Abram", "at": 1}}); W.PROFILE.write_bytes(plistlib.dumps({"ProvisionedDevices": []})); w_status[0] = "PROCESSING"; W.waiting_checked.clear()
+page = wg.get("/").data; assert b"Waiting for Apple" in page and b"Register iPhone" not in page
 print("ok")
