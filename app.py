@@ -308,15 +308,94 @@ def app_entitlements(bid):
     for it for these Ad Hoc apps too, get-task-allow false and all; F23.) An explicit App ID (with push) keeps the profile's
     application-identifier (TEAM.<App ID>), the way paid signing services sign: iOS checks it against
     the profile but not Info.plist, so the app keeps its own bundle ID and registers for push under it,
-    and its developer's server can reach it. Either way the keychain group is narrowed to that one ID
-    (the profile has TEAM.*), and zsign puts the same entitlements on every extension."""
+    and its developer's server can reach it. The keychain groups are narrowed (the profile has TEAM.*) to the app's
+    own, TEAM.<its bundle ID>, first, then TEAM.<App ID> (B23, iFizBox B227): the first is the default group its items
+    land in, so apps under one explicit App ID no longer share one keychain where one app clearing its items signs the
+    others out. The profile's app groups stay as they are; zsign puts the same entitlements on every extension."""
     ents = embedded_plist(PROFILE.read_bytes())["Entitlements"]
     team = ents["com.apple.developer.team-identifier"]
     appid = f"{team}.{bid}" if BUNDLE_ID.endswith("*") else ents["application-identifier"]
     ents["application-identifier"] = appid
-    ents["keychain-access-groups"] = [appid]
+    ents["keychain-access-groups"] = list(dict.fromkeys([f"{team}.{bid}", appid]))
     ents["get-task-allow"] = False
     return ents
+
+
+GROUPFIX_DYLIB = HERE / "native" / "groupfix" / "sidedrop-groupfix.dylib"  # B23: built by native/groupfix/build.sh, committed
+GROUPFIX_CONFIG = "sidedrop-groupfix.plist"  # beside the dylib at the .app's top level, where zsign -l puts it
+
+
+def macho_entitlements(f):
+    """The entitlements (the XML slot) of a Mach-O's first 64-bit slice, or None when it is unsigned or damaged.
+    f: a seekable binary file; only the header, the load commands and the signature are read (an executable can be
+    100 MB, and a zip member seeks forward without holding it). iFizBox's core/groupfix.js entitlementsRead, in Python."""
+    def read(pos, n):
+        f.seek(pos)
+        b = f.read(n)
+        if len(b) < n:
+            raise ValueError("short")
+        return b
+    try:
+        off = 0
+        magic = int.from_bytes(read(0, 4), "big")
+        if magic in (0xCAFEBABE, 0xCAFEBABF):  # fat: the first 64-bit slice
+            n, size = int.from_bytes(read(4, 4), "big"), 32 if magic == 0xCAFEBABF else 20
+            arch = [read(8 + i * size, size) for i in range(min(n, 64))]
+            offs = [int.from_bytes(a[8:16] if size == 32 else a[8:12], "big") for a in arch]
+            off = next(o for o in offs if int.from_bytes(read(o, 4), "little") == 0xFEEDFACF)
+        h = read(off, 32)
+        if int.from_bytes(h[:4], "little") != 0xFEEDFACF:
+            return None
+        ncmds, sizeofcmds = int.from_bytes(h[16:20], "little"), int.from_bytes(h[20:24], "little")
+        cmds, p = read(off + 32, sizeofcmds), 0
+        for _ in range(ncmds):
+            cmd, cs = int.from_bytes(cmds[p:p + 4], "little"), int.from_bytes(cmds[p + 4:p + 8], "little")
+            if cmd == 0x1D:  # LC_CODE_SIGNATURE
+                so, ss = int.from_bytes(cmds[p + 8:p + 12], "little"), int.from_bytes(cmds[p + 12:p + 16], "little")
+                sig = read(off + so, ss)
+                if int.from_bytes(sig[:4], "big") != 0xFADE0CC0:  # SuperBlob
+                    return None
+                for k in range(int.from_bytes(sig[8:12], "big")):
+                    typ, bo = int.from_bytes(sig[12 + 8 * k:16 + 8 * k], "big"), int.from_bytes(sig[16 + 8 * k:20 + 8 * k], "big")
+                    if typ == 5 and int.from_bytes(sig[bo:bo + 4], "big") == 0xFADE7171:  # the XML entitlements
+                        ents = plistlib.loads(sig[bo + 8:bo + int.from_bytes(sig[bo + 4:bo + 8], "big")])
+                        return ents if isinstance(ents, dict) else None
+                return None
+            if cs < 8:
+                return None
+            p += cs
+    except Exception:  # damaged: as unsigned
+        return None
+    return None
+
+
+def ipa_entitlements(path):
+    """The entitlements the app's own executable was signed with (its original groups, before we sign it), or None."""
+    try:
+        with zipfile.ZipFile(path) as z:
+            name = next(n for n in z.namelist() if re.fullmatch(r"Payload/[^/]+\.app/Info\.plist", n))
+            exe = plistlib.loads(z.read(name)).get("CFBundleExecutable")
+            if not exe:
+                return None
+            with z.open(name[:-len("Info.plist")] + exe) as f:
+                return macho_entitlements(f)
+    except (KeyError, StopIteration, OSError, ValueError, zipfile.BadZipFile):
+        return None
+
+
+def group_fix_plan(original, profile_ents):
+    """B23 (iFizBox B211/B227's rule): {groups, target, keychain} for the group fix, or None when the app needs none.
+    A re-signed app still asks for its original app groups (group.com.burbn.instagram) and keychain groups, which the
+    profile can't give. groups: the original's the profile lacks, mapped to Library/AppGroups/<group>/ in the app's own
+    container and a suite of its own (target "": never a profile group, which every app signed with it shares and which
+    moves when the profile is made again); keychain: the original named keychain groups, so kSecAttrAccessGroup is
+    dropped and items land in the app's own group (the first of app_entitlements' keychain-access-groups)."""
+    strs = lambda v: [s for s in v if isinstance(s, str) and s] if isinstance(v, list) else []
+    original = original or {}
+    have = strs(profile_ents.get("com.apple.security.application-groups"))
+    groups = [g for g in dict.fromkeys(strs(original.get("com.apple.security.application-groups"))) if g not in have]
+    keychain = bool(strs(original.get("keychain-access-groups")))
+    return {"groups": groups, "target": "", "keychain": keychain} if groups or keychain else None
 
 
 def ifizbox_identity():
@@ -348,15 +427,22 @@ def sign_ipa(src, out):
     old_id = ipa_info(src)["id"]
     new_id = fit_bundle_id(old_id)
     extra = {"ifizbox-identity.plist": ifizbox_identity(), "web/transfer.link": ifizbox_transfer().encode()} if old_id == IFIZBOX_ID else {}
+    entitlements = app_entitlements(new_id or old_id)
+    # B23: the group fix, for an app whose original signature names groups or keychain groups the profile can't give
+    # (never iFizBox's own IPA, as iFizBox's signers). Its config goes in beside where zsign -l puts the dylib.
+    fix = None if old_id == IFIZBOX_ID else group_fix_plan(ipa_entitlements(src), entitlements)
+    if fix:
+        extra[GROUPFIX_CONFIG] = plistlib.dumps(fix)
     rewrite = bool(new_id or extra)
     tmp = out.with_name(f".{out.name}.in") if rewrite else src
     if rewrite:  # rewrite ourselves: zsign 1.1.2's -b can't find Info.plist
         retarget(src, tmp, old_id, new_id or old_id, extra)
     ents = out.with_name(f".{out.name}.entitlements.plist")
-    ents.write_bytes(plistlib.dumps(app_entitlements(new_id or old_id)))
+    ents.write_bytes(plistlib.dumps(entitlements))
     try:
         subprocess.run(["zsign", "-q", "-t", out.parent, "-k", P12, "-p", P12_PASSWORD, "-m", PROFILE,
-                        "-e", ents, "--rm_watch", "-o", out, tmp], check=True, timeout=600)
+                        "-e", ents, "--rm_watch", *(["-l", GROUPFIX_DYLIB] if fix else []), "-o", out, tmp],
+                       check=True, timeout=600)
     finally:
         ents.unlink(missing_ok=True)
         if rewrite:

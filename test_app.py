@@ -293,9 +293,78 @@ A.subprocess.run = run0
 (pb_ids, pb_ents, pb_rm), (ifz_ids, ifz_ents, _) = seen_in[-2:]
 assert pb_ids == {"Payload/PB.app/Info.plist": "com.mario.pb", "Payload/PB.app/PlugIns/W.appex/Info.plist": "com.mario.pb.widget"} and pb_rm
 assert ifz_ids == {"Payload/iFizBox.app/Info.plist": "com.ryha.ifizbox"}
-assert pb_ents == ifz_ents == {"application-identifier": "TEAM.com.me.sideload", "aps-environment": "production", "com.apple.developer.team-identifier": "TEAM",
-    "keychain-access-groups": ["TEAM.com.me.sideload"], "get-task-allow": False, "com.apple.security.application-groups": []}, pb_ents
+# B23: each app's own keychain group first (TEAM.<its bundle ID>, its default), then the App ID's: one app clearing its items
+# no longer signs the others out
+assert pb_ents == {"application-identifier": "TEAM.com.me.sideload", "aps-environment": "production", "com.apple.developer.team-identifier": "TEAM",
+    "keychain-access-groups": ["TEAM.com.mario.pb", "TEAM.com.me.sideload"], "get-task-allow": False, "com.apple.security.application-groups": []}, pb_ents
+assert ifz_ents == {**pb_ents, "keychain-access-groups": ["TEAM.com.ryha.ifizbox", "TEAM.com.me.sideload"]}, ifz_ents
 A.PROFILE.write_bytes(prof0); A.BUNDLE_ID = bid0
+# B23: signed apps keep their own app-group folders and keychain (iFizBox B211/B227's group fix, SideDrop's own copy).
+# The original executable's entitlements: from a real zsign-signed arm64 executable (fixtures/groupfix-probe.ipa, an empty
+# main ad hoc signed with two groups and a keychain group), from built Mach-Os (thin, fat with a 32-bit slice first), and None
+# for an unsigned or damaged one
+probe = Path(__file__).with_name("fixtures") / "groupfix-probe.ipa"
+probe_ents = {"application-identifier": "ORIGTEAM.com.example.probe", "keychain-access-groups": ["ORIGTEAM.com.example.probe"],
+              "com.apple.security.application-groups": ["group.com.example.probe", "group.com.example.shared"]}
+assert A.ipa_entitlements(probe) == probe_ents, A.ipa_entitlements(probe)
+import io, struct
+def macho(ents, signed=True):
+    xml = plistlib.dumps(ents)
+    blob = struct.pack(">II", 0xFADE7171, 8 + len(xml)) + xml
+    sig = struct.pack(">III", 0xFADE0CC0, 20 + len(blob), 1) + struct.pack(">II", 5, 20) + blob
+    cmd = struct.pack("<IIII", 0x1D, 16, 64, len(sig)) if signed else struct.pack("<II", 0x19, 8) + b"\0" * 8
+    return (struct.pack("<IiiIIIII", 0xFEEDFACF, 0x0100000C, 0, 2, 1, 16, 0, 0) + cmd).ljust(64, b"\0") + sig
+thin = macho({"keychain-access-groups": ["X.a"]})
+assert A.macho_entitlements(io.BytesIO(thin)) == {"keychain-access-groups": ["X.a"]}
+fat = struct.pack(">II", 0xCAFEBABE, 2) + struct.pack(">IIIII", 12, 9, 64, 32, 0) + struct.pack(">IIIII", 0x0100000C, 0, 128, len(thin), 0)
+fat = fat.ljust(64, b"\0") + struct.pack("<I", 0xFEEDFACE).ljust(64, b"\0") + thin
+assert A.macho_entitlements(io.BytesIO(fat)) == {"keychain-access-groups": ["X.a"]}
+assert A.macho_entitlements(io.BytesIO(macho({}, signed=False))) is None and A.macho_entitlements(io.BytesIO(thin[:70])) is None
+assert A.macho_entitlements(io.BytesIO(b"not a mach-o")) is None and A.ipa_entitlements(tmp / "apps" / "Demo.ipa") is None  # no executable
+# the plan: the original's groups the profile lacks, always to the app's own folder (target ""), keychain when it named any
+assert A.group_fix_plan(None, {}) is None and A.group_fix_plan({"com.apple.security.application-groups": []}, {}) is None
+assert A.group_fix_plan(probe_ents, {"com.apple.security.application-groups": ["group.com.example.shared"]}) == {
+    "groups": ["group.com.example.probe"], "target": "", "keychain": True}
+assert A.group_fix_plan({"keychain-access-groups": ["T.x"]}, {}) == {"groups": [], "target": "", "keychain": True}
+# sign_ipa: the config beside where zsign -l puts the dylib (the .app's top level, @executable_path), the dylib injected with
+# -l, the profile's own app groups kept in the entitlements; an app that needs none (Demo) and iFizBox's own IPA get neither
+A.BUNDLE_ID = "com.me.sideload"
+A.PROFILE.write_bytes(plistlib.dumps({"Entitlements": {"application-identifier": "TEAM.com.me.sideload", "com.apple.developer.team-identifier": "TEAM",
+    "keychain-access-groups": ["TEAM.*"], "get-task-allow": False, "com.apple.security.application-groups": ["group.com.me.sideload"]}}))
+gf = []
+def look_gf(cmd, **kw):
+    with zipfile.ZipFile(cmd[-1]) as z:
+        conf_ = [plistlib.loads(z.read(n)) for n in z.namelist() if n.endswith("/sidedrop-groupfix.plist")]
+        gf.append((cmd[cmd.index("-l") + 1] if "-l" in cmd else None, conf_, [n for n in z.namelist() if "groupfix" in n],
+                   plistlib.loads(Path(cmd[cmd.index("-e") + 1]).read_bytes())))
+A.subprocess.run = look_gf
+for ipa in (probe, tmp / "apps" / "Demo.ipa"):
+    A.sign_ipa(ipa, tmp / "gf-signed.ipa")
+ifz_gf = tmp / "ifz-gf.ipa"
+with zipfile.ZipFile(ifz_gf, "w") as z:
+    z.writestr("Payload/iFizBox.app/Info.plist", plistlib.dumps({"CFBundleIdentifier": "com.ryha.ifizbox", "CFBundleExecutable": "iFizBox"}))
+    z.writestr("Payload/iFizBox.app/iFizBox", macho(probe_ents))
+A.sign_ipa(ifz_gf, tmp / "gf-signed.ipa")
+A.subprocess.run = run0
+(p_l, p_conf, p_names, p_ents), (d_l, d_conf, d_names, _), (i_l, i_conf, i_names, _) = gf
+assert p_l == A.GROUPFIX_DYLIB and A.GROUPFIX_DYLIB.name == "sidedrop-groupfix.dylib", p_l
+assert p_names == ["Payload/Probe.app/sidedrop-groupfix.plist"] and p_conf == [{
+    "groups": ["group.com.example.probe", "group.com.example.shared"], "target": "", "keychain": True}], (p_names, p_conf)
+assert p_ents["com.apple.security.application-groups"] == ["group.com.me.sideload"], "the profile's own app groups stay"
+assert p_ents["keychain-access-groups"] == ["TEAM.com.example.probe", "TEAM.com.me.sideload"], p_ents
+assert d_l is None and d_names == [] and i_l is None and i_names == [], gf
+assert not list(tmp.glob(".gf-signed.ipa*")), "the rewritten IPA and entitlements are cleaned up"
+A.PROFILE.write_bytes(prof0); A.BUNDLE_ID = bid0
+# the committed dylib: an arm64 dylib built from the current groupfix.m (build.sh writes its .source-sha256), loaded from
+# @executable_path where zsign -l puts it, reading the config this signer writes; and the image ships it
+import hashlib
+gfm = Path(__file__).with_name("native") / "groupfix" / "groupfix.m"
+dylib = A.GROUPFIX_DYLIB.read_bytes()
+assert dylib[:8] == struct.pack("<Ii", 0xFEEDFACF, 0x0100000C) and struct.unpack("<I", dylib[12:16])[0] == 6, "an arm64 MH_DYLIB"
+assert hashlib.sha256(gfm.read_bytes()).hexdigest() == Path(str(A.GROUPFIX_DYLIB) + ".source-sha256").read_text().strip(), \
+    "groupfix.m changed: run native/groupfix/build.sh and commit the dylib"
+assert b"@executable_path/sidedrop-groupfix.dylib" in dylib and A.GROUPFIX_CONFIG.encode() in dylib and f'@"{A.GROUPFIX_CONFIG}"' in gfm.read_text()
+assert "COPY native/groupfix/sidedrop-groupfix.dylib ./native/groupfix/" in (Path(__file__).with_name("Dockerfile")).read_text()
 # iFizBox gets its own category above Apps
 (tmp / "signed" / "com.ryha.ifizbox.ipa").write_bytes((tmp / "ifz.ipa").read_bytes())
 html = c.get("/").data.decode()

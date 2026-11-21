@@ -96,12 +96,13 @@ empty), and `com.apple.developer.usernotifications.communication` and `.time-sen
 
 With an explicit App ID, every app keeps its own bundle ID in Info.plist (YouTube stays `com.google.ios.youtube`),
 iFizBox included. Only the entitlements carry the App ID: `application-identifier` is `TEAM.<App ID>`, the keychain
-group is narrowed to that one ID, `get-task-allow` is off, and the rest is what the profile grants. App extensions
-(share sheets, widgets, notification services) stay, keep their own IDs and get the same entitlements; watch apps are
-removed, since no watch is in the profile.
+groups are narrowed to the app's own (`TEAM.<its bundle ID>`, first) and then `TEAM.<App ID>`, `get-task-allow` is
+off, and the rest is what the profile grants. App extensions (share sheets, widgets, notification services) stay,
+keep their own IDs and get the same entitlements; watch apps are removed, since no watch is in the profile.
 
-Every app SideDrop signs uses the one App ID, so they share a keychain: an app could see another's saved sign-ins.
-Fine among friends' own phones; iFizBox makes one App ID per app instead. A wildcard `BUNDLE_ID` still works (the old
+Every app SideDrop signs uses the one App ID, but each keeps its keychain items in its own group (the first one), so
+one app clearing its keychain no longer signs the others out ([Keep your apps' data](#keep-your-apps-data)).
+iFizBox can make one App ID per app instead. A wildcard `BUNDLE_ID` still works (the old
 way: apps renamed to `com.yourname.<app>`, no push), and so does an explicit one without Push (bundle IDs kept, no
 notifications).
 
@@ -136,6 +137,39 @@ without it.
 
 Then make the profile again ([step 4](#4-iphones-and-the-profile)) and check it. A profile made this way matches
 what paid signing services hand out.
+
+### Keep your apps' data
+
+A signed app keeps its settings and sign-ins across every re-sign (a new profile, a new iPhone added, a new
+certificate) as long as three things stay the same:
+
+- **The team.** Keychain groups start with the team ID, and iOS refuses an update from another team.
+- **The App ID** (`BUNDLE_ID`). Every app's `application-identifier` is `TEAM.<App ID>`; iOS refuses to install an
+  app over a copy with another one (`MismatchedApplicationIdentifierEntitlement`).
+- **The app's bundle ID.** With an explicit App ID SideDrop always keeps the app's own bundle ID (the same as Keep
+  Bundle IDs in iFizBox's signer), so its own keychain group, `TEAM.<its bundle ID>`, doesn't change.
+
+A new App ID or a new team forces deleting the app and installing it again, and deleting it deletes its data. Back up
+what the app can export first (RyukGram's settings, for one).
+
+Store apps also ask for their original app groups (`group.com.burbn.instagram`) and keychain groups, which no profile
+of yours can give: iOS answers with nothing, and the app forgets imported settings and asks you to sign in again.
+SideDrop reads those from the app's own signature and, when the profile lacks them, puts a small fix in the app
+(`sidedrop-groupfix.dylib`, the same fix iFizBox's signers use, with `sidedrop-groupfix.plist` beside it): each such
+group's folder becomes `Library/AppGroups/<group>/` in the app's own data and its settings a suite of its own, and
+keychain calls lose the group they named, so items land in the app's own group. That place is the same on every
+re-sign, under any profile, and no other app shares it. The profile's own app groups stay in the entitlements, for
+apps (and their notification extensions) that use whatever groups the profile gives. Only the app itself gets the
+fix, not its extensions (as with iFizBox's signers): a widget or share extension that reads the original group still
+gets nothing.
+
+Apps signed before this fix stored nothing in those groups (iOS gave them no folder), so nothing is lost by the
+change. Their keychain items stay in the old shared group (`TEAM.<App ID>`), which is still in every app's
+entitlements, so they are still read; new items go to the app's own group. Until an app writes them again, another
+app clearing its keychain can still delete those old items, so one more sign-in may be needed after that.
+
+If you change the App ID (or its capabilities) on developer.apple.com, the profile is no longer valid: make it again
+([step 4](#4-iphones-and-the-profile)).
 
 ## 5. Switching from a wildcard
 
