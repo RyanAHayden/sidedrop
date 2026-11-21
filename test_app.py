@@ -1572,4 +1572,37 @@ except S26.SignFailed:
     pass
 assert not stamp26.exists() and (b26 / "signed" / "Demo.ipa").exists()
 S26.subprocess.run = run26; S26.resign(); assert len(signs26) == 5 and stamp26.read_text() == S26.signer_stamp()
+# B28: a registration that does not end with the UDID in the profile says so (page, log, Manage > iPhones) instead of looping the profile install
+b28 = tmp / "b28"; (b28 / "apps").mkdir(parents=True)
+K = boot(b28, PASSWORD="friends-pass-b28", ADMIN_PASSWORD="admin-pass-b28", SECRET_KEY="k" * 32)
+k_in, k_calls, k_dev = [], [], {"data": []}
+def k_asc(m, path, **kw):
+    k_calls.append((m, path))
+    if m == "GET" and path == "/devices": return k_dev
+    if m == "POST" and path == "/devices": raise RuntimeError("App Store Connect POST /devices: 409 already exists")
+    return {}
+K.asc = k_asc
+K.resign_later = lambda: None
+K.regen_profile = lambda: K.PROFILE.write_bytes(plistlib.dumps({"ProvisionedDevices": list(k_in)}))
+kf = K.app.test_client(); kf.post("/login", data={"password": "friends-pass-b28"})
+kurl = plistlib.loads(enroll(kf, name="Kim"))["PayloadContent"]["URL"]
+kpost = lambda udid: K.app.test_client().post(path_qs(kurl), data=b"\x30\x80" + plistlib.dumps({"UDID": udid, "PRODUCT": "iPhone9,1"}) + b"\x00")
+# POST /devices failing: a readable page naming the reason, not a bare 500; kept for the admin
+r = kpost("K-1"); assert r.status_code == 500 and b"409 already exists" in r.data and b"Tell the person who runs SideDrop" in r.data
+assert K.load_json(K.REG_ERR)["udid"] == "K-1"
+kboss = K.app.test_client(); assert kboss.get("/?password=admin-pass-b28").location == "/"
+assert "409 already exists" in kboss.get("/admin/iphones").data.decode()
+# a device that exists but is disabled: it is made ENABLED again, and then the profile has it
+k_dev["data"] = [{"id": "D1", "attributes": {"udid": "K-2", "status": "DISABLED"}}]
+k_patch = []
+def k_asc2(m, path, **kw):
+    if m == "PATCH": k_patch.append((path, kw["json"]["data"]["attributes"])); k_in.append("K-2"); return {}
+    return k_asc(m, path, **kw)
+K.asc = k_asc2
+r = kpost("K-2"); assert r.status_code == 301 and "enrolled=" in r.location and k_patch == [("/devices/D1", {"status": "ENABLED"})]
+assert K.load_json(K.REG_ERR)["udid"] == "K-1"  # another iPhone's success leaves its error
+# the profile still without the UDID after regen: a clear error, no 301
+k_dev["data"] = [{"id": "D3", "attributes": {"udid": "K-3", "status": "ENABLED"}}]
+K.asc = k_asc
+r = kpost("K-3"); assert r.status_code == 500 and b"without this iPhone" in r.data and "without this iPhone" in K.load_json(K.REG_ERR)["error"]
 print("ok")

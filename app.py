@@ -9,6 +9,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs7, pkcs12
 from flask import Flask, abort, make_response, redirect, render_template_string, request, send_from_directory, session, url_for
+from markupsafe import escape
 
 DATA = Path(os.environ.get("DATA", "/data"))
 APPS, SIGNED = DATA / "apps", DATA / "signed"
@@ -185,6 +186,26 @@ def regen_profile():
     tmp.replace(PROFILE)
 
 
+REG_ERR = DATA / "register-error.json"  # B28: the last registration that failed {at, udid, error}, shown on Manage > iPhones
+
+
+def register_safely(udid, name, invite=None):
+    """register(), but a failure (Apple refusing, an empty profile) is logged, kept for the admin and answered as a readable page
+    instead of a bare 500: returns that page, or None when it worked. InviteRefused still raises."""
+    try:
+        register(udid, name, invite=invite)
+    except InviteRefused:
+        raise
+    except Exception as e:
+        print(f"registering {udid} failed: {e}", flush=True)
+        save_json(REG_ERR, {"at": time.time(), "udid": udid, "error": str(e)[:500]})
+        return (f"<!doctype html><meta name=viewport content='width=device-width'><body style='font:16px -apple-system,sans-serif;padding:24px'>"
+                f"<h2>Couldn't register this iPhone</h2><p>{escape(str(e))}</p><p>Tell the person who runs SideDrop. Nothing was lost: "
+                f"open the link again once they have fixed it.</p>", 500)
+    if REG_ERR.exists() and load_json(REG_ERR).get("udid") == udid:
+        REG_ERR.unlink(missing_ok=True)
+
+
 reg_lock = threading.Lock()  # B17: registrations (and the profile they make) take this, not lock, so one never waits on a resign
 
 
@@ -194,10 +215,17 @@ def register(udid, name, invite=None):
         if invite:
             invite_check(invite[0], udid)
         if udid not in profile_udids():
-            if not asc("GET", "/devices", params={"filter[udid]": udid})["data"]:
+            found = asc("GET", "/devices", params={"filter[udid]": udid})["data"]
+            if not found:
                 asc("POST", "/devices", json={"data": {"type": "devices", "attributes": {
                     "name": name[:50], "udid": udid, "platform": "IOS"}}})
+            for d in found:  # B28: an iPhone from an earlier try may be disabled or pending: the profile only takes ENABLED ones
+                if (d.get("attributes") or {}).get("status", "ENABLED") != "ENABLED":
+                    asc("PATCH", f"/devices/{d['id']}", json={"data": {"type": "devices", "id": d["id"], "attributes": {"status": "ENABLED"}}})
             regen_profile()
+            if udid not in profile_udids():
+                raise RuntimeError("Apple made the profile without this iPhone (its device is not enabled in the developer account, "
+                                   "or the account is at its device limit)")
             resign_later()  # B17: the 301 doesn't wait for every app to be signed again
         if invite:
             invite_use(invite[0], invite[1], udid, name)
@@ -2680,7 +2708,8 @@ def device_list_html(rows, loading=False, failed=None):
                                   saved=ago(at) if at else "never")
 
 
-IPHONES = """<div data-devs data-csrf="{{ csrf }}">{{ list|safe }}</div>
+IPHONES = """{% if reg_err %}<p class="c err">The last iPhone that tried to register failed ({{ reg_err.udid }}, {{ reg_err.when }}).<small>{{ reg_err.error }}</small></p>{% endif %}
+<div data-devs data-csrf="{{ csrf }}">{{ list|safe }}</div>
 <script>(function(){let box=document.currentScript.previousElementSibling;
 /* each switch turns an iPhone on or off at Apple (POST /admin/device); the answer is the list drawn again */
 window.devSw=function(i){let b=i.closest("[data-devs]"),on=i.checked;
@@ -2703,7 +2732,9 @@ def admin_iphones():
     if r := admin_gate():
         return r
     listed, _ = cached_devices()
-    return admin_page(IPHONES, "iPhones", list=device_list_html(device_rows(listed), loading=True))
+    e = load_json(REG_ERR)
+    return admin_page(IPHONES, "iPhones", list=device_list_html(device_rows(listed), loading=True),
+                      reg_err=e and {**e, "when": ago(e["at"])})
 
 
 @app.get("/admin/devices.json")
@@ -3569,7 +3600,8 @@ def udid(name):
     check_sig()
     attrs = embedded_plist(request.get_data())
     save_product(attrs["UDID"], attrs.get("PRODUCT", ""))
-    register(attrs["UDID"], f"{name} {attrs.get('PRODUCT', '')}".strip())
+    if failed := register_safely(attrs["UDID"], f"{name} {attrs.get('PRODUCT', '')}".strip()):
+        return failed
     return redirect(f"{PUBLIC_URL}/?enrolled={device_token(attrs['UDID'])}", 301)  # iOS requires a 301 here, then opens it in Safari
 
 
@@ -3580,9 +3612,11 @@ def udid_guest(name, tok, sid):
     check_sig()
     attrs = embedded_plist(request.get_data())
     try:
-        register(attrs["UDID"], f"{name} {attrs.get('PRODUCT', '')}".strip(), invite=(tok, sid))
+        failed = register_safely(attrs["UDID"], f"{name} {attrs.get('PRODUCT', '')}".strip(), invite=(tok, sid))
     except InviteRefused:
         return redirect(f"{PUBLIC_URL}/invite/{tok}", 301)
+    if failed:
+        return failed
     save_product(attrs["UDID"], attrs.get("PRODUCT", ""))
     return redirect(f"{PUBLIC_URL}/?enrolled={device_token(attrs['UDID'])}", 301)
 
