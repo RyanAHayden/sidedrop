@@ -692,7 +692,7 @@ for ftr in ("Who can sign in, and the links that let a friend register one iPhon
     assert f"<p class=ftr>{ftr}</p>" in html, ftr
 st = (h := c.get("/").data.decode())[h.index("id=t-settings"):]; st = st[:st.index("</section>")]  # the admin's Settings: the Manage row, second
 assert re.findall(r'<div class="g[^"]*" id=(s\w+)>', st) == ["sThis", "sManage", "sTheme", "sHome", "sHelp"]
-assert '<a class="row mrow" href=/admin data-push>' + str(A.row_icon("manage")) + "<div>Manage</div><span class=val>1 iPhone</span></a>" in st
+assert '<a class="row mrow" href=/admin data-push>' + str(A.row_icon("manage")) + "<div>Manage</div></a>" in st
 assert "Only you see this" not in st and A.ROW_ICONS["manage"][0] == "#f08b1d"  # F29: no hint under the admin's group
 # F29: the admin's group is titled Admin Settings (Manage, then Share pushing Invite Friends' links); Theme's group is Preferences
 assert re.findall(r"<h3 class=hdr>([^<]+)</h3>", st) == ["Admin Settings", "Preferences"] and "This iPhone</h3>" not in st

@@ -1118,7 +1118,7 @@ If they sent you an invite link, open it again: it signs you in with no password
 .hd>div{flex:1;display:flex;justify-content:center;min-width:0} .hd h2{font-size:21px;font-weight:400;line-height:26px;text-shadow:var(--emboss)}
 .hd p{margin:0;font-size:17px;line-height:22px;text-shadow:var(--emboss)} .hd p a{font-weight:700;color:#586c90;text-shadow:0 1px 0 #fff}
 .hx{display:flex;flex-direction:column;gap:10px;margin:14px 0 0} .hx .tile{min-height:43px;padding:0 10px;gap:9px;font-size:17px;line-height:1.2;border:1px solid #999;border-radius:8px}
-.hx .hp,.hx .hw{display:grid;grid-template-columns:1fr 1fr} .hx .hw{gap:9px} .hx .hw:has(>:only-child){grid-template-columns:1fr}  /* F26: a lone tile (Help) spans the row */
+.hx .hp,.hx .hw{display:grid;grid-template-columns:1fr 1fr} .hx .hw{gap:9px} .hx .hw:not(:has(>.tile~.tile:not(.ghost))){grid-template-columns:1fr}  /* F26: a lone tile (Help) spans the row */
 .hx .hp{border:1px solid #999;border-radius:8px;overflow:hidden} .hx .hp .tile{background:none;border:0;border-radius:0} .hx .hp .tile+.tile{border-left:1px solid #999}
 .hx .hw .tile{background:#fff} .hx .tile.reg{background:#eefff0} .hx .tile.todo{background:#fff8e1;border-color:#c9a74a}
 .hx .tile small{display:block;font-size:13px;font-weight:400} .hx .hdt{margin-left:auto;font-weight:400;color:#7f7f7f} .hx .tile:has(.hdt):after{margin-left:8px}
@@ -1331,7 +1331,7 @@ fieldset{border:0;margin:0;padding:0;min-width:0} fieldset:disabled{opacity:.55;
 {% else %}<a class="row mrow" href=#apps onclick="return nudge()">{{ row_icon('device') }}<div>Status</div><span class=val>Not registered</span></a>{% endif %}
 {% if stats and stats[1] %}<div class="row irow">{{ row_icon('calendar') }}<div>Apps Work Until</div><span class=val>{{ stats[1].strftime('%b %-d, %Y') }}</span></div>{% endif %}</div>
 <p class=ftr>{% if enrolled %}Every app on the Apps tab can install on this iPhone.{% else %}Register this iPhone on the Apps tab, then every app there can install on it.{% endif %}</p>
-{% if is_admin %}<h3 class=hdr>Admin Settings</h3><div class="g sg" id=sManage><a class="row mrow" href=/admin data-push>{{ row_icon('manage') }}<div>Manage</div><span class=val>{{ n_iphones }} iPhone{{ '' if n_iphones == 1 else 's' }}</span></a>
+{% if is_admin %}<h3 class=hdr>Admin Settings</h3><div class="g sg" id=sManage><a class="row mrow" href=/admin data-push>{{ row_icon('manage') }}<div>Manage</div></a>
 <a class="row mrow" href=/admin/invites data-push id=shareRow>{{ row_icon('share') }}<div>Share</div></a></div>{% endif %}
 <h3 class=hdr>Preferences</h3><div class="g sg" id=sTheme><a class="row mrow" href=/theme data-push>{{ row_icon('theme') }}<div>Theme</div><span class=val id=themeV>{{ theme_name }}</span></a></div>
 <div class="g grp sg" id=sHome><a class="row mrow" href=/home-screen data-push>{{ row_icon('homeScreen') }}<div>Add to Home Screen</div></a></div>
@@ -1513,7 +1513,7 @@ addEventListener("pageshow",()=>{document.querySelectorAll("input[name=name]").f
         ifz_m=signed_url(f"/m/{ifz['name']}.plist") if ifz else "",
         manifest=lambda n: quote(signed_url(f"/m/{n}.plist"), safe=""),
         adl=lambda f: signed_url(f"/af/{f.relative_to(APP_FILES)}"),
-        file_labels=file_labels, is_admin=is_admin(), n_iphones=manage_iphone_count() if is_admin() else 0, theme_names={n: p[1] for n, p in PALETTES.items()},
+        file_labels=file_labels, is_admin=is_admin(), theme_names={n: p[1] for n, p in PALETTES.items()},
         theme_name=PALETTES[THEME_DEFAULT["light"]][1], files=shared_files(), inv_name=invite_name(), guest=is_guest(), fdl=lambda f: signed_url(f"/f/{f.name}"),
         first_run=enrolled and first_run_due(token_udid(tok))))
     if (enrolled or is_guest()) and request.args.get("enrolled") and token_udid(tok):  # survives sign-out; re-checked against the profile on every load (B7: and against the invite for a guest)
