@@ -22,7 +22,8 @@ owned by root, mode 755, and the app runs as uid 568, so zsign can't open it for
 invalid Mach-O. B23's local checks ran zsign as the file's owner, which is why they passed.
 
 With a copy of the same dylib in a writable folder (`/data/r2tmp`, `DYLIB=` override in a scratch script), the
-deployed app.py's steps (retarget + zsign) signed Instagram in 6.3 s, and the output held what R2 asks for:
+deployed app.py's steps (retarget + zsign) signed Instagram in 6.3 s. That test copy, not a live one, held what R2
+asks of the IPA there (the live copy still doesn't, so R2's check fails until B24 and B26 land; R3 checks again):
 
 - `Payload/Instagram.app/sidedrop-groupfix.dylib` and `Payload/Instagram.app/sidedrop-groupfix.plist`
 - config `{groups: [group.com.burbn.instagram, group.com.facebook.family, group.com.burbn.family], keychain: True, target: ""}`
