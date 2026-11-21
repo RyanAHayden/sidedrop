@@ -19,6 +19,12 @@
   a stamp (from before B26) is signed again; a `SIGNER_VERSION` bump and another group fix dylib each sign again, once;
   a failing zsign leaves no stamp and the old copy, and the next resign signs it.
 
+## Spec review
+
+- The brief says to save the stamp "beside signed/", which could mean one file for the whole folder. I kept one stamp per copy instead, for the reason given above.
+- Checked: every reader of `SIGNED` uses `glob("*.ipa")`, and the download route serves only `<name>.ipa`, so no reader ever sees a stamp.
+- Nothing deletes the signed copy of an app removed from apps/, so its stamp is kept as long as the copy (as before).
+
 ## What failed
 
 Nothing.
