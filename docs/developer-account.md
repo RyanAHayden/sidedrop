@@ -159,7 +159,9 @@ SideDrop reads those from the app's own signature and, when the profile lacks th
 group's folder becomes `Library/AppGroups/<group>/` in the app's own data and its settings a suite of its own, and
 keychain calls lose the group they named, so items land in the app's own group. That place is the same on every
 re-sign, under any profile, and no other app shares it. The profile's own app groups stay in the entitlements, for
-apps (and their notification extensions) that use whatever groups the profile gives.
+apps (and their notification extensions) that use whatever groups the profile gives. Only the app itself gets the
+fix, not its extensions (as with iFizBox's signers): a widget or share extension that reads the original group still
+gets nothing.
 
 Apps signed before this fix stored nothing in those groups (iOS gave them no folder), so nothing is lost by the
 change. Their keychain items stay in the old shared group (`TEAM.<App ID>`), which is still in every app's

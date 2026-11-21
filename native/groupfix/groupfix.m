@@ -11,7 +11,9 @@
 //   - maps -[NSUserDefaults initWithSuiteName:] for them to a suite of the app's own (ifizbox.appgroup.<group>, kept
 //     in its own Library/Preferences);
 //   - strips kSecAttrAccessGroup from SecItemAdd/CopyMatching/Update/Delete, so keychain items land in the app's
-//     default group (its application-identifier, the same on every re-sign with the same team and App ID).
+//     default group: the first of its keychain-access-groups, TEAM.<its bundle ID> (app.py app_entitlements), the
+//     same on every re-sign with the same team and App ID, and no other app's.
+// Only the main executable loads it (zsign -l, as iFizBox's signers): an app extension's calls are not mapped.
 // What to map comes from sidedrop-groupfix.plist beside this dylib: { groups: [original IDs], target: "" (or a profile
 // group an earlier sign chose), keychain: bool, legacy: the profile group older signs mapped to, copied in once }.
 // SideDrop always writes target "" and no legacy (it never mapped to a profile group); the code keeps them so it
