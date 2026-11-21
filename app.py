@@ -419,6 +419,34 @@ def ifizbox_settings():
         return {}
 
 
+class SignFailed(RuntimeError):
+    """B25: a zsign run that failed, said without its command line: zsign's argv holds P12_PASSWORD, and this text goes on
+    the Apps page (index's error) and into the container log."""
+
+
+def run_zsign(name, cmd):
+    """Run zsign for the app `name`; on a failure raise SignFailed with the app, the exit code (or the timeout) and zsign's
+    last output line, never the argv (subprocess's own errors print it, P12_PASSWORD included). `from None` keeps the
+    original error, and so the argv, out of any traceback too."""
+    secrets = [str(a) for a in cmd[cmd.index("-p") + 1:cmd.index("-p") + 2] if str(a)] if "-p" in cmd else []
+    def said(text):
+        lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+        last = lines[-1] if lines else ""
+        for s in secrets:
+            last = last.replace(s, "…")
+        return f": {last[:300]}" if last else ""
+    try:
+        subprocess.run(cmd, check=True, timeout=600, capture_output=True, text=True, errors="replace")
+    except subprocess.CalledProcessError as e:
+        raise SignFailed(f"Couldn't sign {name}: zsign exited with {e.returncode}{said(e.stderr) or said(e.stdout)}") from None
+    except subprocess.TimeoutExpired as e:
+        out = e.stderr or e.stdout or ""
+        raise SignFailed(f"Couldn't sign {name}: zsign took over {e.timeout:g}s"
+                         f"{said(out.decode(errors='replace') if isinstance(out, bytes) else out)}") from None
+    except OSError as e:
+        raise SignFailed(f"Couldn't sign {name}: zsign didn't start ({e.strerror or type(e).__name__})") from None
+
+
 def sign_ipa(src, out):
     """Sign one IPA. Under an explicit App ID every app keeps its Info.plist bundle ID, iFizBox's own too: it is installed as
     com.ryha.ifizbox already (it fitted the old com.ryha.* wildcard), and iFizBox signs its own IPA the old way only when the
@@ -448,9 +476,8 @@ def sign_ipa(src, out):
             gf_dir.mkdir(exist_ok=True)
             gf_copy.unlink(missing_ok=True)
             gf_copy.write_bytes(GROUPFIX_DYLIB.read_bytes())
-        subprocess.run(["zsign", "-q", "-t", out.parent, "-k", P12, "-p", P12_PASSWORD, "-m", PROFILE,
-                        "-e", ents, "--rm_watch", *(["-l", gf_copy] if fix else []), "-o", out, tmp],
-                       check=True, timeout=600)
+        run_zsign(src.stem, ["zsign", "-q", "-t", out.parent, "-k", P12, "-p", P12_PASSWORD, "-m", PROFILE,
+                             "-e", ents, "--rm_watch", *(["-l", gf_copy] if fix else []), "-o", out, tmp])
     finally:
         if fix:
             gf_copy.unlink(missing_ok=True)

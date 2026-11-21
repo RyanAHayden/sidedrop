@@ -352,6 +352,44 @@ with zipfile.ZipFile(ifz_gf, "w") as z:
     z.writestr("Payload/iFizBox.app/iFizBox", macho(probe_ents))
 A.sign_ipa(ifz_gf, tmp / "gf-signed.ipa")
 A.subprocess.run = run0
+# B25: a failing zsign's error names the app, the exit code and zsign's last line, never its command line (which holds the P12
+# password), on the Apps page, in the log and in the traceback; a password zsign echoes is blanked too
+import contextlib, io, subprocess as SP25, traceback
+pw0, A.P12_PASSWORD = A.P12_PASSWORD, "p12-secret-b25-xyzzy"
+def zsign_fails(how):
+    def run(cmd, **kw):
+        assert A.P12_PASSWORD in map(str, cmd)  # what subprocess's own error would have printed
+        if how == "exit":
+            raise SP25.CalledProcessError(2, cmd, output="", stderr=f">>> Signing with {A.P12_PASSWORD}\n>>> Can't Load P12 or PEM File!\n\n")
+        if how == "timeout":
+            raise SP25.TimeoutExpired(cmd, 600, stderr=b">>> Signing...\n")
+        raise FileNotFoundError(2, "No such file or directory", "zsign")
+    return run
+for how, says in (("exit", "Couldn't sign Demo: zsign exited with 2: >>> Can't Load P12 or PEM File!"),
+                  ("timeout", "Couldn't sign Demo: zsign took over 600s: >>> Signing..."),
+                  ("exit-echo", "")):
+    A.subprocess.run = zsign_fails("exit" if how == "exit-echo" else how)
+    try:
+        A.sign_ipa(tmp / "apps" / "Demo.ipa", tmp / "b25-signed.ipa"); raise AssertionError("no error")
+    except A.SignFailed as e:
+        tb = "".join(traceback.format_exception(e))
+        assert A.P12_PASSWORD not in tb and "-p" not in str(e) and (not says or str(e) == says), (str(e), tb)
+A.subprocess.run = zsign_fails("missing")
+try:
+    A.sign_ipa(tmp / "apps" / "Demo.ipa", tmp / "b25-signed.ipa"); raise AssertionError("no error")
+except A.SignFailed as e:
+    assert str(e) == "Couldn't sign Demo: zsign didn't start (No such file or directory)", str(e)
+A.subprocess.run = zsign_fails("exit")
+os.utime(tmp / "apps" / "Demo.ipa")  # Demo's signed copy is stale, so the page and resign_logged sign it
+log25 = io.StringIO()
+with contextlib.redirect_stdout(log25):
+    page25 = c.get("/").data.decode()
+    A.resign_logged()
+assert "Couldn&#39;t sign Demo: zsign exited with 2" in page25 and A.P12_PASSWORD not in page25, page25[:500]
+assert "resign failed: Couldn't sign Demo: zsign exited with 2" in log25.getvalue() and A.P12_PASSWORD not in log25.getvalue(), log25.getvalue()
+A.subprocess.run, A.P12_PASSWORD = run0, pw0
+with contextlib.redirect_stdout(io.StringIO()):
+    A.resign_logged()  # Demo signed again for what follows
 (p_l, p_conf, p_names, p_ents), (d_l, d_conf, d_names, _), (i_l, i_conf, i_names, _) = gf
 assert Path(p_l).name == A.GROUPFIX_DYLIB.name == "sidedrop-groupfix.dylib", p_l  # the name it is loaded by
 assert A.GROUPFIX_DYLIB.read_bytes() == gf_bytes, "a sign never changes the committed dylib"
