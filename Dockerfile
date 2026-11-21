@@ -9,6 +9,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py icon.png *-sources.txt ./
 COPY static ./static
+# B23: the group fix zsign -l injects (built by native/groupfix/build.sh; no iOS toolchain in this image)
+COPY native/groupfix/sidedrop-groupfix.dylib ./native/groupfix/
 # the commit for the version line (no .git in the image): deploy.sh and compose.yaml pass it
 ARG COMMIT=
 ENV SIDEDROP_COMMIT=$COMMIT
