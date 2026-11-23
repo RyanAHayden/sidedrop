@@ -2,6 +2,7 @@
 
 ### Next
 
+- [ ] **D6** Distributor guide: replace the <you> placeholder in the git clone with the real repo URL, and bring stale lines up to date with Manage (App Sources editable without a rebuild, Invite Friends, Passwords and Signing pages, Manage > iPhones, Make New Certificate path); .env.example says More > Manage, now Settings > Manage. Check: grep finds no <you> or 'More →' in docs/.env.example. | files: docs/become-a-distributor.md, .env.example
 ### Follow-ups
 
 - [~] **F36** (follow-up, normal) Control session 2 asked the person: "Want me to queue the `/sync` fix as a task?" Carry on from their answer (the session, closed while it waited: https://claude.ai/code/session_012iEtdNSwuoDgUtMGEBjyja) BLOCKED: DECIDE: Want me to queue the `/sync` fix as a task? https://claude.ai/code/session_012iEtdNSwuoDgUtMGEBjyja (asked 2026-11-20 20:07)
