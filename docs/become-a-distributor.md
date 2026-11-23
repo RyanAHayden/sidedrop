@@ -44,7 +44,7 @@ under **Manual setup** in step 4 below.
 On the server:
 
 ```sh
-git clone https://github.com/<you>/sidedrop.git   # your fork, or the original
+git clone https://github.com/RyanAHayden/sidedrop.git   # or your fork
 cd sidedrop
 cp .env.example .env
 mkdir -p data
@@ -124,26 +124,26 @@ Before you invite anyone, go through it yourself as a friend would. Sign in with
 Stolen Device Protection, tap **Register iPhone**, install the profile, then install an app. Turn on Developer
 Mode when iOS asks for it. If the app opens, SideDrop is working.
 
-With the admin password, **Settings → Manage** lists every registered iPhone and can turn one off.
+With the admin password, **Settings → Manage → iPhones** lists every registered iPhone and can turn one off.
 
 ## 6. Add apps and invite friends
 
-- Put `.ipa` files in `data/apps/`, or list AltStore sources in `mirror-sources.txt` (your own apps) and
-  `third-party-sources.txt` (other people's). Changing the `*-sources.txt` files needs a rebuild:
-  `docker compose up -d --build`.
-- Send friends the address and the friends' password. They follow the same steps as you did in step 5.
+- Put `.ipa` files in `data/apps/`, or list AltStore sources on **Settings → Manage → App Sources** (your own apps,
+  and third-party ones listed apart). No rebuild needed; the repo's `mirror-sources.txt` and
+  `third-party-sources.txt` are only the defaults.
+- Send friends the address and the friends' password. They follow the same steps as you did in step 5. Or make a
+  link on **Manage → Invite Friends** that lets one friend register one iPhone.
 
 ## Keeping it running
 
 - `git pull && docker compose up -d --build` updates SideDrop. `deploy.sh` does this from cron, but it is written for
   a TrueNAS custom app; on plain Docker, a cron job running those two commands does the same.
 - Back up `data/`: it holds your certificate, the API key, the passwords and the list of registered iPhones.
-- Each year: renew the membership, then tap **Settings → Manage → Make New Certificate** before the old certificate
+- Each year: renew the membership, then tap **Settings → Manage → Certificate → Make New Certificate** before the old certificate
   expires (on the manual path, make one yourself and upload it there). Apps stop opening when it does. iPhone slots
   (100 a year) free up at renewal.
-- To change the passwords or signing files after setup, edit `.env` (it wins over the setup screen) and recreate the container as above, or
-  delete `data/setup.json` to see the setup screen again. That also brings back the default password until you save,
-  so do it right away.
+- To change the passwords or signing files after setup, use **Manage → Passwords** and **Manage → Certificate**.
+  Passwords can replace one set in `.env`; a later edit of `.env` wins again (recreate the container as above).
 
 ## When it doesn't work
 
