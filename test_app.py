@@ -326,6 +326,13 @@ assert A.group_fix_plan(None, {}) is None and A.group_fix_plan({"com.apple.secur
 assert A.group_fix_plan(probe_ents, {"com.apple.security.application-groups": ["group.com.example.shared"]}) == {
     "groups": ["group.com.example.probe"], "target": "", "keychain": True}
 assert A.group_fix_plan({"keychain-access-groups": ["T.x"]}, {}) == {"groups": [], "target": "", "keychain": True}
+# C65 (iFizBox B327): isolate, the app's own keychain group, whenever the signed app has two (its own and TEAM.<App ID>):
+# every app gets the fix then, even one whose original names nothing; one group (the App ID's own app) needs none
+assert A.group_fix_plan(None, {}, ["T.com.a", "T.com.me.sideload"]) == {"groups": [], "target": "", "keychain": False, "isolate": "T.com.a"}
+assert A.group_fix_plan({"keychain-access-groups": ["O.x"]}, {}, ["T.com.a", "T.com.me.sideload"]) == {
+    "groups": [], "target": "", "keychain": True, "isolate": "T.com.a"}
+assert A.group_fix_plan(None, {}, ["T.com.me.sideload"]) is None and A.group_fix_plan(None, {}, []) is None
+assert A.group_fix_plan({"keychain-access-groups": ["O.x"]}, {}, ["T.com.me.sideload"]) == {"groups": [], "target": "", "keychain": True}
 # sign_ipa: the config beside where zsign -l puts the dylib (the .app's top level, @executable_path), the dylib injected with
 # -l, the profile's own app groups kept in the entitlements; an app that needs none (Demo) and iFizBox's own IPA get neither
 A.BUNDLE_ID = "com.me.sideload"
@@ -408,10 +415,14 @@ assert Path(p_l).name == A.GROUPFIX_DYLIB.name == "sidedrop-groupfix.dylib", p_l
 assert A.GROUPFIX_DYLIB.read_bytes() == gf_bytes, "a sign never changes the committed dylib"
 assert not Path(p_l).exists() and not Path(p_l).parent.exists(), "the dylib's copy is removed after"
 assert p_names == ["Payload/Probe.app/sidedrop-groupfix.plist"] and p_conf == [{
-    "groups": ["group.com.example.probe", "group.com.example.shared"], "target": "", "keychain": True}], (p_names, p_conf)
+    "groups": ["group.com.example.probe", "group.com.example.shared"], "target": "", "keychain": True,
+    "isolate": "TEAM.com.example.probe"}], (p_names, p_conf)
 assert p_ents["com.apple.security.application-groups"] == ["group.com.me.sideload"], "the profile's own app groups stay"
 assert p_ents["keychain-access-groups"] == ["TEAM.com.example.probe", "TEAM.com.me.sideload"], p_ents
-assert d_l is None and d_names == [] and i_l is None and i_names == [], gf
+# C65: Demo's original names nothing (no executable here), but it has a keychain group of its own: isolate only
+assert Path(d_l).name == "sidedrop-groupfix.dylib" and d_names == ["Payload/Demo.app/sidedrop-groupfix.plist"] and d_conf == [{
+    "groups": [], "target": "", "keychain": False, "isolate": "TEAM.com.me.demo"}], (d_l, d_names, d_conf)
+assert i_l is None and i_names == [], gf  # never iFizBox's own IPA
 assert not list(tmp.glob(".gf-signed.ipa*")), "the rewritten IPA and entitlements are cleaned up"
 A.PROFILE.write_bytes(prof0); A.BUNDLE_ID = bid0
 # the committed dylib: an arm64 dylib built from the current groupfix.m (build.sh writes its .source-sha256), loaded from

@@ -469,19 +469,27 @@ def ipa_entitlements(path):
         return None
 
 
-def group_fix_plan(original, profile_ents):
-    """B23 (iFizBox B211/B227's rule): {groups, target, keychain} for the group fix, or None when the app needs none.
+def group_fix_plan(original, profile_ents, keychain_groups=()):
+    """B23 (iFizBox B211/B227's rule): {groups, target, keychain, isolate?} for the group fix, or None when the app needs none.
     A re-signed app still asks for its original app groups (group.com.burbn.instagram) and keychain groups, which the
     profile can't give. groups: the original's the profile lacks, mapped to Library/AppGroups/<group>/ in the app's own
     container and a suite of its own (target "": never a profile group, which every app signed with it shares and which
     moves when the profile is made again); keychain: the original named keychain groups, so kSecAttrAccessGroup is
-    dropped and items land in the app's own group (the first of app_entitlements' keychain-access-groups)."""
+    dropped and items land in the app's own group (the first of app_entitlements' keychain-access-groups).
+    isolate (iFizBox B327, C65 there): keychain_groups are the signed app's (app_entitlements'); whenever they have two
+    entries, its own group (the first) besides TEAM.<App ID> (which every app under the App ID shares), the dylib keeps
+    the app's passwords in its own group, so another app clearing its keychain can't sign it out. Every app gets the fix
+    then, even one whose original names no groups."""
     strs = lambda v: [s for s in v if isinstance(s, str) and s] if isinstance(v, list) else []
     original = original or {}
     have = strs(profile_ents.get("com.apple.security.application-groups"))
     groups = [g for g in dict.fromkeys(strs(original.get("com.apple.security.application-groups"))) if g not in have]
     keychain = bool(strs(original.get("keychain-access-groups")))
-    return {"groups": groups, "target": "", "keychain": keychain} if groups or keychain else None
+    kc = strs(list(keychain_groups))
+    isolate = kc[0] if len(kc) > 1 else ""
+    if not (groups or keychain or isolate):
+        return None
+    return {"groups": groups, "target": "", "keychain": keychain, **({"isolate": isolate} if isolate else {})}
 
 
 def ifizbox_identity():
@@ -553,9 +561,10 @@ def sign_ipa(src, out):
     new_id = fit_bundle_id(old_id)
     extra = {"ifizbox-identity.plist": ifizbox_identity(), "web/transfer.link": ifizbox_transfer().encode()} if old_id == IFIZBOX_ID else {}
     entitlements = app_entitlements(new_id or old_id)
-    # B23: the group fix, for an app whose original signature names groups or keychain groups the profile can't give
-    # (never iFizBox's own IPA, as iFizBox's signers). Its config goes in beside where zsign -l puts the dylib.
-    fix = None if old_id == IFIZBOX_ID else group_fix_plan(ipa_entitlements(src), entitlements)
+    # B23: the group fix, for an app whose original signature names groups or keychain groups the profile can't give,
+    # and (isolate) every app with a keychain group of its own (never iFizBox's own IPA, as iFizBox's signers). Its
+    # config goes in beside where zsign -l puts the dylib.
+    fix = None if old_id == IFIZBOX_ID else group_fix_plan(ipa_entitlements(src), entitlements, entitlements["keychain-access-groups"])
     if fix:
         extra[GROUPFIX_CONFIG] = plistlib.dumps(fix)
     rewrite = bool(new_id or extra)
@@ -590,7 +599,7 @@ def sign_ipa(src, out):
 # B26: bump by hand whenever what sign_ipa puts in a signed copy changes (sign_ipa, app_entitlements, group_fix_plan,
 # retarget, zsign's flags): every signed copy made before is then signed again on the next resign, not only at the next
 # registration. The group fix dylib needs no bump: its hash is in the signer stamp too.
-SIGNER_VERSION = 1
+SIGNER_VERSION = 2  # 2: isolate (every app gets the group fix)
 
 
 def signer_stamp():
