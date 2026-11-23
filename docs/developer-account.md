@@ -164,9 +164,18 @@ fix, not its extensions (as with iFizBox's signers): a widget or share extension
 gets nothing.
 
 Apps signed before this fix stored nothing in those groups (iOS gave them no folder), so nothing is lost by the
-change. Their keychain items stay in the old shared group (`TEAM.<App ID>`), which is still in every app's
-entitlements, so they are still read; new items go to the app's own group. Until an app writes them again, another
-app clearing its keychain can still delete those old items, so one more sign-in may be needed after that.
+change.
+
+The old shared keychain group (`TEAM.<App ID>`) stays in every app's entitlements, and every app under that App ID
+can reach it: a read that names no group finds another app's items there, and a delete that names no group (a fresh
+install clearing its keychain, a logout) deletes every app's items there, signing them out. So every app with a
+keychain group of its own (any app but the App ID's own) gets the fix too, with `isolate` set to that group in
+`sidedrop-groupfix.plist`: every password call (add, read, update, delete) names the app's own group, so no other
+app's call reaches its passwords and it never sees theirs. On the first launch with it, an app that ran before copies
+every password it could see in the shared groups into its own (never over one it has); a fresh install copies
+nothing. Until every item can be read (before the first unlock after a restart) calls stay as before and the next
+launch tries again. Keys and certificates keep the plain stripping. The rule, the code and the preference marks are
+the same as iFizBox's, so an app signed by one and then the other keeps its passwords.
 
 If you change the App ID (or its capabilities) on developer.apple.com, the profile is no longer valid: make it again
 ([step 4](#4-iphones-and-the-profile)).
